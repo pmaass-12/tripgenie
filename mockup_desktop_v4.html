@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Itinerary — Desktop v4</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: #f7f7f7;
+    color: #222;
+    display: flex;
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Slim sidebar ── */
+  .sidebar {
+    width: 62px;
+    background: #1a3a5c;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 0 20px;
+    gap: 2px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+  }
+  .sb-logo { font-size: 1.45rem; margin-bottom: 18px; }
+  .sb-btn {
+    width: 42px; height: 42px;
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,.35);
+    font-size: .98rem;
+    cursor: pointer;
+    border: none;
+    background: none;
+    transition: all .15s;
+    position: relative;
+  }
+  .sb-btn:hover { color: #fff; background: rgba(255,255,255,.09); }
+  .sb-btn.active { color: #fff; background: rgba(232,129,58,.3); }
+  .sb-btn .tip {
+    position: absolute; left: 54px;
+    background: #0f2540; color: #fff;
+    font-size: .7rem; font-weight: 700;
+    padding: 5px 10px; border-radius: 6px;
+    white-space: nowrap; opacity: 0; pointer-events: none;
+    transition: opacity .15s; z-index: 300;
+  }
+  .sb-btn:hover .tip { opacity: 1; }
+  .sb-gap { flex: 1; }
+
+  /* ── Main ── */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+
+  /* ── Top bar ── */
+  .topbar {
+    background: #fff;
+    border-bottom: 1px solid #ebebeb;
+    padding: 0 28px;
+    display: flex; align-items: center; gap: 14px;
+    height: 56px; flex-shrink: 0;
+  }
+  .topbar-title { font-weight: 800; font-size: 1rem; color: #1a1a2e; display: flex; align-items: center; gap: 8px; }
+  .topbar-title i { color: #E8813A; font-size: .88rem; }
+  .topbar-meta { font-size: .74rem; color: #c0c0c0; border-left: 1px solid #ebebeb; padding-left: 14px; }
+  .tb-space { flex: 1; }
+  .tb-pill {
+    background: #FFF3EB; color: #E8813A;
+    border: 1px solid #fbd4aa; border-radius: 100px;
+    padding: 5px 14px; font-size: .73rem; font-weight: 800; white-space: nowrap;
+  }
+  .tb-btn {
+    background: none;
+    border: 1.5px solid #e0e0e0;
+    border-radius: 100px;
+    padding: 7px 15px;
+    font-size: .75rem; font-weight: 700;
+    color: #555; cursor: pointer;
+    font-family: inherit;
+    display: flex; align-items: center; gap: 7px;
+    transition: all .15s;
+    white-space: nowrap;
+  }
+  .tb-btn:hover { border-color: #1a3a5c; color: #1a3a5c; }
+
+  /* ── Content area ── */
+  .content { flex: 1; overflow-y: auto; padding: 24px 32px 56px; max-width: 900px; }
+
+  /* Toggle + route */
+  .toggle-row {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .view-toggle {
+    display: inline-flex;
+    background: #efefef;
+    border-radius: 100px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .vt-btn {
+    padding: 6px 18px; border: none;
+    background: transparent; border-radius: 100px;
+    font-size: .79rem; font-weight: 700;
+    cursor: pointer; color: #888;
+    transition: all .18s; font-family: inherit;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .vt-btn.active { background: #fff; color: #1a3a5c; box-shadow: 0 1px 5px rgba(0,0,0,.10); }
+  .route-lbl { font-size: .74rem; color: #bbb; letter-spacing: .01em; }
+
+  /* ── Stop card ── */
+  .card {
+    background: #fff;
+    border-radius: 14px;
+    margin-bottom: 10px;
+    border: 1px solid #e8e8e8;
+    overflow: hidden;
+    transition: box-shadow .2s;
+  }
+  .card:hover { box-shadow: 0 2px 12px rgba(0,0,0,.07); }
+  .card.current {
+    border: 1.5px solid #E8813A;
+    box-shadow: 0 4px 20px rgba(232,129,58,.11);
+  }
+  .card.past { opacity: .62; }
+
+  /* Card header */
+  .card-header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 20px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .card-header:hover { background: #fafafa; }
+  .card-icon { font-size: 1.65rem; flex-shrink: 0; line-height: 1; }
+  .card-info { flex: 1; min-width: 0; }
+  .card-name {
+    font-size: 1.02rem; font-weight: 800; color: #1a1a2e;
+    margin-bottom: 5px;
+    display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  }
+  .card-badge {
+    font-size: .62rem; font-weight: 800;
+    padding: 3px 9px; border-radius: 100px;
+    color: #fff; white-space: nowrap; letter-spacing: .03em;
+  }
+  .card-meta {
+    font-size: .77rem; color: #aaa;
+    display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  }
+  .wx-tag {
+    background: #EEF5FB; color: #2C5F8A;
+    font-size: .71rem; font-weight: 700;
+    padding: 2px 9px; border-radius: 100px; white-space: nowrap;
+  }
+  .card-chev {
+    color: #d0d5dd; font-size: .8rem;
+    transition: transform .22s; flex-shrink: 0;
+  }
+  .card-chev.open { transform: rotate(90deg); }
+
+  /* Card body */
+  .card-body { display: none; border-top: 1px solid #f2f2f2; }
+  .card-body.open { display: block; }
+
+  /* Inner tabs */
+  .itabs {
+    display: flex; border-bottom: 1px solid #f0f0f0;
+    padding: 0 20px; background: #fff;
+    gap: 2px;
+  }
+  .itab {
+    padding: 11px 16px;
+    font-size: .77rem; font-weight: 700;
+    color: #bbb; cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all .15s; white-space: nowrap;
+    user-select: none;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .itab:hover { color: #888; }
+  .itab.active { color: #E8813A; border-bottom-color: #E8813A; }
+  .itab .act-count {
+    background: #7c3aed; color: #fff;
+    border-radius: 100px; padding: 1px 7px;
+    font-size: .61rem; font-weight: 800;
+  }
+  .itab .ai-spark {
+    color: #E8813A; font-size: .7rem;
+  }
+
+  .ipanel { padding: 20px; }
+  .ipanel.hidden { display: none; }
+
+  /* ── Day rows ── */
+  .day {
+    display: flex; align-items: center; gap: 14px;
+    padding: 13px 12px; border-radius: 12px;
+    cursor: pointer; transition: background .12s;
+    margin-bottom: 2px;
+  }
+  .day:hover { background: #f8f8f8; }
+  .day.now {
+    background: #FFF5EE;
+    border: 1px solid #fbd4aa;
+  }
+
+  /* Calendar date label */
+  .day-cal {
+    flex-shrink: 0;
+    width: 62px;
+    display: flex; flex-direction: column;
+    align-items: flex-start; gap: 1px;
+    font-size: .7rem; color: #bbb; font-weight: 600;
+    line-height: 1.3;
+  }
+  .day-cal strong { font-size: .83rem; font-weight: 800; color: #555; display: block; }
+  .today-cal strong { color: #d4600a; }
+  .today-cal { color: #e8a070; }
+
+  .day-body { flex: 1; min-width: 0; }
+  .day-title {
+    font-size: .88rem; font-weight: 700; color: #1a1a2e;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .day.now .day-title { color: #d4600a; }
+  .day-sub { font-size: .71rem; color: #bbb; margin-top: 2px; }
+
+  .day-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .dtag {
+    font-size: .68rem; font-weight: 800;
+    padding: 3px 10px; border-radius: 100px;
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+    white-space: nowrap;
+    min-width: 88px;   /* fixed width so all tags align */
+  }
+  .dtag-drive   { background: #EEF5FB; color: #2C5F8A; }
+  .dtag-explore { background: #EEF9F2; color: #2e7d52; }
+  .dtag-today   { background: #E8813A; color: #fff; }
+  .day-dist {
+    font-size: .71rem; color: #c8c8c8;
+    white-space: nowrap;
+    min-width: 72px;   /* fixed width so distances stay in one column */
+    text-align: right;
+  }
+
+  /* ── Activities tab ── */
+  .act-search {
+    background: #f8f8f8;
+    border: 1.5px solid #ebebeb;
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 18px;
+  }
+  .act-search-lbl {
+    font-size: .72rem; font-weight: 800;
+    color: #bbb; text-transform: uppercase;
+    letter-spacing: .06em; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .act-search-lbl i { color: #E8813A; font-size: .8rem; }
+  .act-search-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .act-search-row input {
+    flex: 1; border: 1.5px solid #e0e0e0;
+    border-radius: 100px; padding: 9px 16px;
+    font-size: .82rem; font-family: inherit;
+    outline: none; color: #333;
+    background: #fff;
+    transition: border-color .15s;
+  }
+  .act-search-row input:focus { border-color: #E8813A; }
+  .act-search-row button {
+    background: #1a3a5c; color: #fff;
+    border: none; border-radius: 100px;
+    padding: 9px 20px;
+    font-size: .78rem; font-weight: 800;
+    cursor: pointer; font-family: inherit;
+    display: flex; align-items: center; gap: 7px;
+    transition: background .15s; white-space: nowrap;
+  }
+  .act-search-row button:hover { background: #0f2540; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    padding: 5px 13px; border-radius: 100px;
+    border: 1.5px solid #e0e0e0; background: #fff;
+    font-size: .72rem; font-weight: 700;
+    cursor: pointer; color: #666;
+    transition: all .15s; white-space: nowrap;
+  }
+  .chip:hover, .chip.on { border-color: #E8813A; color: #E8813A; background: #fff8f3; }
+
+  /* AI results */
+  .act-results { margin-bottom: 22px; }
+  .result {
+    display: flex; align-items: flex-start; gap: 13px;
+    padding: 13px 16px;
+    background: #fff; border: 1px solid #ebebeb;
+    border-radius: 12px; margin-bottom: 7px;
+    transition: box-shadow .15s;
+  }
+  .result:hover { box-shadow: 0 2px 10px rgba(0,0,0,.07); }
+  .result .rem { font-size: 1.4rem; flex-shrink: 0; margin-top: 1px; line-height: 1; }
+  .result .rbod { flex: 1; min-width: 0; }
+  .result .rnm { font-size: .87rem; font-weight: 800; color: #1a1a2e; }
+  .result .rmt {
+    font-size: .71rem; color: #bbb;
+    margin-top: 3px; display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .result .rdsc { font-size: .76rem; color: #666; margin-top: 6px; line-height: 1.6; }
+  .result .radd {
+    background: #fff; color: #3A8A5C;
+    border: 1.5px solid #3A8A5C;
+    border-radius: 100px; padding: 6px 14px;
+    font-size: .72rem; font-weight: 800;
+    cursor: pointer; font-family: inherit;
+    white-space: nowrap; flex-shrink: 0; align-self: center;
+    transition: all .15s;
+  }
+  .result .radd:hover { background: #3A8A5C; color: #fff; }
+  .result .radd.done { background: #3A8A5C; color: #fff; border-color: #3A8A5C; pointer-events: none; }
+
+  /* Planned section */
+  .act-section-lbl {
+    font-size: .67rem; font-weight: 800;
+    color: #c0c0c0; text-transform: uppercase;
+    letter-spacing: .07em; margin-bottom: 10px;
+  }
+  .pitem {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 14px;
+    background: #fafafa; border: 1px solid #ebebeb;
+    border-radius: 11px; margin-bottom: 6px;
+  }
+  .pitem .pem { font-size: 1.1rem; flex-shrink: 0; }
+  .pitem .ptxt { flex: 1; }
+  .pitem .pnm { font-size: .85rem; font-weight: 700; color: #1a1a2e; }
+  .pitem .pmt { font-size: .71rem; color: #bbb; margin-top: 2px; }
+  .pitem .prm {
+    background: none; border: none; color: #ddd;
+    cursor: pointer; font-size: .88rem;
+    border-radius: 50%; padding: 4px 6px;
+    transition: color .15s;
+  }
+  .pitem .prm:hover { color: #e53935; }
+
+  .add-btn {
+    width: 100%; padding: 11px;
+    border: 1.5px dashed #d8d8d8;
+    border-radius: 11px; background: none;
+    font-size: .78rem; font-weight: 700; color: #bbb;
+    cursor: pointer; font-family: inherit;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-top: 4px; transition: all .15s;
+  }
+  .add-btn:hover { border-color: #E8813A; color: #E8813A; background: #fff8f3; }
+
+  /* ── About tab ── */
+  .about-body { }
+  .about-body .desc {
+    font-size: .85rem; line-height: 1.75; color: #555;
+    background: #f9f9f9; border-radius: 12px;
+    padding: 16px 18px; margin-bottom: 18px;
+    border-left: 3px solid #2C5F8A;
+  }
+  .hl-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+  .hl {
+    background: #fff; border: 1px solid #ebebeb;
+    border-radius: 11px; padding: 11px 14px;
+    font-size: .78rem; font-weight: 700; color: #333;
+  }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    background: #1a3a5c; color: #fff;
+    padding: 10px 22px; border-radius: 100px;
+    font-size: .8rem; font-weight: 700;
+    opacity: 0; transition: opacity .3s;
+    pointer-events: none; z-index: 999; white-space: nowrap;
+  }
+  .toast.show { opacity: 1; }
+
+  .empty-state {
+    text-align: center; padding: 36px 0;
+    color: #c8c8c8; font-size: .82rem;
+  }
+  .empty-state i { display: block; font-size: 1.8rem; margin-bottom: 10px; color: #e0e0e0; }
+
+  .thinking { text-align: center; padding: 30px 0; display: none; }
+  .thinking i { font-size: 1.4rem; color: #E8813A; animation: spin 1.2s linear infinite; display: block; margin-bottom: 10px; }
+  .thinking span { font-size: .81rem; color: #bbb; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Day Detail Modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.38);
+    z-index: 800;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity .22s;
+    backdrop-filter: blur(2px);
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+
+  .day-modal {
+    background: #fff;
+    border-radius: 18px;
+    width: min(660px, 92vw);
+    max-height: 84vh;
+    overflow: hidden;
+    display: flex; flex-direction: column;
+    box-shadow: 0 20px 60px rgba(0,0,0,.22);
+    transform: translateY(18px) scale(.97);
+    transition: transform .22s;
+  }
+  .modal-overlay.open .day-modal { transform: none; }
+
+  /* Modal header band */
+  .dm-header {
+    padding: 22px 24px 18px;
+    display: flex; align-items: flex-start; gap: 16px;
+    border-bottom: 1px solid #f0f0f0;
+    flex-shrink: 0;
+  }
+  .dm-date-box {
+    width: 48px; flex-shrink: 0;
+    border-radius: 10px; overflow: hidden;
+    border: 1px solid #e8e8e8; line-height: 1;
+    text-align: center;
+  }
+  .dm-date-box .dm-dow {
+    font-size: .62rem; font-weight: 900; text-transform: uppercase;
+    letter-spacing: .04em; padding: 4px 4px 3px; color: #fff;
+  }
+  .dm-date-box .dm-d {
+    font-size: 1.15rem; font-weight: 900; padding: 5px 4px 6px;
+    color: #1a1a2e; background: #fff;
+  }
+  .dm-info { flex: 1; }
+  .dm-title { font-size: 1.12rem; font-weight: 900; color: #1a1a2e; line-height: 1.3; margin-bottom: 5px; }
+  .dm-meta  { font-size: .76rem; color: #bbb; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .dm-badge {
+    font-size: .68rem; font-weight: 800; padding: 3px 10px;
+    border-radius: 100px; color: #fff; white-space: nowrap;
+  }
+  .dm-close {
+    background: #f5f5f5; border: none; border-radius: 50%;
+    width: 32px; height: 32px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    color: #888; font-size: .88rem; flex-shrink: 0;
+    transition: background .15s;
+  }
+  .dm-close:hover { background: #eee; color: #333; }
+
+  /* Modal body */
+  .dm-body { overflow-y: auto; flex: 1; }
+
+  /* Modal section */
+  .dm-section { padding: 18px 24px; border-bottom: 1px solid #f5f5f5; }
+  .dm-section:last-child { border-bottom: none; }
+  .dm-section-lbl {
+    font-size: .65rem; font-weight: 900; color: #c8c8c8;
+    text-transform: uppercase; letter-spacing: .07em;
+    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .dm-section-lbl i { color: #d8d8d8; }
+
+  /* Info row (campground, weather) */
+  .dm-info-row {
+    display: flex; gap: 10px;
+  }
+  .dm-info-card {
+    flex: 1; background: #f9f9f9; border: 1px solid #ebebeb;
+    border-radius: 11px; padding: 12px 14px;
+    display: flex; gap: 10px; align-items: flex-start;
+  }
+  .dm-info-card i { color: #bbb; font-size: .95rem; margin-top: 1px; flex-shrink: 0; }
+  .dm-info-card .ic-body {}
+  .dm-info-card .ic-title { font-size: .83rem; font-weight: 700; color: #1a1a2e; }
+  .dm-info-card .ic-sub   { font-size: .71rem; color: #bbb; margin-top: 2px; }
+
+  /* Drive stat strip */
+  .dm-drive-strip {
+    display: flex; gap: 10px;
+  }
+  .dm-drive-stat {
+    flex: 1; background: #f0f6fc; border: 1px solid #d8eaf6;
+    border-radius: 11px; padding: 11px 14px; text-align: center;
+  }
+  .dm-drive-stat .dsv { font-size: 1.05rem; font-weight: 900; color: #2C5F8A; }
+  .dm-drive-stat .dsl { font-size: .63rem; font-weight: 700; color: #7aaac8; text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
+
+  /* Activity list in modal */
+  .dm-act {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 12px; border-radius: 10px;
+    background: #fafafa; border: 1px solid #ebebeb;
+    margin-bottom: 6px;
+  }
+  .dm-act .da-em  { font-size: 1.1rem; flex-shrink: 0; }
+  .dm-act .da-txt { flex: 1; }
+  .dm-act .da-nm  { font-size: .85rem; font-weight: 700; color: #1a1a2e; }
+  .dm-act .da-mt  { font-size: .71rem; color: #bbb; margin-top: 1px; }
+
+  /* Journal note area */
+  .dm-note {
+    width: 100%; min-height: 72px;
+    border: 1.5px solid #e8e8e8; border-radius: 11px;
+    padding: 11px 14px; font-family: inherit;
+    font-size: .83rem; color: #333; line-height: 1.6;
+    resize: none; outline: none; transition: border-color .15s;
+    background: #fafafa;
+  }
+  .dm-note:focus { border-color: #E8813A; background: #fff; }
+  .dm-note::placeholder { color: #ccc; }
+  .dm-note-save {
+    margin-top: 8px; float: right;
+    background: #1a3a5c; color: #fff; border: none;
+    border-radius: 100px; padding: 7px 18px;
+    font-size: .76rem; font-weight: 800;
+    cursor: pointer; font-family: inherit;
+    transition: background .15s;
+  }
+  .dm-note-save:hover { background: #0f2540; }
+
+  /* Weather in modal header */
+  .dm-wx {
+    flex-shrink: 0;
+    display: flex; align-items: center; gap: 7px;
+    background: #f0f7ff; border: 1px solid #d4e8f7;
+    border-radius: 10px; padding: 7px 12px;
+    margin-right: 4px;
+  }
+  .dm-wx-icon { font-size: 1.3rem; line-height: 1; }
+  .dm-wx-body { display: flex; flex-direction: column; gap: 1px; }
+  .dm-wx-tmp { font-size: .82rem; font-weight: 800; color: #1a3a5c; }
+  .dm-wx-dsc { font-size: .66rem; color: #7aaac8; font-weight: 600; }
+
+  /* Spotify icon on card header */
+  .card-spotify {
+    width: 30px; height: 30px; border-radius: 50%;
+    background: #1DB954;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: .82rem; flex-shrink: 0;
+    cursor: pointer; transition: transform .15s, box-shadow .15s;
+    margin-right: 4px;
+  }
+  .card-spotify:hover { transform: scale(1.08); box-shadow: 0 2px 8px rgba(29,185,84,.4); }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="sb-logo">🚐</div>
+  <button class="sb-btn"><i class="fa-solid fa-house"></i><span class="tip">Dashboard</span></button>
+  <button class="sb-btn"><i class="fa-solid fa-map-location-dot"></i><span class="tip">Route Map</span></button>
+  <button class="sb-btn active"><i class="fa-solid fa-calendar-days"></i><span class="tip">Itinerary</span></button>
+  <button class="sb-btn"><i class="fa-solid fa-graduation-cap"></i><span class="tip">School</span></button>
+  <button class="sb-btn"><i class="fa-solid fa-book-open"></i><span class="tip">Journal</span></button>
+  <button class="sb-btn"><i class="fa-solid fa-images"></i><span class="tip">Gallery</span></button>
+  <button class="sb-btn"><i class="fa-solid fa-envelope"></i><span class="tip">Postcards</span></button>
+  <div class="sb-gap"></div>
+  <button class="sb-btn"><i class="fa-solid fa-gear"></i><span class="tip">Settings</span></button>
+</div>
+
+<!-- Main -->
+<div class="main">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div class="topbar-title">
+      <i class="fa-solid fa-calendar-days"></i>
+      Itinerary
+    </div>
+    <div class="topbar-meta">46 days · 15 stops · ~7,000 mi</div>
+    <div class="tb-space"></div>
+    <button class="tb-btn">
+      <i class="fa-solid fa-arrows-spin"></i> Change Plan
+    </button>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+
+    <!-- Toggle + route -->
+    <div class="toggle-row">
+      <div class="view-toggle">
+        <button class="vt-btn active" onclick="setView(this,'stop')">
+          <i class="fa-solid fa-location-dot"></i> By Stop
+        </button>
+        <button class="vt-btn" onclick="setView(this,'day')">
+          <i class="fa-solid fa-calendar-days"></i> By Day
+        </button>
+      </div>
+      <div class="route-lbl">Warwick, NY &nbsp;→&nbsp; … &nbsp;→&nbsp; Warwick, NY</div>
+    </div>
+
+    <!-- ── Past: Ozarks ── -->
+    <div class="card past">
+      <div class="card-header" onclick="toggle('oz')">
+        <div class="card-icon">🏞️</div>
+        <div class="card-info">
+          <div class="card-name">
+            Ozark Mountains, AR
+            <span class="card-badge" style="background:#c0c0c0;">✓ Visited</span>
+          </div>
+          <div class="card-meta">
+            Mar 6–9 · 4 nights
+            <span class="wx-tag">🌧️ 37°–57°F typical</span>
+          </div>
+        </div>
+        <i class="fa-solid fa-chevron-right card-chev" id="chev-oz"></i>
+      </div>
+      <div class="card-body" id="body-oz">
+        <!-- collapsed by default for past stops -->
+      </div>
+    </div>
+
+    <!-- ── Current: Texas Hill Country ── -->
+    <div class="card current">
+      <div class="card-header" onclick="toggle('tx')">
+        <div class="card-icon">🌻</div>
+        <div class="card-info">
+          <div class="card-name">
+            Texas Hill Country, TX
+          </div>
+          <div class="card-meta">
+            Mar 10–13 · 4 nights
+            <span class="wx-tag">☀️ 50°–73°F typical</span>
+          </div>
+        </div>
+        <div class="card-spotify" title="Texas Hill Country playlist" onclick="event.stopPropagation(); showToast('Opening Spotify playlist…')">
+          <i class="fa-brands fa-spotify"></i>
+        </div>
+        <i class="fa-solid fa-chevron-right card-chev open" id="chev-tx"></i>
+      </div>
+
+      <div class="card-body open" id="body-tx">
+
+        <!-- Inner tabs -->
+        <div class="itabs">
+          <div class="itab active" onclick="itab('tx','days',this)">Days</div>
+          <div class="itab" onclick="itab('tx','activities',this)">
+            Activities
+            <span class="act-count">5</span>
+          </div>
+          <div class="itab" onclick="itab('tx','about',this)">About</div>
+        </div>
+
+        <!-- Days panel -->
+        <div class="ipanel" id="p-tx-days">
+          <div class="day" onclick="openDay('drive','Tue Mar 10','Ozarks → Fredericksburg, TX','drive')">
+            <div class="day-cal">Tue<strong>Mar 10</strong></div>
+            <div class="day-body">
+              <div class="day-title">Ozarks → Fredericksburg, TX</div>
+              <div class="day-sub">Fredericksburg KOA Holiday</div>
+            </div>
+            <div class="day-right">
+              <span class="dtag dtag-drive">Drive</span>
+              <span class="day-dist">490 mi · 8h</span>
+            </div>
+          </div>
+
+          <div class="day now" onclick="openDay('today','Wed Mar 11','Enchanted Rock &amp; Wildflowers','explore')">
+            <div class="day-cal today-cal">Wed<strong>Mar 11</strong></div>
+            <div class="day-body">
+              <div class="day-title">Enchanted Rock &amp; Wildflowers</div>
+              <div class="day-sub">Fredericksburg KOA Holiday</div>
+            </div>
+            <div class="day-right">
+              <span class="dtag dtag-today">Today</span>
+              <span class="day-dist"></span>
+            </div>
+          </div>
+
+          <div class="day" onclick="openDay('explore','Thu Mar 12','Austin Day Trip','explore')">
+            <div class="day-cal">Thu<strong>Mar 12</strong></div>
+            <div class="day-body">
+              <div class="day-title">Austin Day Trip — Bats, Barton Springs &amp; South Congress</div>
+              <div class="day-sub">Fredericksburg KOA Holiday · 150 mi from base</div>
+            </div>
+            <div class="day-right">
+              <span class="dtag dtag-explore">Explore</span>
+              <span class="day-dist">150 mi · 2.5h</span>
+            </div>
+          </div>
+
+          <div class="day" onclick="openDay('explore2','Fri Mar 13','Hamilton Pool &amp; Salt Lick BBQ','explore')">
+            <div class="day-cal">Fri<strong>Mar 13</strong></div>
+            <div class="day-body">
+              <div class="day-title">Hamilton Pool &amp; Salt Lick BBQ</div>
+              <div class="day-sub">Fredericksburg KOA Holiday</div>
+            </div>
+            <div class="day-right">
+              <span class="dtag dtag-explore">Explore</span>
+              <span class="day-dist"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Activities panel -->
+        <div class="ipanel hidden" id="p-tx-activities">
+
+          <!-- AI Recommendations -->
+          <div class="act-search">
+            <div class="act-search-row">
+              <input type="text" placeholder="✨  Find things to do — hikes, music, restaurants…" id="ai-q" />
+              <button onclick="runSearch()">Search</button>
+            </div>
+            <div class="chips" id="suggestion-chips" style="display:none;">
+              <div class="chip" onclick="toggleChip(this)">🥾 Hiking</div>
+              <div class="chip" onclick="toggleChip(this)">🏊 Swimming</div>
+              <div class="chip on" onclick="toggleChip(this)">🎵 Live Music</div>
+              <div class="chip" onclick="toggleChip(this)">🍽️ Restaurants</div>
+              <div class="chip" onclick="toggleChip(this)">🌸 Wildflowers</div>
+              <div class="chip" onclick="toggleChip(this)">🐾 Kid-Friendly</div>
+            </div>
+          </div>
+
+          <!-- AI Results (shown after search) -->
+          <div class="act-results" id="ai-results" style="display:none;">
+            <div class="act-section-lbl">Recommendations for Texas Hill Country</div>
+
+            <div class="result">
+              <div class="rem">🎸</div>
+              <div class="rbod">
+                <div class="rnm">Luckenbach Texas Dance Hall</div>
+                <div class="rmt"><span>Live music</span><span>Luckenbach, TX · 10 mi</span><span>Free admission</span></div>
+                <div class="rdsc">Legendary dance hall with nightly live music. Texas country and honky-tonk in a true Hill Country setting.</div>
+              </div>
+              <button class="radd done"><i class="fa-solid fa-check"></i> Added</button>
+            </div>
+
+            <div class="result">
+              <div class="rem">🌊</div>
+              <div class="rbod">
+                <div class="rnm">Jacob's Well Natural Area</div>
+                <div class="rmt"><span>Swimming</span><span>Wimberley, TX · 45 mi</span><span>Reservations required</span></div>
+                <div class="rdsc">Crystal-clear natural swimming hole fed by an artesian spring. One of Texas's most iconic outdoor spots.</div>
+              </div>
+              <button class="radd" onclick="addActivity(this,'Jacob\'s Well')"><i class="fa-solid fa-plus"></i> Add</button>
+            </div>
+
+            <div class="result">
+              <div class="rem">🌸</div>
+              <div class="rbod">
+                <div class="rnm">Wildseed Farms Wildflower Drive</div>
+                <div class="rmt"><span>Scenic drive</span><span>Fredericksburg, TX · 5 mi</span><span>Peak season now</span></div>
+                <div class="rdsc">America's largest working wildflower farm. Bluebonnets and Indian paintbrush at peak bloom in March.</div>
+              </div>
+              <button class="radd" onclick="addActivity(this,'Wildseed Farms')"><i class="fa-solid fa-plus"></i> Add</button>
+            </div>
+          </div>
+
+          <div class="thinking" id="ai-thinking">
+            <i class="fa-solid fa-wand-magic-sparkles"></i>
+            <span>Finding the best activities in Texas Hill Country…</span>
+          </div>
+
+          <!-- Planned Activities -->
+          <div id="plan-list" style="margin-top:8px;">
+            <div class="pitem">
+              <div class="pem">🏔️</div>
+              <div class="ptxt">
+                <div class="pnm">Enchanted Rock State Natural Area</div>
+                <div class="pmt">Hiking · Day 12 (today)</div>
+              </div>
+              <button class="prm" onclick="removeActivity(this)"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="pitem">
+              <div class="pem">🎸</div>
+              <div class="ptxt">
+                <div class="pnm">Luckenbach Texas Dance Hall</div>
+                <div class="pmt">Live Music · Day 12</div>
+              </div>
+              <button class="prm" onclick="removeActivity(this)"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="pitem">
+              <div class="pem">🦇</div>
+              <div class="ptxt">
+                <div class="pnm">Congress Bridge Bat Colony</div>
+                <div class="pmt">Nature · Day 13</div>
+              </div>
+              <button class="prm" onclick="removeActivity(this)"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="pitem">
+              <div class="pem">🍖</div>
+              <div class="ptxt">
+                <div class="pnm">Salt Lick BBQ</div>
+                <div class="pmt">Food · Day 14</div>
+              </div>
+              <button class="prm" onclick="removeActivity(this)"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="pitem">
+              <div class="pem">🏊</div>
+              <div class="ptxt">
+                <div class="pnm">Hamilton Pool Preserve</div>
+                <div class="pmt">Swimming · Day 14</div>
+              </div>
+              <button class="prm" onclick="removeActivity(this)"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+
+          <button class="add-btn" onclick="showToast('Add activity coming soon')">
+            <i class="fa-solid fa-plus"></i> Add activity manually
+          </button>
+        </div>
+
+        <!-- About panel -->
+        <div class="ipanel hidden" id="p-tx-about">
+          <div class="about-body">
+            <div class="desc">
+              Texas Hill Country is a region of rolling limestone hills, clear-water rivers, and wildflower meadows. In March, the region explodes with bluebonnets and Indian paintbrush — the best wildflower season in the state. Fredericksburg blends Texas ranch culture with German heritage and world-class wineries.
+            </div>
+            <div class="hl-grid">
+              <div class="hl">🌸 Peak wildflower season</div>
+              <div class="hl">🍷 30+ wineries nearby</div>
+              <div class="hl">🌡️ 50°–73°F typical</div>
+              <div class="hl">🦇 Austin bat colony</div>
+              <div class="hl">🏔️ Enchanted Rock</div>
+              <div class="hl">💧 Jacob's Well swimming</div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /card-body -->
+    </div><!-- /current card -->
+
+    <!-- ── Upcoming: Big Bend ── -->
+    <div class="card">
+      <div class="card-header" onclick="toggle('bb')">
+        <div class="card-icon">🌵</div>
+        <div class="card-info">
+          <div class="card-name">Big Bend National Park, TX</div>
+          <div class="card-meta">
+            Mar 14–17 · 4 nights
+            <span class="wx-tag">☀️ 55°–81°F typical</span>
+          </div>
+        </div>
+        <i class="fa-solid fa-chevron-right card-chev" id="chev-bb"></i>
+      </div>
+      <div class="card-body" id="body-bb"></div>
+    </div>
+
+    <!-- ── Upcoming: White Sands ── -->
+    <div class="card">
+      <div class="card-header" onclick="toggle('ws')">
+        <div class="card-icon">🏜️</div>
+        <div class="card-info">
+          <div class="card-name">White Sands, NM</div>
+          <div class="card-meta">
+            Mar 18–19 · 2 nights
+            <span class="wx-tag">🌤️ 48°–76°F typical</span>
+          </div>
+        </div>
+        <i class="fa-solid fa-chevron-right card-chev" id="chev-ws"></i>
+      </div>
+      <div class="card-body" id="body-ws"></div>
+    </div>
+
+    <!-- ── Upcoming: Sedona ── -->
+    <div class="card">
+      <div class="card-header" onclick="toggle('sed')">
+        <div class="card-icon">🔴</div>
+        <div class="card-info">
+          <div class="card-name">Sedona, AZ</div>
+          <div class="card-meta">
+            Mar 20–24 · 5 nights
+            <span class="wx-tag">🌤️ 44°–68°F typical</span>
+          </div>
+        </div>
+        <i class="fa-solid fa-chevron-right card-chev" id="chev-sed"></i>
+      </div>
+      <div class="card-body" id="body-sed"></div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<div class="toast" id="toast"></div>
+
+<!-- ── Day Detail Modal ── -->
+<div class="modal-overlay" id="day-modal-overlay" onclick="closeDay(event)">
+  <div class="day-modal">
+
+    <div class="dm-header">
+      <div class="dm-date-box" id="dm-datebox">
+        <div class="dm-dow" id="dm-dow">Wed</div>
+        <div class="dm-d"   id="dm-d">11</div>
+      </div>
+      <div class="dm-info">
+        <div class="dm-title" id="dm-title">Enchanted Rock &amp; Wildflowers</div>
+        <div class="dm-meta">
+          <span class="dm-badge" id="dm-badge" style="background:#3A8A5C;">Explore</span>
+        </div>
+      </div>
+      <!-- Weather top-right -->
+      <div class="dm-wx" id="dm-wx">
+        <div class="dm-wx-icon">☀️</div>
+        <div class="dm-wx-body">
+          <div class="dm-wx-tmp">50°–73°F</div>
+          <div class="dm-wx-dsc">Sunny</div>
+        </div>
+      </div>
+      <button class="dm-close" onclick="document.getElementById('day-modal-overlay').classList.remove('open')">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+    </div>
+
+    <div class="dm-body">
+
+      <!-- Stay info -->
+      <div class="dm-section">
+        <div class="dm-section-lbl"><i class="fa-solid fa-campground"></i> Staying at</div>
+        <div class="dm-info-row">
+          <div class="dm-info-card">
+            <i class="fa-solid fa-campground"></i>
+            <div class="ic-body">
+              <div class="ic-title">Fredericksburg KOA Holiday</div>
+              <div class="ic-sub">Electric hookup · Full bath · Pool · Pet friendly</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Drive details (shown for drive days) -->
+      <div class="dm-section" id="dm-drive-section">
+        <div class="dm-section-lbl"><i class="fa-solid fa-car-side"></i> Drive</div>
+        <div class="dm-drive-strip">
+          <div class="dm-drive-stat"><div class="dsv">490 mi</div><div class="dsl">Distance</div></div>
+          <div class="dm-drive-stat"><div class="dsv">~8h</div><div class="dsl">Drive Time</div></div>
+          <div class="dm-drive-stat"><div class="dsv">I-40 W</div><div class="dsl">Main Route</div></div>
+        </div>
+      </div>
+
+      <!-- Activities for this day -->
+      <div class="dm-section">
+        <div class="dm-section-lbl"><i class="fa-solid fa-star"></i> Planned for today</div>
+        <div class="dm-act">
+          <div class="da-em">🏔️</div>
+          <div class="da-txt">
+            <div class="da-nm">Enchanted Rock State Natural Area</div>
+            <div class="da-mt">Hiking · ~3 hrs · Opens 8am</div>
+          </div>
+        </div>
+        <div class="dm-act">
+          <div class="da-em">🎸</div>
+          <div class="da-txt">
+            <div class="da-nm">Luckenbach Texas Dance Hall</div>
+            <div class="da-mt">Live music · Evening · Free</div>
+          </div>
+        </div>
+        <div class="dm-act">
+          <div class="da-em">🌸</div>
+          <div class="da-txt">
+            <div class="da-nm">Wildseed Farms Wildflower Drive</div>
+            <div class="da-mt">Scenic · 5 mi away · Peak bloom</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Notes -->
+      <div class="dm-section">
+        <div class="dm-section-lbl"><i class="fa-solid fa-pen"></i> Notes for this day</div>
+        <textarea class="dm-note" placeholder="Add notes, reminders, things to pack…">Bring sunscreen + wildflower field guide. Enchanted Rock gets busy — arrive by 9am. Kids want to catch fireflies tonight!</textarea>
+        <button class="dm-note-save">Save note</button>
+        <div style="clear:both;"></div>
+      </div>
+
+    </div><!-- /dm-body -->
+  </div><!-- /day-modal -->
+</div><!-- /modal-overlay -->
+
+<script>
+  function toggle(id) {
+    var body = document.getElementById('body-' + id);
+    var chev = document.getElementById('chev-' + id);
+    var isOpen = body.classList.contains('open');
+    body.classList.toggle('open', !isOpen);
+    chev.classList.toggle('open', !isOpen);
+  }
+
+  function itab(stop, panel, el) {
+    var all = el.closest('.itabs').querySelectorAll('.itab');
+    all.forEach(function(t) { t.classList.remove('active'); });
+    el.classList.add('active');
+    var prefix = 'p-' + stop + '-';
+    ['days','activities','about'].forEach(function(p) {
+      var panel_el = document.getElementById(prefix + p);
+      if (panel_el) panel_el.classList.toggle('hidden', p !== panel);
+    });
+  }
+
+  function setView(el, view) {
+    el.closest('.view-toggle').querySelectorAll('.vt-btn').forEach(function(b) { b.classList.remove('active'); });
+    el.classList.add('active');
+  }
+
+  function toggleChip(el) { el.classList.toggle('on'); }
+
+  var DAY_DATA = {
+    drive: {
+      dow: 'Tue', d: '10', dateFull: 'Tue, Mar 10',
+      badge: 'Drive Day', badgeColor: '#2C5F8A',
+      showDrive: true
+    },
+    today: {
+      dow: 'Wed', d: '11', dateFull: 'Wed, Mar 11',
+      badge: 'Today', badgeColor: '#E8813A',
+      showDrive: false
+    },
+    explore: {
+      dow: 'Thu', d: '12', dateFull: 'Thu, Mar 12',
+      badge: 'Explore', badgeColor: '#3A8A5C',
+      showDrive: false
+    },
+    explore2: {
+      dow: 'Fri', d: '13', dateFull: 'Fri, Mar 13',
+      badge: 'Explore', badgeColor: '#3A8A5C',
+      showDrive: false
+    }
+  };
+
+  function openDay(type, dateStr, title, variant) {
+    var d = DAY_DATA[type] || DAY_DATA.explore;
+    document.getElementById('dm-title').innerHTML     = title;
+    document.getElementById('dm-dow').textContent     = d.dow;
+    document.getElementById('dm-d').textContent       = d.d;
+    document.getElementById('dm-date-full').textContent = d.dateFull;
+    var badge = document.getElementById('dm-badge');
+    badge.textContent = d.badge;
+    badge.style.background = d.badgeColor;
+    var datebox = document.getElementById('dm-datebox');
+    datebox.querySelector('.dm-dow').style.background = d.badgeColor;
+    var driveSection = document.getElementById('dm-drive-section');
+    if (driveSection) driveSection.style.display = d.showDrive ? 'block' : 'none';
+    document.getElementById('day-modal-overlay').classList.add('open');
+  }
+
+  function closeDay(e) {
+    if (e.target === document.getElementById('day-modal-overlay')) {
+      document.getElementById('day-modal-overlay').classList.remove('open');
+    }
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') document.getElementById('day-modal-overlay').classList.remove('open');
+  });
+
+  function runSearch() {
+    var thinking = document.getElementById('ai-thinking');
+    var results  = document.getElementById('ai-results');
+    var chips    = document.getElementById('suggestion-chips');
+    results.style.display = 'none';
+    thinking.style.display = 'block';
+    setTimeout(function() {
+      thinking.style.display = 'none';
+      results.style.display  = 'block';
+      if (chips) chips.style.display = 'flex';
+    }, 1400);
+  }
+
+  function addActivity(btn, name) {
+    btn.classList.add('done');
+    btn.innerHTML = '<i class="fa-solid fa-check"></i> Added';
+    var list = document.getElementById('plan-list');
+    var div = document.createElement('div');
+    div.className = 'pitem';
+    div.innerHTML = '<div class="pem">⭐</div>'
+      + '<div class="ptxt"><div class="pnm">' + name + '</div><div class="pmt">Added just now</div></div>'
+      + '<button class="prm" onclick="removeActivity(this)"><i class="fa-solid fa-xmark"></i></button>';
+    list.appendChild(div);
+    updateCount(1);
+    showToast(name + ' added to your plan');
+  }
+
+  function removeActivity(btn) {
+    btn.closest('.pitem').remove();
+    updateCount(-1);
+    showToast('Removed from plan');
+  }
+
+  function updateCount(delta) {
+    var badge = document.querySelector('.itab .act-count');
+    if (badge) {
+      var n = parseInt(badge.textContent) + delta;
+      badge.textContent = n;
+    }
+  }
+
+  function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._t);
+    t._t = setTimeout(function() { t.classList.remove('show'); }, 2400);
+  }
+
+  // Keyboard shortcut hint
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && document.activeElement === document.getElementById('ai-q')) {
+      runSearch();
+    }
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Itinerary — Desktop v3</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f2f5; color: #1a1a2e; display: flex; min-height: 100vh; }
+
+  /* ── Slim sidebar ── */
+  .sidebar {
+    width: 60px; background: #1a3a5c; display: flex; flex-direction: column;
+    align-items: center; padding: 14px 0 18px; gap: 2px; flex-shrink: 0;
+    position: sticky; top: 0; height: 100vh;
+  }
+  .sb-logo { font-size: 1.4rem; margin-bottom: 14px; }
+  .sb-btn { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,.4); font-size: 1rem; cursor: pointer; border: none; background: none; transition: all .15s; position: relative; }
+  .sb-btn:hover { color: #fff; background: rgba(255,255,255,.1); }
+  .sb-btn.active { color: #fff; background: rgba(232,129,58,.35); }
+  .sb-btn .tip { position: absolute; left: 50px; background: #0f2540; color: #fff; font-size: .71rem; font-weight: 700; padding: 4px 9px; border-radius: 6px; white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .15s; z-index: 200; }
+  .sb-btn:hover .tip { opacity: 1; }
+  .sb-gap { flex: 1; }
+
+  /* ── Main ── */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+
+  /* ── Top bar ── */
+  .topbar { background: #fff; border-bottom: 1px solid #e4e8ed; padding: 0 24px; display: flex; align-items: center; gap: 12px; height: 54px; flex-shrink: 0; }
+  .topbar-title { font-weight: 900; font-size: .98rem; color: #1a1a2e; display: flex; align-items: center; gap: 7px; }
+  .topbar-meta  { font-size: .75rem; color: #bbb; border-left: 1px solid #e4e8ed; padding-left: 12px; }
+  .tb-space { flex: 1; }
+  .tb-pill  { background: #FFF3EB; color: #E8813A; border: 1px solid #fbd4aa; border-radius: 100px; padding: 5px 13px; font-size: .74rem; font-weight: 800; white-space: nowrap; }
+  .tb-btn   { background: none; border: 1.5px solid #e4e8ed; border-radius: 100px; padding: 6px 14px; font-size: .75rem; font-weight: 700; color: #555; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 6px; transition: all .15s; }
+  .tb-btn:hover { border-color: #2C5F8A; color: #2C5F8A; }
+  .tb-btn.ai { background: linear-gradient(135deg,#E8813A,#c45e0e); border-color: transparent; color: #fff; font-weight: 800; }
+  .tb-btn.ai:hover { opacity: .92; }
+
+  /* ── Content ── */
+  .content { flex: 1; overflow-y: auto; padding: 20px 28px 40px; max-width: 860px; }
+
+  /* Toggle row */
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .view-toggle { display: inline-flex; background: #e2e8f0; border-radius: 100px; padding: 3px; }
+  .vt-btn { padding: 6px 16px; border: none; background: transparent; border-radius: 100px; font-size: .79rem; font-weight: 700; cursor: pointer; color: #777; transition: all .18s; font-family: inherit; display: flex; align-items: center; gap: 6px; }
+  .vt-btn.active { background: #fff; color: #1a3a5c; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+  .route-lbl { font-size: .75rem; color: #bbb; }
+
+  /* Summary strip */
+  .summary { display: flex; gap: 10px; margin-bottom: 18px; }
+  .sum { flex: 1; background: #fff; border-radius: 10px; padding: 12px 14px; border: 1px solid #e8ecf1; display: flex; flex-direction: column; gap: 2px; }
+  .sum .v { font-size: 1.15rem; font-weight: 900; }
+  .sum .l { font-size: .64rem; font-weight: 700; color: #bbb; text-transform: uppercase; letter-spacing: .05em; }
+
+  /* ── Stop card ── */
+  .card { background: #fff; border-radius: 13px; margin-bottom: 10px; border: 1px solid #e4e9f0; overflow: hidden; }
+  .card.current { border: 2px solid #E8813A; box-shadow: 0 3px 18px rgba(232,129,58,.13); }
+  .card.past { opacity: .68; }
+
+  /* Header row */
+  .card-header { display: flex; align-items: center; gap: 14px; padding: 14px 18px; cursor: pointer; }
+  .card-header:hover { background: #fafbfc; }
+  .card-icon { font-size: 1.6rem; flex-shrink: 0; line-height: 1; }
+  .card-info { flex: 1; min-width: 0; }
+  .card-name { font-size: 1rem; font-weight: 800; color: #1a1a2e; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card-badge { font-size: .62rem; font-weight: 800; padding: 3px 9px; border-radius: 100px; color: #fff; white-space: nowrap; }
+  .card-meta { font-size: .76rem; color: #999; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .wx-tag { background: #EEF5FB; color: #2C5F8A; font-size: .71rem; font-weight: 700; padding: 2px 8px; border-radius: 100px; white-space: nowrap; }
+  .planned-tag { background: #f3f0ff; color: #7c3aed; font-size: .71rem; font-weight: 700; padding: 2px 8px; border-radius: 100px; white-space: nowrap; }
+  .card-chev { color: #d0d5dd; font-size: .82rem; transition: transform .2s; flex-shrink: 0; }
+  .card-chev.open { transform: rotate(90deg); }
+
+  /* Body */
+  .card-body { display: none; border-top: 1px solid #f0f3f6; }
+  .card-body.open { display: block; }
+
+  /* Weather bar */
+  .wx-bar { background: #f0f7ff; border-bottom: 1px solid #d8eaf6; padding: 11px 18px; display: flex; align-items: center; gap: 14px; }
+  .wx-bar .wx-em  { font-size: 1.5rem; }
+  .wx-bar .wx-tmp { font-size: .95rem; font-weight: 900; color: #1a3a5c; }
+  .wx-bar .wx-dsc { font-size: .74rem; color: #5a7a9a; margin-top: 1px; }
+  .wx-bar .wx-lbl { font-size: .62rem; font-weight: 800; color: #7aaac8; text-transform: uppercase; letter-spacing: .07em; }
+  .wx-bar .wx-fc  { margin-left: auto; background: #fff; border: 1px solid #b0cfe8; border-radius: 100px; padding: 4px 12px; font-size: .72rem; font-weight: 700; color: #2C5F8A; cursor: pointer; font-family: inherit; white-space: nowrap; }
+
+  /* AI action bar */
+  .ai-bar { padding: 10px 18px; background: #fff; border-bottom: 1px solid #f0f3f6; display: flex; gap: 7px; flex-wrap: wrap; }
+  .ai-bar-btn { padding: 6px 13px; border-radius: 100px; border: 1.5px solid #e4e9f0; background: #fff; font-size: .73rem; font-weight: 700; color: #555; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 5px; transition: all .15s; white-space: nowrap; }
+  .ai-bar-btn:hover { border-color: #2C5F8A; color: #2C5F8A; background: #f0f6fc; }
+  .ai-bar-btn.spark { border-color: #E8813A; color: #E8813A; }
+  .ai-bar-btn.spark:hover { background: #fff8f3; }
+
+  /* Inner tabs */
+  .itabs { display: flex; border-bottom: 1px solid #eef1f5; padding: 0 18px; background: #fff; }
+  .itab { padding: 9px 14px; font-size: .77rem; font-weight: 700; color: #aaa; cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; white-space: nowrap; }
+  .itab.active { color: #E8813A; border-bottom-color: #E8813A; }
+
+  .ipanel { padding: 16px 18px; }
+  .ipanel.hidden { display: none; }
+
+  /* Section label */
+  .slbl { font-size: .66rem; font-weight: 900; color: #aaa; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+  .slbl::after { content: ''; flex: 1; height: 1px; background: #eef1f5; }
+
+  /* Day rows */
+  .day { display: flex; align-items: center; gap: 11px; padding: 9px 10px; border-radius: 9px; cursor: pointer; transition: background .12s; margin-bottom: 3px; }
+  .day:hover { background: #f5f7fa; }
+  .day.now { background: #FFF3EB; border-left: 3px solid #E8813A; padding-left: 7px; }
+  .day-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot-drive { background: #2C5F8A; }
+  .dot-explore { background: #3A8A5C; }
+  .dot-today { background: #E8813A; }
+  .day-body { flex: 1; }
+  .day-title { font-size: .85rem; font-weight: 700; color: #1a1a2e; }
+  .day-sub { font-size: .71rem; color: #aaa; margin-top: 1px; }
+  .day-right { font-size: .71rem; color: #ccc; text-align: right; white-space: nowrap; flex-shrink: 0; }
+  .dtag { font-size: .65rem; font-weight: 800; padding: 2px 8px; border-radius: 100px; }
+  .dtag-drive   { background: #EEF5FB; color: #2C5F8A; }
+  .dtag-explore { background: #EEF9F2; color: #2e7d52; }
+  .dtag-today   { background: #E8813A; color: #fff; }
+
+  /* Planned activities */
+  .pitem { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: #fafbfc; border: 1px solid #eef1f5; border-radius: 9px; margin-bottom: 6px; }
+  .pitem .pem  { font-size: 1.1rem; flex-shrink: 0; }
+  .pitem .ptxt { flex: 1; }
+  .pitem .pnm  { font-size: .83rem; font-weight: 700; color: #1a1a2e; }
+  .pitem .pmt  { font-size: .7rem; color: #aaa; margin-top: 1px; }
+  .pitem .prm  { background: none; border: none; color: #ddd; cursor: pointer; font-size: .88rem; border-radius: 50%; padding: 4px; transition: color .15s; }
+  .pitem .prm:hover { color: #e53935; }
+
+  .add-btn { width: 100%; padding: 9px; border: 1.5px dashed #d5dde8; border-radius: 9px; background: none; font-size: .77rem; font-weight: 700; color: #aaa; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 7px; margin-top: 4px; transition: all .15s; }
+  .add-btn:hover { border-color: #E8813A; color: #E8813A; background: #fff8f3; }
+
+  /* ── AI Events finder ── */
+  .finder { padding: 16px 18px; }
+  .ai-intro { background: linear-gradient(135deg,#fff8f3,#fff3eb); border: 1px solid #fbd4aa; border-radius: 10px; padding: 11px 14px; margin-bottom: 12px; font-size: .79rem; color: #7a3a0e; line-height: 1.55; display: flex; align-items: flex-start; gap: 9px; }
+  .ai-intro i { color: #E8813A; margin-top: 1px; flex-shrink: 0; }
+
+  .search-row { display: flex; gap: 8px; margin-bottom: 10px; }
+  .search-row input { flex: 1; border: 1.5px solid #e4e8ed; border-radius: 100px; padding: 8px 16px; font-size: .82rem; font-family: inherit; outline: none; color: #333; transition: border-color .15s; }
+  .search-row input:focus { border-color: #E8813A; }
+  .search-row button { background: linear-gradient(135deg,#E8813A,#c45e0e); color: #fff; border: none; border-radius: 100px; padding: 8px 18px; font-size: .79rem; font-weight: 800; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .chip { padding: 4px 12px; border-radius: 100px; border: 1.5px solid #e4e8ed; background: #fff; font-size: .72rem; font-weight: 700; cursor: pointer; color: #666; transition: all .15s; }
+  .chip:hover, .chip.on { border-color: #E8813A; color: #E8813A; background: #fff8f3; }
+
+  .result { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; background: #fff; border: 1px solid #eef1f5; border-radius: 11px; margin-bottom: 7px; }
+  .result .rem  { font-size: 1.3rem; flex-shrink: 0; margin-top: 2px; line-height: 1; }
+  .result .rbod { flex: 1; }
+  .result .rnm  { font-size: .86rem; font-weight: 800; color: #1a1a2e; }
+  .result .rmt  { font-size: .71rem; color: #aaa; margin-top: 2px; display: flex; flex-wrap: wrap; gap: 8px; }
+  .result .rdsc { font-size: .75rem; color: #555; margin-top: 5px; line-height: 1.55; }
+  .result .radd { background: #3A8A5C; color: #fff; border: none; border-radius: 100px; padding: 5px 13px; font-size: .72rem; font-weight: 800; cursor: pointer; font-family: inherit; white-space: nowrap; flex-shrink: 0; align-self: center; transition: background .15s; }
+  .result .radd:hover { background: #2d6e48; }
+  .result .radd.done { background: #2e7d52; pointer-events: none; }
+
+  /* About */
+  .about-body { padding: 16px 18px; }
+  .about-body .desc { font-size: .84rem; line-height: 1.7; color: #444; background: #f7f9fb; border-radius: 10px; padding: 13px 16px; border-left: 3px solid #2C5F8A; margin-bottom: 14px; }
+  .hl-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 7px; }
+  .hl { background: #fff; border: 1px solid #eef1f5; border-radius: 9px; padding: 9px 12px; font-size: .77rem; font-weight: 700; color: #1a1a2e; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); background: #1a3a5c; color: #fff; padding: 9px 20px; border-radius: 100px; font-size: .8rem; font-weight: 700; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 999; white-space: nowrap; }
+  .toast.show { opacity: 1; }
+
+  .thinking { text-align: center; padding: 24px; font-size: .82rem; color: #aaa; display: none; }
+  .thinking i { display: block; font-size: 1.3rem; color: #E8813A; margin-bottom: 8px; }
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="sb-logo">🚐</div>
+  <button class="sb-btn"><i class="fa-solid fa-house"></i><span class="tip">Dashboard</span></button>
+  <button class="sb-btn"><i class="fa-solid fa-map-location-dot"></i><span class="tip">Route Map</span></button>
+  <button class="sb-btn active"><i class="fa-solid fa-calendar-days"></i><span class="tip">Itinerary</span></button>
+  <button class="sb-btn"><i class="fa-solid fa-graduation-cap"></i><span class="tip">School</span></button>
+  <button class="sb-btn"><i class="fa-solid fa-book-open"></i><span class="tip">Journal</span></button>
+  <button class="sb-btn"><i class="fa-solid fa-images"></i><span class="tip">Gallery</span></button>
+  <button class="sb-btn"><i class="fa-solid fa-envelope"></i><span class="tip">Postcards</span></button>
+  <div class="sb-gap"></div>
+  <button class="sb-btn"><i class="fa-solid fa-gear"></i><span class="tip">Settings</span></button>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title"><i class="fa-solid fa-calendar-days" style="color:#E8813A;font-size:.85rem;"></i> Itinerary</div>
+    <div class="topbar-meta">46 days · 15 stops · ~7,000 mi</div>
+    <div class="tb-space"></div>
+    <div class="tb-pill">Day 12 of 46 — Texas Hill Country</div>
+    <button class="tb-btn"><i class="fa-solid fa-arrows-spin"></i> Change Plan</button>
+    <button class="tb-btn ai"><i class="fa-solid fa-wand-magic-sparkles"></i> Ask TripGenie</button>
+  </div>
+
+  <div class="content">
+
+    <!-- Toggle row -->
+    <div class="toggle-row">
+      <div class="view-toggle">
+        <button class="vt-btn active" onclick="setView(this)"><i class="fa-solid fa-location-dot"></i> By Stop</button>
+        <button class="vt-btn" onclick="setView(this)"><i class="fa-solid fa-calendar-days"></i> By Day</button>
+      </div>
+      <div class="route-lbl">Warwick, NY &nbsp;→&nbsp; … &nbsp;→&nbsp; Warwick, NY</div>
+    </div>
+
+    <!-- Summary -->
+    <div class="summary">
+      <div class="sum"><div class="v" style="color:#aaa;">4</div><div class="l">Visited</div></div>
+      <div class="sum"><div class="v" style="color:#E8813A;">1</div><div class="l">Current</div></div>
+      <div class="sum"><div class="v" style="color:#2C5F8A;">10</div><div class="l">Upcoming</div></div>
+      <div class="sum"><div class="v" style="color:#2e7d52;">46</div><div class="l">Total Days</div></div>
+      <div class="sum"><div class="v" style="color:#7c3aed;">12</div><div class="l">Planned</div></div>
+    </div>
+
+    <!-- ── Past: Ozarks ── -->
+    <div class="card past">
+      <div class="card-header" onclick="toggle('oz')">
+        <div class="card-icon">🏞️</div>
+        <div class="card-info">
+          <div class="card-name">Ozark Mountains, AR <span class="card-badge" style="background:#aaa;">✓ Visited</span></div>
+          <div class="card-meta">Mar 6–9 · 4 nights <span class="wx-tag">🌧️ 37°–57°F typical</span></div>
+        </div>
+        <i class="fa-solid fa-chevron-right card-chev" id="chev-oz"></i>
+      </div>
+      <div class="card-body" id="body-oz"></div>
+    </div>
+
+    <!-- ── Current: Texas Hill Country ── -->
+    <div class="card current">
+      <div class="card-header" onclick="toggle('tx')">
+        <div class="card-icon">🌻</div>
+        <div class="card-info">
+          <div class="card-name">
+            Texas Hill Country, TX
+            <span class="card-badge" style="background:#E8813A;">HERE NOW</span>
+          </div>
+          <div class="card-meta">
+            Mar 10–13 · 4 nights
+            <span class="wx-tag">☀️ 50°–73°F typical</span>
+            <span class="planned-tag">🎯 5 planned</span>
+          </div>
+        </div>
+        <i class="fa-solid fa-chevron-right card-chev open" id="chev-tx"></i>
+      </div>
+
+      <div class="card-body open" id="body-tx">
+
+        <!-- Weather -->
+        <div class="wx-bar">
+          <div class="wx-em">☀️</div>
+          <div>
+            <div class="wx-lbl">March Typical Weather</div>
+            <div class="wx-tmp">50°F low · 73°F high</div>
+            <div class="wx-dsc">Sunny — peak wildflower season!</div>
+          </div>
+          <button class="wx-fc"><i class="fa-solid fa-cloud-sun"></i> Live Forecast</button>
+        </div>
+
+        <!-- AI quick-actions -->
+        <div class="ai-bar">
+          <button class="ai-bar-btn spark"><i class="fa-solid fa-wand-magic-sparkles"></i> Suggest activities for today</button>
+          <button class="ai-bar-btn spark"><i class="fa-solid fa-magnifying-glass-location"></i> Find events this weekend</button>
+          <button class="ai-bar-btn spark"><i class="fa-solid fa-utensils"></i> Best restaurants nearby</button>
+          <button class="ai-bar-btn"><i class="fa-solid fa-campground"></i> Campground info</button>
+          <button class="ai-bar-btn"><i class="fa-solid fa-music"></i> Local music</button>
+        </div>
+
+        <!-- Inner tabs -->
+        <div class="itabs">
+          <div class="itab active" onclick="itab('tx','days',this)">Days</div>
+          <div class="itab" onclick="itab('tx','planned',this)">Planned <span style="background:#7c3aed;color:#fff;border-radius:100px;padding:1px 7px;font-size:.62rem;margin-left:3px;">5</span></div>
+          <div class="itab" onclick="itab('tx','find',this)">✨ Find Events &amp; Activities</div>
+          <div class="itab" onclick="itab('tx','about',this)">About</div>
+        </div>
+
+        <!-- Days -->
+        <div class="ipanel" id="p-tx-days">
+          <div class="slbl">4 days at this stop</div>
+
+          <div class="day">
+            <div class="day-dot dot-drive"></div>
+            <div class="day-body">
+              <div class="day-title">Ozarks → Fredericksburg, TX</div>
+              <div class="day-sub">Tue Mar 10 · Fredericksburg KOA Holiday</div>
+            </div>
+            <span class="dtag dtag-drive">Drive</span>
+            <div class="day-right">490 mi · 8h</div>
+          </div>
+
+          <div class="day now">
+            <div class="day-dot dot-today"></div>
+            <div class="day-body">
+              <div class="day-title" style="color:#E8813A;">Enchanted Rock &amp; Wildflowers</div>
+              <div class="day-sub">Wed Mar 11 · Fredericksburg KOA Holiday</div>
+            </div>
+            <span class="dtag dtag-today">Today</span>
+            <div class="day-right">—</div>
+          </div>
+
+          <div class="day">
+            <div class="day-dot dot-explore"></div>
+            <div class="day-body">
+              <div class="day-title">Austin Day Trip — Bats &amp; Barton Springs</div>
+              <div class="day-sub">Thu Mar 12 · Fredericksburg KOA Holiday</div>
+            </div>
+            <span class="dtag dtag-explore">Explore</span>
+            <div class="day-right">150 mi · 2.5h</div>
+          </div>
+
+          <div class="day">
+            <div class="day-dot dot-explore"></div>
+            <div class="day-body">
+              <div class="day-title">Hamilton Pool &amp; Salt Lick BBQ</div>
+              <div class="day-sub">Fri Mar 13 · Fredericksburg KOA Holiday</div>
+            </div>
+            <span class="dtag dtag-explore">Explore</span>
+            <div class="day-right">—</div>
+          </div>
+        </div>
+
+        <!-- Planned activities -->
+        <div class="ipanel hidden" id="p-tx-planned">
+          <div class="slbl">Planned activities</div>
+          <div id="planned-list">
+            <div class="pitem"><div class="pem">🪨</div><div class="ptxt"><div class="pnm">Enchanted Rock State Natural Area</div><div class="pmt">🥾 Hiking · Day 12 (Today)</div></div><button class="prm" onclick="rmItem(this)"><i class="fa-solid fa-xmark"></i></button></div>
+            <div class="pitem"><div class="pem">🌸</div><div class="ptxt"><div class="pnm">Willow City Wildflower Loop</div><div class="pmt">🌿 Scenic Drive · Day 12</div></div><button class="prm" onclick="rmItem(this)"><i class="fa-solid fa-xmark"></i></button></div>
+            <div class="pitem"><div class="pem">🦇</div><div class="ptxt"><div class="pnm">Congress Avenue Bat Flight</div><div class="pmt">🦇 Wildlife · Day 13 (Austin)</div></div><button class="prm" onclick="rmItem(this)"><i class="fa-solid fa-xmark"></i></button></div>
+            <div class="pitem"><div class="pem">💧</div><div class="ptxt"><div class="pnm">Hamilton Pool Preserve</div><div class="pmt">🏊 Swimming · Day 14</div></div><button class="prm" onclick="rmItem(this)"><i class="fa-solid fa-xmark"></i></button></div>
+            <div class="pitem"><div class="pem">🍖</div><div class="ptxt"><div class="pnm">Salt Lick BBQ</div><div class="pmt">🍽️ Food · Day 14</div></div><button class="prm" onclick="rmItem(this)"><i class="fa-solid fa-xmark"></i></button></div>
+          </div>
+          <button class="add-btn" onclick="itab('tx','find',document.querySelector('#body-tx .itab:nth-child(3)'))"><i class="fa-solid fa-plus"></i> Find more…</button>
+        </div>
+
+        <!-- Find Events & Activities (AI) -->
+        <div class="ipanel hidden" id="p-tx-find">
+          <div class="finder" style="padding:0;">
+            <div class="ai-intro">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span><strong>AI Events &amp; Activities Finder</strong> — Searching near <strong>Fredericksburg, TX</strong> for Mar 10–13. Describe what you're looking for or pick a category.</span>
+            </div>
+
+            <div class="search-row">
+              <input type="text" placeholder="e.g. family hikes with kids, live music Saturday, swimming holes…" id="srch">
+              <button onclick="doSearch()"><i class="fa-solid fa-wand-magic-sparkles"></i> Find</button>
+            </div>
+
+            <div class="chips">
+              <span class="chip on"  onclick="chip(this)">🥾 Hiking</span>
+              <span class="chip"     onclick="chip(this)">🎸 Live Music</span>
+              <span class="chip"     onclick="chip(this)">🎢 Family</span>
+              <span class="chip"     onclick="chip(this)">🍽️ Food</span>
+              <span class="chip"     onclick="chip(this)">🌲 State Parks</span>
+              <span class="chip"     onclick="chip(this)">🍷 Wine</span>
+              <span class="chip"     onclick="chip(this)">🎪 Events</span>
+              <span class="chip"     onclick="chip(this)">💧 Swimming</span>
+            </div>
+
+            <div class="thinking" id="thinking"><i class="fa-solid fa-spinner fa-spin"></i>TripGenie is searching…</div>
+
+            <div id="results">
+              <div class="slbl">Hiking near Fredericksburg, TX · Mar 10–13</div>
+
+              <div class="result">
+                <div class="rem">🪨</div>
+                <div class="rbod">
+                  <div class="rnm">Enchanted Rock State Natural Area</div>
+                  <div class="rmt"><span>🥾 Hiking</span><span>★★★★★ 5.0</span><span>~20 min</span></div>
+                  <div class="rdsc">A massive pink granite dome with panoramic Hill Country views. Arrive early — fills up fast. Great for all ages.</div>
+                </div>
+                <button class="radd done"><i class="fa-solid fa-check"></i> Added</button>
+              </div>
+
+              <div class="result">
+                <div class="rem">🌸</div>
+                <div class="rbod">
+                  <div class="rnm">Willow City Loop — Wildflower Scenic Drive</div>
+                  <div class="rmt"><span>🌿 Scenic</span><span>★★★★★ 4.9</span><span>~30 min</span></div>
+                  <div class="rdsc">13-mile loop through peak bluebonnet country in mid-March. One of Texas's most celebrated wildflower drives.</div>
+                </div>
+                <button class="radd done"><i class="fa-solid fa-check"></i> Added</button>
+              </div>
+
+              <div class="result">
+                <div class="rem">🛶</div>
+                <div class="rbod">
+                  <div class="rnm">Pedernales Falls State Park</div>
+                  <div class="rmt"><span>🏕️ State Park · Swimming</span><span>★★★★☆ 4.7</span><span>~40 min</span></div>
+                  <div class="rdsc">Beautiful stepped waterfalls, swimming holes, and hiking on the Pedernales River. A local family favorite.</div>
+                </div>
+                <button class="radd" onclick="addTo(this,'Pedernales Falls State Park','🛶','🏕️ State Park')">Add to Plan</button>
+              </div>
+
+              <div class="result">
+                <div class="rem">🎸</div>
+                <div class="rbod">
+                  <div class="rnm">Live Oak Outdoor Stage — Saturday Night</div>
+                  <div class="rmt"><span>🎵 Live Music</span><span>★★★★☆ 4.5</span><span>Downtown Fredericksburg</span></div>
+                  <div class="rdsc">Weekly Texas country and roots music on the outdoor stage. All ages, food trucks, free before 8pm.</div>
+                </div>
+                <button class="radd" onclick="addTo(this,'Live Oak Outdoor Stage','🎸','🎵 Live Music')">Add to Plan</button>
+              </div>
+
+              <div class="result">
+                <div class="rem">🍷</div>
+                <div class="rbod">
+                  <div class="rnm">Becker Vineyards Wine Tasting</div>
+                  <div class="rmt"><span>🍷 Wine</span><span>★★★★☆ 4.6</span><span>~15 min</span></div>
+                  <div class="rdsc">One of Texas's top wineries. Family-friendly grounds, lavender fields in spring, and a beautiful tasting room.</div>
+                </div>
+                <button class="radd" onclick="addTo(this,'Becker Vineyards','🍷','🍷 Wine Tasting')">Add to Plan</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- About -->
+        <div class="ipanel hidden about-body" id="p-tx-about">
+          <div class="desc">The Texas Hill Country around Fredericksburg is a stunning region of rolling limestone hills, peak wildflowers, and German heritage. Mid-March is prime bluebonnet season — one of the most spectacular times to visit. The area has 50+ wineries, world-class hiking at Enchanted Rock, and easy day trips to Austin.</div>
+          <div class="slbl">Highlights</div>
+          <div class="hl-grid">
+            <div class="hl">🪨 Enchanted Rock</div>
+            <div class="hl">🌸 Bluebonnet Season</div>
+            <div class="hl">🍷 Wine Country</div>
+            <div class="hl">🌆 Austin Day Trip</div>
+            <div class="hl">💧 Swimming Holes</div>
+            <div class="hl">🎸 Live Music</div>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- /TX card -->
+
+    <!-- Carlsbad -->
+    <div class="card">
+      <div class="card-header" onclick="toggle('nm')">
+        <div class="card-icon">🦇</div>
+        <div class="card-info">
+          <div class="card-name">Carlsbad Caverns, NM</div>
+          <div class="card-meta">Mar 14–15 · 2 nights <span class="wx-tag">☀️ 44°–72°F typical</span></div>
+        </div>
+        <i class="fa-solid fa-chevron-right card-chev" id="chev-nm"></i>
+      </div>
+      <div class="card-body" id="body-nm"></div>
+    </div>
+
+    <!-- Sedona -->
+    <div class="card">
+      <div class="card-header" onclick="toggle('az')">
+        <div class="card-icon">🏜️</div>
+        <div class="card-info">
+          <div class="card-name">Sedona, AZ</div>
+          <div class="card-meta">Mar 16–19 · 4 nights <span class="wx-tag">☀️ 42°–66°F typical</span></div>
+        </div>
+        <i class="fa-solid fa-chevron-right card-chev" id="chev-az"></i>
+      </div>
+      <div class="card-body" id="body-az"></div>
+    </div>
+
+    <!-- Grand Canyon -->
+    <div class="card">
+      <div class="card-header" onclick="toggle('gc')">
+        <div class="card-icon">🏔️</div>
+        <div class="card-info">
+          <div class="card-name">Grand Canyon, AZ</div>
+          <div class="card-meta">Mar 20–22 · 3 nights <span class="wx-tag">🌤️ 29°–57°F typical</span></div>
+        </div>
+        <i class="fa-solid fa-chevron-right card-chev" id="chev-gc"></i>
+      </div>
+      <div class="card-body" id="body-gc"></div>
+    </div>
+
+    <!-- Zion -->
+    <div class="card">
+      <div class="card-header" onclick="toggle('ut')">
+        <div class="card-icon">🌄</div>
+        <div class="card-info">
+          <div class="card-name">Zion / St. George, UT</div>
+          <div class="card-meta">Mar 23–25 · 3 nights <span class="wx-tag">🌤️ 40°–64°F typical</span></div>
+        </div>
+        <i class="fa-solid fa-chevron-right card-chev" id="chev-ut"></i>
+      </div>
+      <div class="card-body" id="body-ut"></div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+function toggle(id) {
+  var b = document.getElementById('body-'+id), c = document.getElementById('chev-'+id);
+  var open = b.classList.contains('open');
+  b.classList.toggle('open', !open);
+  c.classList.toggle('open', !open);
+}
+
+function setView(btn) {
+  document.querySelectorAll('.vt-btn').forEach(function(b){b.classList.remove('active');});
+  btn.classList.add('active');
+}
+
+function itab(stop, tab, el) {
+  var card = document.getElementById('body-'+stop);
+  card.querySelectorAll('.itab').forEach(function(t){t.classList.remove('active');});
+  el.classList.add('active');
+  ['days','planned','find','about'].forEach(function(p){
+    var panel = document.getElementById('p-'+stop+'-'+p);
+    if (panel) panel.classList.toggle('hidden', p !== tab);
+  });
+}
+
+function chip(el) {
+  document.querySelectorAll('.chip').forEach(function(c){c.classList.remove('on');});
+  el.classList.add('on');
+  document.getElementById('srch').value = el.textContent.replace(/^\S+\s/,'');
+  doSearch();
+}
+
+function doSearch() {
+  var t = document.getElementById('thinking'), r = document.getElementById('results');
+  t.style.display = 'block'; r.style.opacity = '.3';
+  setTimeout(function(){t.style.display='none'; r.style.opacity='1';}, 1100);
+}
+
+function addTo(btn, name, icon, meta) {
+  btn.innerHTML = '<i class="fa-solid fa-check"></i> Added';
+  btn.classList.add('done');
+  var li = document.createElement('div');
+  li.className = 'pitem';
+  li.innerHTML = '<div class="pem">'+icon+'</div>'
+    +'<div class="ptxt"><div class="pnm">'+name+'</div><div class="pmt">'+meta+'</div></div>'
+    +'<button class="prm" onclick="rmItem(this)"><i class="fa-solid fa-xmark"></i></button>';
+  document.getElementById('planned-list').appendChild(li);
+  toast('✅ Added: '+name);
+}
+
+function rmItem(btn) { btn.closest('.pitem').remove(); }
+
+function toast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(function(){t.classList.remove('show');}, 2800);
+}
+</script>
+</body>
+</html>

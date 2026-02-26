@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Itinerary Tab — Desktop Mockup</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #e8edf2; color: #1a1a2e; min-height: 100vh; display: flex; align-items: stretch; }
+
+  /* ── Sidebar nav ── */
+  .sidebar { width: 220px; background: linear-gradient(180deg, #1a3a5c 0%, #0f2540 100%); display: flex; flex-direction: column; flex-shrink: 0; }
+  .sidebar-logo { padding: 22px 18px 16px; border-bottom: 1px solid rgba(255,255,255,.1); }
+  .sidebar-logo .trip-name { font-weight: 900; font-size: 1rem; color: #fff; line-height: 1.3; }
+  .sidebar-logo .trip-sub  { font-size: .72rem; color: rgba(255,255,255,.55); margin-top: 4px; }
+  .sidebar-logo .progress-bar-wrap { margin-top: 10px; background: rgba(255,255,255,.15); border-radius: 100px; height: 5px; }
+  .sidebar-logo .progress-bar-fill { height: 5px; border-radius: 100px; background: #E8813A; width: 26%; }
+  .sidebar-logo .progress-lbl { font-size: .65rem; color: rgba(255,255,255,.5); margin-top: 4px; }
+
+  .nav-item { display: flex; align-items: center; gap: 11px; padding: 11px 18px; color: rgba(255,255,255,.6); font-size: .86rem; font-weight: 600; cursor: pointer; border-left: 3px solid transparent; transition: all .15s; text-decoration: none; }
+  .nav-item:hover { background: rgba(255,255,255,.06); color: rgba(255,255,255,.9); }
+  .nav-item.active { color: #fff; background: rgba(232,129,58,.18); border-left-color: #E8813A; }
+  .nav-item i { width: 18px; text-align: center; font-size: .95rem; }
+  .nav-section { padding: 14px 18px 5px; font-size: .62rem; font-weight: 800; color: rgba(255,255,255,.3); text-transform: uppercase; letter-spacing: .1em; }
+
+  /* ── Main area ── */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ── Top header bar ── */
+  .topbar { background: #fff; border-bottom: 1px solid #e0e6ec; padding: 0 28px; display: flex; align-items: center; gap: 16px; height: 60px; flex-shrink: 0; }
+  .topbar-title { font-weight: 900; font-size: 1.15rem; color: #1a1a2e; }
+  .topbar-meta { font-size: .78rem; color: #888; margin-left: 2px; }
+  .topbar-spacer { flex: 1; }
+  .topbar-pill { background: #FFF3EB; color: #E8813A; border: 1px solid #fbd4aa; border-radius: 100px; padding: 5px 14px; font-size: .78rem; font-weight: 800; }
+  .topbar-btn { background: none; border: 1.5px solid #e0e6ec; border-radius: 100px; padding: 6px 14px; font-size: .78rem; font-weight: 700; color: #555; cursor: pointer; font-family: inherit; display: flex; align-items: center; gap: 6px; transition: all .15s; }
+  .topbar-btn:hover { border-color: #2C5F8A; color: #2C5F8A; }
+  .topbar-btn.orange { background: #E8813A; border-color: #E8813A; color: #fff; }
+  .topbar-btn.orange:hover { background: #d4611e; border-color: #d4611e; }
+
+  /* ── Content area: two columns ── */
+  .content { flex: 1; display: flex; overflow: hidden; }
+
+  /* LEFT: stop list */
+  .stop-list-panel { width: 340px; flex-shrink: 0; border-right: 1px solid #e0e6ec; overflow-y: auto; background: #f7f9fb; }
+  .panel-header { padding: 14px 18px 10px; background: #fff; border-bottom: 1px solid #e0e6ec; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 5; }
+  .panel-header h2 { font-size: .85rem; font-weight: 900; color: #1a1a2e; }
+  .view-toggle { display: flex; background: #f0f2f5; border-radius: 100px; padding: 3px; gap: 2px; }
+  .toggle-btn { padding: 5px 12px; border: none; background: transparent; border-radius: 100px; font-size: .75rem; font-weight: 700; cursor: pointer; color: #777; transition: all .2s; font-family: inherit; }
+  .toggle-btn.active { background: #fff; color: #1a3a5c; box-shadow: 0 1px 4px rgba(0,0,0,.12); }
+
+  /* Stop cards in left panel */
+  .stop-item { background: #fff; border-bottom: 1px solid #eef1f4; cursor: pointer; transition: background .12s; display: flex; align-items: stretch; }
+  .stop-item:hover { background: #f0f4f8; }
+  .stop-item.active-stop { background: #FFF3EB; border-left: 3px solid #E8813A; }
+  .stop-item.past-stop { opacity: .7; }
+  .stop-item.selected { background: #EEF5FB; border-left: 3px solid #2C5F8A; }
+
+  .stop-item-left { min-width: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 12px 6px; color: #fff; font-size: 1.3rem; gap: 2px; }
+  .stop-item-num { font-size: .58rem; font-weight: 800; opacity: .85; }
+
+  .stop-item-body { flex: 1; padding: 11px 12px; }
+  .stop-item-name { font-weight: 800; font-size: .9rem; color: #1a1a2e; }
+  .stop-item-meta { font-size: .72rem; color: #888; margin-top: 3px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .stop-item-wx { background: #EEF5FB; color: #2C5F8A; font-size: .67rem; font-weight: 700; padding: 1px 7px; border-radius: 100px; white-space: nowrap; }
+  .stop-item-badge { font-size: .58rem; font-weight: 800; padding: 2px 6px; border-radius: 100px; color: #fff; white-space: nowrap; }
+
+  .stop-item-right { display: flex; align-items: center; padding: 0 12px; color: #ccc; font-size: .8rem; }
+
+  /* RIGHT: detail panel */
+  .detail-panel { flex: 1; overflow-y: auto; background: #fff; }
+
+  .detail-hero { background: linear-gradient(135deg, #1a3a5c 0%, #2C5F8A 100%); color: #fff; padding: 24px 28px 20px; }
+  .detail-hero-top { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 14px; }
+  .detail-emoji { font-size: 2.8rem; line-height: 1; }
+  .detail-hero-info { flex: 1; }
+  .detail-hero-name { font-size: 1.45rem; font-weight: 900; line-height: 1.2; }
+  .detail-hero-sub { font-size: .82rem; opacity: .8; margin-top: 4px; }
+  .detail-hero-badge { display: inline-flex; align-items: center; gap: 5px; background: #E8813A; border-radius: 100px; padding: 4px 12px; font-size: .75rem; font-weight: 800; margin-top: 8px; }
+
+  .detail-stats { display: flex; gap: 10px; }
+  .detail-stat { background: rgba(255,255,255,.12); border-radius: 10px; padding: 10px 14px; flex: 1; }
+  .detail-stat .val { font-size: 1.2rem; font-weight: 900; }
+  .detail-stat .lbl { font-size: .65rem; opacity: .7; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-top: 2px; }
+
+  /* Weather bar */
+  .wx-bar { background: #EEF5FB; border-bottom: 1px solid #d0e4f5; padding: 12px 24px; display: flex; align-items: center; gap: 16px; }
+  .wx-bar-icon { font-size: 1.8rem; }
+  .wx-bar-temps { font-size: 1.1rem; font-weight: 900; color: #1a3a5c; }
+  .wx-bar-desc { font-size: .8rem; color: #5a7a9a; }
+  .wx-bar-label { font-size: .68rem; font-weight: 800; color: #7aaac8; text-transform: uppercase; letter-spacing: .07em; }
+  .wx-bar-btn { margin-left: auto; background: #fff; border: 1px solid #a8cde8; border-radius: 100px; padding: 5px 13px; font-size: .75rem; font-weight: 700; color: #2C5F8A; cursor: pointer; font-family: inherit; white-space: nowrap; }
+
+  /* Tabs inside detail */
+  .detail-tabs { display: flex; border-bottom: 1px solid #e0e6ec; background: #fff; padding: 0 24px; position: sticky; top: 0; z-index: 4; }
+  .detail-tab { padding: 11px 16px; font-size: .82rem; font-weight: 700; color: #888; cursor: pointer; border-bottom: 2.5px solid transparent; transition: all .15s; white-space: nowrap; }
+  .detail-tab.active { color: #E8813A; border-bottom-color: #E8813A; }
+
+  .detail-body { padding: 20px 24px; }
+
+  /* Day list in detail */
+  .day-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #f0f0f0; cursor: pointer; border-radius: 8px; padding: 10px 12px; transition: background .12s; margin: 0 -12px; }
+  .day-row:hover { background: #f8f9fb; }
+  .day-row.today { background: #FFF3EB; border-left: 3px solid #E8813A; padding-left: 9px; }
+  .day-num-bubble { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .75rem; font-weight: 900; flex-shrink: 0; }
+  .day-num-bubble.drive   { background: #2C5F8A; color: #fff; }
+  .day-num-bubble.explore { background: #3A8A5C; color: #fff; }
+  .day-num-bubble.today-b { background: #E8813A; color: #fff; }
+  .day-info { flex: 1; }
+  .day-title { font-size: .88rem; font-weight: 700; color: #1a1a2e; }
+  .day-sub { font-size: .74rem; color: #888; margin-top: 2px; }
+  .day-badge { font-size: .67rem; font-weight: 800; padding: 3px 9px; border-radius: 100px; white-space: nowrap; flex-shrink: 0; }
+  .drive-badge   { background: #EEF5FB; color: #2C5F8A; }
+  .explore-badge { background: #EEF9F2; color: #2e7d52; }
+  .today-badge   { background: #E8813A; color: #fff; }
+  .day-miles { font-size: .72rem; color: #aaa; text-align: right; flex-shrink: 0; min-width: 44px; }
+
+  /* Activities grid */
+  .activities-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+  .activity-card { background: #f7f9fb; border: 1px solid #e8edf2; border-radius: 10px; padding: 12px 14px; cursor: pointer; transition: all .15s; }
+  .activity-card:hover { border-color: #2C5F8A; background: #EEF5FB; }
+  .activity-card .act-name { font-weight: 700; font-size: .84rem; color: #1a1a2e; }
+  .activity-card .act-type { font-size: .7rem; color: #888; margin-top: 3px; }
+  .activity-card .act-rating { font-size: .7rem; color: #f59e0b; margin-top: 4px; }
+
+  /* Section title */
+  .section-title { font-size: .72rem; font-weight: 900; color: #2C5F8A; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 12px; display: flex; align-items: center; gap: 7px; }
+  .section-title::after { content: ''; flex: 1; height: 1px; background: #e0e6ec; }
+
+  /* Quick actions */
+  .quick-actions { display: flex; gap: 8px; margin-bottom: 20px; }
+  .qa-btn { flex: 1; padding: 9px 12px; border: 1.5px solid #e0e6ec; border-radius: 100px; background: #fff; font-size: .78rem; font-weight: 700; color: #444; cursor: pointer; font-family: inherit; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all .15s; }
+  .qa-btn:hover { border-color: #2C5F8A; color: #2C5F8A; background: #EEF5FB; }
+  .qa-btn.genie { border-color: #E8813A; color: #E8813A; }
+  .qa-btn.genie:hover { background: #FFF3EB; }
+
+  /* Description */
+  .stop-desc { font-size: .85rem; line-height: 1.65; color: #444; background: #f7f9fb; border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; border-left: 3px solid #2C5F8A; }
+</style>
+</head>
+<body>
+
+<!-- ── Sidebar ── -->
+<div class="sidebar">
+  <div class="sidebar-logo">
+    <div class="trip-name">🚐 Maass Family<br>RV Adventure 2026</div>
+    <div class="trip-sub">Day 12 of 46 · Texas Hill Country</div>
+    <div class="progress-bar-wrap"><div class="progress-bar-fill"></div></div>
+    <div class="progress-lbl">26% complete · ~5,250 mi to go</div>
+  </div>
+
+  <div style="height:8px;"></div>
+  <div class="nav-section">Navigation</div>
+  <a class="nav-item"        href="#"><i class="fa-solid fa-house"></i> Dashboard</a>
+  <a class="nav-item"        href="#"><i class="fa-solid fa-map-location-dot"></i> Route Map</a>
+  <a class="nav-item active" href="#"><i class="fa-solid fa-calendar-days"></i> Itinerary</a>
+  <a class="nav-item"        href="#"><i class="fa-solid fa-graduation-cap"></i> School</a>
+  <a class="nav-item"        href="#"><i class="fa-solid fa-book-open"></i> Journal</a>
+  <a class="nav-item"        href="#"><i class="fa-solid fa-images"></i> Gallery</a>
+  <a class="nav-item"        href="#"><i class="fa-solid fa-envelope"></i> Postcards</a>
+
+  <div class="nav-section" style="margin-top:8px;">Tools</div>
+  <a class="nav-item" href="#"><i class="fa-solid fa-gear"></i> Trip Settings</a>
+  <a class="nav-item" href="#"><i class="fa-solid fa-receipt"></i> Expenses</a>
+  <a class="nav-item" href="#"><i class="fa-solid fa-gamepad"></i> Fun &amp; Games</a>
+
+  <div style="flex:1;"></div>
+  <div style="padding:14px 18px;border-top:1px solid rgba(255,255,255,.08);">
+    <div style="font-size:.68rem;color:rgba(255,255,255,.35);font-weight:700;">✨ TripGenie ready</div>
+    <div style="font-size:.62rem;color:rgba(255,255,255,.25);margin-top:2px;">~7,000 mi · 15 stops</div>
+  </div>
+</div>
+
+<!-- ── Main area ── -->
+<div class="main">
+
+  <!-- Top bar -->
+  <div class="topbar">
+    <div>
+      <div class="topbar-title"><i class="fa-solid fa-calendar-days" style="color:#E8813A;margin-right:6px;"></i>Itinerary</div>
+    </div>
+    <div class="topbar-meta">46 days · 15 stops · ~7,000 miles</div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-pill">📍 Day 12 — Texas Hill Country</div>
+    <button class="topbar-btn"><i class="fa-solid fa-arrows-spin"></i> Change Plan</button>
+    <button class="topbar-btn orange"><i class="fa-solid fa-wand-magic-sparkles"></i> TripGenie</button>
+  </div>
+
+  <!-- Two-column content -->
+  <div class="content">
+
+    <!-- LEFT: stop list -->
+    <div class="stop-list-panel">
+      <div class="panel-header">
+        <h2>15 Stops</h2>
+        <div class="view-toggle">
+          <button class="toggle-btn active" onclick="setToggle(this,'stops')"><i class="fa-solid fa-location-dot"></i> By Stop</button>
+          <button class="toggle-btn"        onclick="setToggle(this,'days')"><i class="fa-solid fa-calendar-days"></i> By Day</button>
+        </div>
+      </div>
+
+      <!-- By-Stop list -->
+      <div id="list-stops">
+
+        <!-- 1: Shenandoah — past -->
+        <div class="stop-item past-stop" onclick="selectStop(this, 1)">
+          <div class="stop-item-left" style="background:#aaa;"><div>🏔️</div><div class="stop-item-num">#1</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name">Shenandoah Valley, VA</div>
+            <div class="stop-item-meta">
+              Feb 28–Mar 1 · 2 nights
+              <span class="stop-item-badge" style="background:#888;">✓ Visited</span>
+              <span class="stop-item-wx">🌤️ 34°–52°F typical</span>
+            </div>
+          </div>
+          <div class="stop-item-right"><i class="fa-solid fa-chevron-right"></i></div>
+        </div>
+
+        <!-- 2: Smokies — past -->
+        <div class="stop-item past-stop" onclick="selectStop(this, 2)">
+          <div class="stop-item-left" style="background:#aaa;"><div>🌲</div><div class="stop-item-num">#2</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name">Great Smoky Mountains, TN</div>
+            <div class="stop-item-meta">
+              Mar 2–5 · 4 nights
+              <span class="stop-item-badge" style="background:#888;">✓ Visited</span>
+              <span class="stop-item-wx">🌦️ 38°–59°F typical</span>
+            </div>
+          </div>
+          <div class="stop-item-right"><i class="fa-solid fa-chevron-right"></i></div>
+        </div>
+
+        <!-- 3: Ozarks — past -->
+        <div class="stop-item past-stop" onclick="selectStop(this, 3)">
+          <div class="stop-item-left" style="background:#aaa;"><div>🏞️</div><div class="stop-item-num">#3</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name">Ozark Mountains, AR</div>
+            <div class="stop-item-meta">
+              Mar 6–9 · 4 nights
+              <span class="stop-item-badge" style="background:#888;">✓ Visited</span>
+              <span class="stop-item-wx">🌧️ 37°–57°F typical</span>
+            </div>
+          </div>
+          <div class="stop-item-right"><i class="fa-solid fa-chevron-right"></i></div>
+        </div>
+
+        <!-- 4: TX Hill Country — CURRENT / selected -->
+        <div class="stop-item active-stop selected" onclick="selectStop(this, 4)">
+          <div class="stop-item-left" style="background:#E8813A;"><div>🌻</div><div class="stop-item-num">#4</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name">Texas Hill Country, TX</div>
+            <div class="stop-item-meta">
+              Mar 10–13 · 4 nights
+              <span class="stop-item-badge" style="background:#E8813A;">HERE NOW</span>
+              <span class="stop-item-wx">☀️ 50°–73°F typical</span>
+            </div>
+          </div>
+          <div class="stop-item-right"><i class="fa-solid fa-chevron-right"></i></div>
+        </div>
+
+        <!-- 5: Carlsbad -->
+        <div class="stop-item" onclick="selectStop(this, 5)">
+          <div class="stop-item-left" style="background:#2C5F8A;"><div>🦇</div><div class="stop-item-num">#5</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name">Carlsbad Caverns, NM</div>
+            <div class="stop-item-meta">
+              Mar 14–15 · 2 nights
+              <span class="stop-item-wx">☀️ 44°–72°F typical</span>
+            </div>
+          </div>
+          <div class="stop-item-right"><i class="fa-solid fa-chevron-right"></i></div>
+        </div>
+
+        <!-- 6: Sedona -->
+        <div class="stop-item" onclick="selectStop(this, 6)">
+          <div class="stop-item-left" style="background:#2C5F8A;"><div>🔴</div><div class="stop-item-num">#6</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name">Sedona, AZ</div>
+            <div class="stop-item-meta">
+              Mar 16–19 · 4 nights
+              <span class="stop-item-wx">☀️ 42°–66°F typical</span>
+            </div>
+          </div>
+          <div class="stop-item-right"><i class="fa-solid fa-chevron-right"></i></div>
+        </div>
+
+        <!-- 7: Grand Canyon -->
+        <div class="stop-item" onclick="selectStop(this, 7)">
+          <div class="stop-item-left" style="background:#2C5F8A;"><div>🏜️</div><div class="stop-item-num">#7</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name">Grand Canyon, AZ</div>
+            <div class="stop-item-meta">
+              Mar 20–22 · 3 nights
+              <span class="stop-item-wx">🌤️ 29°–57°F typical</span>
+            </div>
+          </div>
+          <div class="stop-item-right"><i class="fa-solid fa-chevron-right"></i></div>
+        </div>
+
+        <!-- 8: Zion -->
+        <div class="stop-item" onclick="selectStop(this, 8)">
+          <div class="stop-item-left" style="background:#2C5F8A;"><div>🏔️</div><div class="stop-item-num">#8</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name">Zion / St. George, UT</div>
+            <div class="stop-item-meta">
+              Mar 23–25 · 3 nights
+              <span class="stop-item-wx">🌤️ 40°–64°F typical</span>
+            </div>
+          </div>
+          <div class="stop-item-right"><i class="fa-solid fa-chevron-right"></i></div>
+        </div>
+
+        <!-- 9: Bryce -->
+        <div class="stop-item" onclick="selectStop(this, 9)">
+          <div class="stop-item-left" style="background:#2C5F8A;"><div>🧡</div><div class="stop-item-num">#9</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name">Bryce Canyon, UT</div>
+            <div class="stop-item-meta">
+              Mar 26–28 · 3 nights
+              <span class="stop-item-wx">❄️ 25°–50°F typical</span>
+            </div>
+          </div>
+          <div class="stop-item-right"><i class="fa-solid fa-chevron-right"></i></div>
+        </div>
+
+        <!-- More stops... -->
+        <div class="stop-item" onclick="selectStop(this, 10)">
+          <div class="stop-item-left" style="background:#2C5F8A;"><div>🏜️</div><div class="stop-item-num">#10</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name">Moab / Arches, UT</div>
+            <div class="stop-item-meta">Mar 29–Apr 2 · 5 nights<span class="stop-item-wx">☀️ 40°–67°F typical</span></div>
+          </div>
+          <div class="stop-item-right"><i class="fa-solid fa-chevron-right"></i></div>
+        </div>
+
+        <div style="height:10px;"></div>
+      </div><!-- /list-stops -->
+
+      <!-- By-Day list (hidden) -->
+      <div id="list-days" style="display:none;">
+        <div style="padding:8px 12px;background:#f0f4f8;border-bottom:1px solid #dbe8f2;font-size:.68rem;font-weight:900;color:#2C5F8A;text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;gap:6px;">
+          <span style="background:#E8813A;color:#fff;border-radius:100px;padding:2px 8px;font-size:.63rem;">🌻 #4</span>
+          Texas Hill Country · Mar 10–13
+        </div>
+        <div class="stop-item today" style="border-left:3px solid #E8813A;background:#FFF3EB;" onclick="">
+          <div class="stop-item-left" style="background:#E8813A;font-size:.95rem;min-width:44px;">⛺<div class="stop-item-num">D12</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name" style="font-size:.84rem;">Enchanted Rock &amp; Wildflowers</div>
+            <div class="stop-item-meta">TODAY · Mar 11 · Fredericksburg KOA</div>
+          </div>
+        </div>
+        <div class="stop-item" onclick="">
+          <div class="stop-item-left" style="background:#3A8A5C;font-size:.95rem;min-width:44px;">🌆<div class="stop-item-num">D13</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name" style="font-size:.84rem;">Austin Day Trip — Bats &amp; Barton Springs</div>
+            <div class="stop-item-meta">Mar 12 · 150 mi · Paul</div>
+          </div>
+        </div>
+        <div class="stop-item" onclick="">
+          <div class="stop-item-left" style="background:#3A8A5C;font-size:.95rem;min-width:44px;">⛺<div class="stop-item-num">D14</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name" style="font-size:.84rem;">Hamilton Pool &amp; Salt Lick BBQ</div>
+            <div class="stop-item-meta">Mar 13 · Fredericksburg KOA</div>
+          </div>
+        </div>
+        <div style="padding:8px 12px;background:#f0f4f8;border-bottom:1px solid #dbe8f2;font-size:.68rem;font-weight:900;color:#2C5F8A;text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;gap:6px;">
+          <span style="background:#2C5F8A;color:#fff;border-radius:100px;padding:2px 8px;font-size:.63rem;">🦇 #5</span>
+          Carlsbad Caverns · Mar 14–15
+        </div>
+        <div class="stop-item" onclick="">
+          <div class="stop-item-left" style="background:#2C5F8A;font-size:.95rem;min-width:44px;">🚗<div class="stop-item-num">D15</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name" style="font-size:.84rem;">Texas → Carlsbad, NM</div>
+            <div class="stop-item-meta">Mar 14 · 380 mi · 6h · Paul</div>
+          </div>
+        </div>
+        <div class="stop-item" onclick="">
+          <div class="stop-item-left" style="background:#3A8A5C;font-size:.95rem;min-width:44px;">⛺<div class="stop-item-num">D16</div></div>
+          <div class="stop-item-body">
+            <div class="stop-item-name" style="font-size:.84rem;">Big Room Tour &amp; Bat Flight</div>
+            <div class="stop-item-meta">Mar 15 · Carlsbad RV Park</div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /stop-list-panel -->
+
+    <!-- RIGHT: detail -->
+    <div class="detail-panel">
+
+      <!-- Hero -->
+      <div class="detail-hero">
+        <div class="detail-hero-top">
+          <div class="detail-emoji">🌻</div>
+          <div class="detail-hero-info">
+            <div class="detail-hero-name">Texas Hill Country</div>
+            <div class="detail-hero-sub">Fredericksburg, TX &nbsp;·&nbsp; Stop #4 of 15</div>
+            <div class="detail-hero-badge"><i class="fa-solid fa-location-dot"></i> HERE NOW — Day 12</div>
+          </div>
+          <div style="text-align:right;opacity:.8;font-size:.8rem;line-height:1.7;">
+            Mar 10–13<br>4 nights<br>5 planned
+          </div>
+        </div>
+        <div class="detail-stats">
+          <div class="detail-stat"><div class="val">4</div><div class="lbl">Nights</div></div>
+          <div class="detail-stat"><div class="val">490mi</div><div class="lbl">Drive In</div></div>
+          <div class="detail-stat"><div class="val">8h</div><div class="lbl">Drive Time</div></div>
+          <div class="detail-stat"><div class="val">5</div><div class="lbl">Planned</div></div>
+        </div>
+      </div>
+
+      <!-- Weather bar -->
+      <div class="wx-bar">
+        <div class="wx-bar-icon">☀️</div>
+        <div>
+          <div class="wx-bar-label">March Typical Weather</div>
+          <div class="wx-bar-temps">50°F low · 73°F high</div>
+          <div class="wx-bar-desc">Sunny — peak wildflower season!</div>
+        </div>
+        <button class="wx-bar-btn"><i class="fa-solid fa-cloud-sun"></i> Live Forecast →</button>
+      </div>
+
+      <!-- Inner tabs -->
+      <div class="detail-tabs">
+        <div class="detail-tab active" onclick="setDetailTab(this)">Days</div>
+        <div class="detail-tab" onclick="setDetailTab(this)">Activities</div>
+        <div class="detail-tab" onclick="setDetailTab(this)">Campgrounds</div>
+        <div class="detail-tab" onclick="setDetailTab(this)">About</div>
+        <div class="detail-tab" onclick="setDetailTab(this)">Arrivals &amp; Departures</div>
+      </div>
+
+      <div class="detail-body">
+
+        <!-- Quick actions -->
+        <div class="quick-actions">
+          <button class="qa-btn"><i class="fa-solid fa-music"></i> Local Music</button>
+          <button class="qa-btn"><i class="fa-solid fa-camera"></i> Photos</button>
+          <button class="qa-btn"><i class="fa-solid fa-book"></i> Journal</button>
+          <button class="qa-btn genie"><i class="fa-solid fa-wand-magic-sparkles"></i> Ask Genie</button>
+        </div>
+
+        <!-- Days section -->
+        <div class="section-title"><i class="fa-solid fa-calendar-days"></i> Days at this stop</div>
+
+        <div class="day-row">
+          <div class="day-num-bubble drive">11</div>
+          <div class="day-info">
+            <div class="day-title">Ozarks → Fredericksburg, TX</div>
+            <div class="day-sub">Tue Mar 10 &nbsp;·&nbsp; Fredericksburg KOA &nbsp;·&nbsp; Paul driving</div>
+          </div>
+          <span class="day-badge drive-badge">🚗 Drive Day</span>
+          <div class="day-miles">490 mi<br>8h</div>
+        </div>
+
+        <div class="day-row today">
+          <div class="day-num-bubble today-b">12</div>
+          <div class="day-info">
+            <div class="day-title" style="color:#E8813A;">Enchanted Rock &amp; Wildflowers</div>
+            <div class="day-sub">Wed Mar 11 &nbsp;·&nbsp; Fredericksburg KOA &nbsp;·&nbsp; Melissa driving</div>
+          </div>
+          <span class="day-badge today-badge">📍 TODAY</span>
+          <div class="day-miles">—</div>
+        </div>
+
+        <div class="day-row">
+          <div class="day-num-bubble explore">13</div>
+          <div class="day-info">
+            <div class="day-title">Austin Day Trip — Bats, Barton Springs &amp; South Congress</div>
+            <div class="day-sub">Thu Mar 12 &nbsp;·&nbsp; Fredericksburg KOA &nbsp;·&nbsp; Paul driving</div>
+          </div>
+          <span class="day-badge explore-badge">⛺ Explore</span>
+          <div class="day-miles">150 mi<br>2.5h</div>
+        </div>
+
+        <div class="day-row">
+          <div class="day-num-bubble explore">14</div>
+          <div class="day-info">
+            <div class="day-title">Hamilton Pool &amp; Salt Lick BBQ</div>
+            <div class="day-sub">Fri Mar 13 &nbsp;·&nbsp; Fredericksburg KOA &nbsp;·&nbsp; Melissa driving</div>
+          </div>
+          <span class="day-badge explore-badge">⛺ Explore</span>
+          <div class="day-miles">—</div>
+        </div>
+
+        <div style="height:24px;"></div>
+        <div class="section-title"><i class="fa-solid fa-star"></i> Top Activities</div>
+
+        <div class="activities-grid">
+          <div class="activity-card">
+            <div class="act-name">Enchanted Rock State Natural Area</div>
+            <div class="act-type">🥾 Hiking · State Park</div>
+            <div class="act-rating">★★★★★ &nbsp;<span style="color:#aaa;">5.0</span></div>
+          </div>
+          <div class="activity-card">
+            <div class="act-name">Fredericksburg Wildflower Trails</div>
+            <div class="act-type">🌸 Nature · Scenic</div>
+            <div class="act-rating">★★★★★ &nbsp;<span style="color:#aaa;">4.9</span></div>
+          </div>
+          <div class="activity-card">
+            <div class="act-name">Congress Avenue Bridge Bats</div>
+            <div class="act-type">🦇 Wildlife · Austin</div>
+            <div class="act-rating">★★★★☆ &nbsp;<span style="color:#aaa;">4.7</span></div>
+          </div>
+          <div class="activity-card">
+            <div class="act-name">Hamilton Pool Preserve</div>
+            <div class="act-type">💧 Swimming · Nature</div>
+            <div class="act-rating">★★★★★ &nbsp;<span style="color:#aaa;">4.8</span></div>
+          </div>
+        </div>
+
+      </div>
+    </div><!-- /detail-panel -->
+  </div>
+</div>
+
+<script>
+function setToggle(btn, view) {
+  document.querySelectorAll('.toggle-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.classList.add('active');
+  document.getElementById('list-stops').style.display = view === 'stops' ? 'block' : 'none';
+  document.getElementById('list-days').style.display  = view === 'days'  ? 'block' : 'none';
+}
+
+function selectStop(el, id) {
+  document.querySelectorAll('.stop-item').forEach(function(s) { s.classList.remove('selected'); });
+  el.classList.add('selected');
+}
+
+function setDetailTab(tab) {
+  document.querySelectorAll('.detail-tab').forEach(function(t) { t.classList.remove('active'); });
+  tab.classList.add('active');
+}
+</script>
+</body>
+</html>
