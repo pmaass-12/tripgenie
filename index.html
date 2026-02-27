@@ -9331,8 +9331,21 @@ function renderDayTimeBlocks(d, stop) {
       ovSub('lunch','Find a diner or drive-through on the way'),
       'eat',false,'','','lunch') });
 
+    /* Leg 2 — only when drive is split overnight */
+    var _finalArrH = _arrH; /* default: single-leg arrival */
+    if (_splitRes) {
+      var _leg2DepH  = _lunchH + 0.5;  /* depart ~30 min after lunch */
+      var _leg2ArrH  = _leg2DepH + _splitH;
+      _finalArrH = _leg2ArrH;
+      var _leg2Sub = Math.round(d.miles / 2) + ' mi \u00b7 ~' + _dispHours + 'h (Leg 2 of 2) \u00b7 Arrive ~' + _fmtHour(_leg2ArrH);
+      _items.push({ key:'drive2', html: tbbRow(ovTime('drive2', _fmtHour(_leg2DepH)),'&#128656;',
+        'Continue \u2192 ' + (stop ? stop.name : 'Destination'),
+        ovSub('drive2', _leg2Sub),
+        'drive',false,'','','drive2') });
+    }
+
     /* Check-in time — RV parks / hotels typically open at 3 PM regardless of arrival time */
-    var _checkInH   = Math.max(_arrH, 15);   /* 3 PM floor */
+    var _checkInH   = Math.max(_finalArrH, 15);   /* 3 PM floor */
     var _checkInStr = _fmtHour(_checkInH);
     var _earlyNote  = _arrH < 15 ? 'Check-in from 3:00 PM \u00b7 ' : '';
     _items.push({ key:'sleep', html: tbbRow(_checkInStr,'&#127957;',
@@ -9427,15 +9440,16 @@ function renderDayTimeBlocks(d, stop) {
   }
 
   /* Render with drive-time separators between non-drive editable items */
-  var _driveEstimates = { breakfast:12, act0:10, lunch:10, act1:12, dinner:15, drive:0, sleep:0 };
+  var _driveEstimates = { breakfast:12, act0:10, lunch:10, act1:12, dinner:15, drive:0, drive2:0, sleep:0 };
+  var _noDriveSep = { drive:true, drive2:true, sleep:true };
   for (var _ii = 0; _ii < _items.length; _ii++) {
     html += _items[_ii].html;
-    /* add separator after all items except drive/sleep rows and the last item */
+    /* add separator after all items except drive/drive2/sleep rows and the last item */
     var _k = _items[_ii].key;
     var _nextK = _ii + 1 < _items.length ? _items[_ii+1].key : null;
-    if (_nextK && _k !== 'drive' && _k !== 'sleep' && _nextK !== 'drive') {
+    if (_nextK && !_noDriveSep[_k] && !_noDriveSep[_nextK]) {
       html += driveSep(_driveEstimates[_k] || 12);
-    } else if (_nextK === 'sleep' && _k !== 'drive') {
+    } else if (_nextK === 'sleep' && !_noDriveSep[_k]) {
       html += driveSep(_driveEstimates['dinner'] || 15);
     }
   }
