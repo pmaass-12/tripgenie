@@ -2224,12 +2224,9 @@
     <button class="nav-tab" data-tab="map" data-tooltip="Route Map">
       <i class="fa-solid fa-map"></i>
     <span class="nav-tab-lbl">Route Map</span></button>
-    <button class="nav-tab" data-tab="schedule" data-tooltip="Schedule">
-      <i class="fa-solid fa-calendar-days"></i>
-    <span class="nav-tab-lbl">Schedule</span></button>
-    <button class="nav-tab" data-tab="stops" data-tooltip="Stops">
-      <i class="fa-solid fa-campground"></i>
-    <span class="nav-tab-lbl">Stops</span></button>
+    <button class="nav-tab" data-tab="planner" data-tooltip="Planner">
+      <i class="fa-solid fa-route"></i>
+    <span class="nav-tab-lbl">Planner</span></button>
     <button class="nav-tab" data-tab="school" data-tooltip="School">
       <i class="fa-solid fa-book-open"></i>
     <span class="nav-tab-lbl">School</span></button>
@@ -2304,14 +2301,14 @@
       </div>
     </div>
 
-    <!-- SCHEDULE TAB -->
-    <div class="tab-panel" id="tab-schedule">
-      <div id="schedule-content"></div>
-    </div>
-
-    <!-- STOPS TAB -->
-    <div class="tab-panel" id="tab-stops">
-      <div id="stops-content"></div>
+    <!-- PLANNER TAB (Schedule + Stops combined) -->
+    <div class="tab-panel" id="tab-planner">
+      <div style="display:flex;gap:8px;margin-bottom:20px;padding-top:4px;">
+        <button id="plan-seg-schedule" onclick="_mainSeg('schedule')" style="flex:1;padding:9px 16px;border:1.5px solid var(--orange);border-radius:50px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-calendar-days"></i> Schedule</button>
+        <button id="plan-seg-stops" onclick="_mainSeg('stops')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-campground"></i> Stops</button>
+      </div>
+      <div id="schedule-content" style="display:block"></div>
+      <div id="stops-content" style="display:none"></div>
     </div>
 
     <!-- SCHOOL TAB -->
@@ -3693,6 +3690,7 @@ document.querySelectorAll('.nav-tab').forEach(btn => {
     if (tab === 'tools')       { renderTools(); }
     if (tab === 'whatsnew')    { renderWhatsNew(); document.getElementById('whatsnew-dot') && (document.getElementById('whatsnew-dot').style.display='none'); }
     if (tab === 'ideas')       { renderIdeas(); }
+    if (tab === 'planner')     { _mainSeg('schedule'); renderSchedule(); }
   });
 });
 
@@ -4218,16 +4216,16 @@ function renderDashboard() {
     : '<span style="color:var(--text-3);font-size:.78rem;">Tap for forecast</span>';
   var _boxStyle = 'flex:1;min-width:0;padding:10px 12px;border-radius:var(--radius-s);text-align:center;cursor:pointer;';
   var tonightTile = (!_destIsHome && curStop)
-    ? '<div style="display:flex;gap:8px;margin-top:12px;" onclick="showStopForecastModal(' + curStop.id + ')">'
-      + '<div style="' + _boxStyle + 'background:var(--green-l);border:1px solid #a5d6a7;">'
+    ? '<div style="display:flex;gap:8px;margin-top:12px;">'
+      + '<div style="' + _boxStyle + 'background:var(--green-l);border:1px solid #a5d6a7;" onclick="showStopForecastModal(' + curStop.id + ')" title="Tap for weather forecast">'
         + '<div style="font-size:.6rem;font-weight:800;color:#2e7d32;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Destination</div>'
         + '<div style="font-weight:800;font-size:.85rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _destLabel + '</div>'
       + '</div>'
-      + '<div style="' + _boxStyle + 'background:var(--blue-l);border:1px solid rgba(44,95,138,.2);">'
-        + '<div style="font-size:.6rem;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Sleep</div>'
+      + '<div style="' + _boxStyle + 'background:var(--blue-l);border:1px solid rgba(44,95,138,.2);" onclick="openCampInfo(' + dayNum + ')" title="Tap for AI campground info">'
+        + '<div style="font-size:.6rem;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Sleep ✨</div>'
         + '<div style="font-weight:700;font-size:.82rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (_destSub || '—') + '</div>'
       + '</div>'
-      + '<div style="' + _boxStyle + 'background:var(--orange-l);border:1px solid rgba(232,129,58,.25);">'
+      + '<div style="' + _boxStyle + 'background:var(--orange-l);border:1px solid rgba(232,129,58,.25);" onclick="showStopForecastModal(' + curStop.id + ')" title="Tap for weather forecast">'
         + '<div style="font-size:.6rem;font-weight:800;color:var(--orange-d);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Tonight\'s Weather</div>'
         + '<div style="font-weight:700;font-size:.82rem;color:var(--text);">' + _wxBox + '</div>'
       + '</div>'
@@ -6294,6 +6292,24 @@ function _openMediaLightbox(src, type, caption) {
 }
 
 /* ── SWITCH TAB HELPER ────────────────────────────────────────────────────── */
+function _mainSeg(which) {
+  var schDiv = document.getElementById('schedule-content');
+  var stpDiv = document.getElementById('stops-content');
+  var btnSch = document.getElementById('plan-seg-schedule');
+  var btnStp = document.getElementById('plan-seg-stops');
+  if (!schDiv || !stpDiv) return;
+  if (which === 'schedule') {
+    schDiv.style.display = 'block'; stpDiv.style.display = 'none';
+    if (btnSch) { btnSch.style.background='var(--orange)'; btnSch.style.borderColor='var(--orange)'; btnSch.style.color='#fff'; }
+    if (btnStp) { btnStp.style.background='var(--card)';   btnStp.style.borderColor='var(--border)'; btnStp.style.color='var(--text-2)'; }
+  } else {
+    schDiv.style.display = 'none'; stpDiv.style.display = 'block';
+    if (btnSch) { btnSch.style.background='var(--card)';   btnSch.style.borderColor='var(--border)'; btnSch.style.color='var(--text-2)'; }
+    if (btnStp) { btnStp.style.background='var(--orange)'; btnStp.style.borderColor='var(--orange)'; btnStp.style.color='#fff'; }
+    renderStops();
+  }
+}
+
 function switchTab(tabId) {
   document.querySelectorAll('.nav-tab').forEach(function(b) { b.classList.remove('active'); });
   document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
@@ -6308,7 +6324,7 @@ function applyFriendMode() {
   // Hide family-only tabs, show only map + stops + suggestions
   var allTabs = document.querySelectorAll('.nav-tab');
   var allPanels = document.querySelectorAll('.tab-panel');
-  var friendTabs = ['map', 'stops', 'suggestions'];
+  var friendTabs = ['map', 'planner', 'suggestions'];
 
   for (var ti = 0; ti < allTabs.length; ti++) {
     var tab = allTabs[ti];
@@ -9687,13 +9703,17 @@ function openCampInfo(dayNum) {
   fetchCampInfo(campName, loc);
 }
 function fetchCampInfo(campName, location) {
+  var _campAmps = (appState.tripSettings && appState.tripSettings.rvAmps) ? appState.tripSettings.rvAmps + '-amp' : '50-amp';
   var prompt = 'You are a helpful RV travel guide. Provide a detailed info page for the campground/RV park "'
-    + campName + '" near ' + location + '.\n\n'
+    + campName + '" near ' + location + '. Our RV requires ' + _campAmps + ' service.\n\n'
     + 'CRITICAL: Output ONE raw JSON object on its own line first — NO markdown fences:\n'
-    + '{"address":"full street address","phone":"phone number or empty","website":"url or empty","nightly":"$XX/night or range","hookups":"full/water-electric/dry","googleRating":4.2,"reviewCount":340}\n\n'
+    + '{"address":"full street address","phone":"phone number or empty","website":"url or empty","nightly":"$XX/night or range","hookups":"full/water-electric/dry","amps":"30/50/both or unknown","checkIn":"3pm","checkOut":"11am","googleRating":4.2,"reviewCount":340}\n\n'
     + 'Then output sections with EXACT bold headers:\n'
     + '**Overview** (2-3 sentences: setting, vibe, who it\'s best for)\n'
-    + '**Amenities** (hookups, bathrooms, showers, laundry, pool, WiFi, store — bullet list)\n'
+    + '**Power & Hookups** (does this campground offer 30-amp, 50-amp, or both? Are full hookup sites available? Explicitly note if our ' + _campAmps + ' RV can be accommodated — bullet list)\n'
+    + '**Check-in & Checkout** (standard check-in time, check-out time, early arrival policy, late checkout options)\n'
+    + '**Nearest Laundromat** (name of the closest laundromat to this campground, approximate distance, hours of operation if known)\n'
+    + '**Amenities** (bathrooms, showers, pool, WiFi, store, dump station — bullet list)\n'
     + '**Site Types** (pull-through, back-in, big-rig friendly, pet policy)\n'
     + '**Reviews** (3 visitor quotes each starting with a star rating like ★★★★☆ then 1-2 sentences)\n'
     + '**Family Tips** (what kids love, nearby activities, playground/pool)\n'
@@ -9729,8 +9749,8 @@ function fetchCampInfo(campName, location) {
         }
       } catch(e2) {}
     }
-    var campColors={'Overview':'#2C5F8A','Amenities':'#3A8A5C','Site Types':'#7B5EA7','Reviews':'#E8813A','Family Tips':'#3A8A5C','Insider Tips':'#8A2C7B','Quick Facts':'#7B5EA7'};
-    var _knownCamp={'Overview':1,'Amenities':1,'Site Types':1,'Reviews':1,'Family Tips':1,'Insider Tips':1,'Quick Facts':1};
+    var campColors={'Overview':'#2C5F8A','Power & Hookups':'#E65100','Check-in & Checkout':'#1565C0','Nearest Laundromat':'#3A8A5C','Amenities':'#3A8A5C','Site Types':'#7B5EA7','Reviews':'#E8813A','Family Tips':'#3A8A5C','Insider Tips':'#8A2C7B','Quick Facts':'#7B5EA7'};
+    var _knownCamp={'Overview':1,'Power & Hookups':1,'Check-in & Checkout':1,'Nearest Laundromat':1,'Amenities':1,'Site Types':1,'Reviews':1,'Family Tips':1,'Insider Tips':1,'Quick Facts':1};
     var rp4=text.split(/\*\*([^*\n]+)\*\*/); var sc4=[]; var pp4=rp4[0]||''; var campFactsText='';
     for(var ri4=1;ri4<rp4.length;ri4+=2){var pt4=(rp4[ri4]||'').trim(),pb4c=rp4[ri4+1]||''; if(_knownCamp[pt4])sc4.push({title:pt4,body:pb4c}); else{if(sc4.length>0)sc4[sc4.length-1].body+='**'+pt4+'**'+pb4c;else pp4+='**'+pt4+'**'+pb4c;}}
     var h4=''; if(pp4.trim())h4+='<p style="margin:0 0 12px;font-size:.87rem;line-height:1.6;color:var(--text-2);">'+pp4.trim().replace(/\n/g,'<br>')+'</p>';
@@ -9926,7 +9946,7 @@ function fetchGeminiInfo(item, stop, type) {
     var text = '';
     try { text = data.candidates[0].content.parts[0].text || ''; } catch(e) {}
     if (!text) {
-      document.getElementById('aim-body').innerHTML = '<div style="color:var(--red);padding:16px;">Could not load info. Check your connection.</div>';
+      document.getElementById('aim-body').innerHTML = '<div style="color:var(--red);padding:16px;line-height:1.6;">Could not load info — the AI may be temporarily busy.<br><small style="color:var(--text-3);">Close this and try again in a moment. If it keeps failing, check your internet connection.</small></div>';
       return;
     }
 
@@ -10996,6 +11016,18 @@ function renderTripSettings() {
   html += '&#127951; ' + numDays + ' days &nbsp;&#8226;&nbsp; ' + startVal + ' → ' + endVal;
   html += '</div>';
 
+  // RV Power (Amps)
+  var _tsAmps = (appState.tripSettings && appState.tripSettings.rvAmps) ? appState.tripSettings.rvAmps : 50;
+  html += '<div>';
+  html += '<label style="font-size:.72rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">&#9889; RV Power Required</label>';
+  html += '<select id="ts-amps" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-s);font-size:.95rem;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;">';
+  html += '<option value="50"' + (_tsAmps == 50 ? ' selected' : '') + '>50 Amps (most large RVs &amp; 5th wheels)</option>';
+  html += '<option value="30"' + (_tsAmps == 30 ? ' selected' : '') + '>30 Amps (smaller RVs &amp; travel trailers)</option>';
+  html += '<option value="20"' + (_tsAmps == 20 ? ' selected' : '') + '>20 Amps (dry camping / basic hookup)</option>';
+  html += '</select>';
+  html += '<div style="font-size:.75rem;color:var(--text-3);margin-top:4px;">Used by AI to check hookup compatibility at campgrounds.</div>';
+  html += '</div>';
+
   // Save button
   html += '<button onclick="saveTripSettings()" style="width:100%;background:var(--orange);color:#fff;border:none;border-radius:var(--radius-s);padding:13px;font-size:.95rem;font-weight:800;cursor:pointer;font-family:var(--font);">&#10003; Save Trip Settings</button>';
 
@@ -11446,7 +11478,8 @@ function saveTripSettings() {
   var newDays = Math.max(1, Math.round((new Date(newEnd + 'T12:00:00') - new Date(newStart + 'T12:00:00')) / 86400000) + 1);
 
   // Persist to appState (no startCity/endCity — those come from TRIP_STOPS[0]/[last])
-  appState.tripSettings = { startDate: newStart, endDate: newEnd, tripName: newName, totalDays: newDays };
+  var _saveAmps = parseInt(((document.getElementById('ts-amps') || {}).value) || '50') || 50;
+  appState.tripSettings = { startDate: newStart, endDate: newEnd, tripName: newName, totalDays: newDays, rvAmps: _saveAmps };
   saveState(appState);
 
   // Apply to live CONFIG so everything recalculates immediately
@@ -11478,6 +11511,7 @@ function saveTripSettings() {
     var tab = activeTab.dataset.tab;
     if (tab === 'dashboard')   renderDashboard();
     if (tab === 'schedule')    renderSchedule();
+    if (tab === 'planner')     renderSchedule();
     if (tab === 'school')      renderSchool();
     if (tab === 'stops')       renderStops();
   }
@@ -15672,7 +15706,7 @@ function _smRenderToday() {
 
   /* Tonight's stop hero */
   var heroHtml = '<h2 class="section-head">Tonight</h2>'
-    + '<div class="hero-card" onclick="switchNav(\'s-schedule\',\'nav-schedule\',\'Planner\'); _smSeg(\'stops\')">'
+    + '<div class="hero-card" onclick="openCampInfo(' + (idx + 1) + ')">'
     + '<div class="hero-bg"></div><div class="hero-overlay"></div>'
     + '<div class="hero-label"><i class="fa-solid fa-location-dot"></i> Tonight\'s stop</div>'
     + '<div class="hero-title">' + (stop.emoji || '📍') + ' ' + (stop.name || 'Unknown') + (stop.state ? ', ' + stop.state : '') + '</div>'
