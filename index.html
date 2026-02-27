@@ -8506,6 +8506,17 @@ function initApp() {
       }
     }
   }
+
+  // ── Sync CONFIG from TRIP_DAYS (ground truth) ───────────────────
+  // Prevents the banner/countdown from using a stale hardcoded start date
+  // when the active trip (custom or re-dated builtin) starts on a different day.
+  // Also keeps totalDays in sync so tripDay() doesn't cap too early.
+  if (TRIP_DAYS && TRIP_DAYS.length > 0) {
+    if (TRIP_DAYS[0].date)                          CONFIG.startDate = TRIP_DAYS[0].date;
+    if (TRIP_DAYS[TRIP_DAYS.length - 1].date)       CONFIG.endDate   = TRIP_DAYS[TRIP_DAYS.length - 1].date;
+    if (TRIP_DAYS.length > CONFIG.totalDays)        CONFIG.totalDays = TRIP_DAYS.length;
+  }
+
   _updateLoginDisplay();
 
   // Update trip selector in header
