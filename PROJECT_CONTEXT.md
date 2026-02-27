@@ -16,7 +16,7 @@ A personal RV trip planner web app for the Maass Family RV Adventure 2026. Stati
 
 ```
 tripgenie/
-├── index.html                    # Main app (primary working file)
+├── index.html                    # Main app (primary working file, ~16,700 lines)
 ├── index2.html                   # Alternate version / experiment
 ├── simple-mode.html              # Simplified mode variant
 ├── mockup_desktop_v2.html        # Desktop layout mockup v2
@@ -58,9 +58,8 @@ tripgenie/
 - Added CLAUDE.md and PROJECT_CONTEXT.md for cross-device session continuity
 - Session 2 (2026-02-26): Applied 10 UX/feature fixes — purple return route line, TripBuddy→TripGenie rename, removed duplicate suggestions, auto drive time on reorder, drag hint moved to orange bar, diet prefs in trip settings, removed duplicate AI ask button, AI info modal on rec cards, reworked Pause Trip modal, enhanced Decisions tab with days-over counter
 - Session 2: Set up GitHub repo (pmaass-12/tripgenie) and Netlify CI/CD auto-deploy from main branch
-- Session 3 (2026-02-27): Fixed trip start date not updating schedule — saveTripSettings() now re-dates all TRIP_DAYS entries from new start date; initApp() also re-dates on reload from saved tripSettings
-- Session 3: Fixed mobile bottom nav button bunching — added @media (max-width: 380px) rule to shrink nav buttons on very small screens
-- Session 3: Combined Schedule + Stops into single "Planner" tab — bottom nav now has 4 tabs (Today, Planner, Journal, School); Planner tab has a segmented Days/Stops toggle at top; _smSeg() function controls visibility
+- Session 3 (2026-02-27): Fixed trip start date not updating schedule; combined Schedule+Stops into Planner tab; mobile nav spacing fixes; full app nav merged; login persistence (30-day rv_session); update banner with ETag polling; RV Amps setting; campground AI prompt with hookup/laundromat/check-in; Drive Time Split rename; WHY: markdown strip in suggestItemAlternative; improved AI error diagnostics
+- Session 4 (2026-02-27): Drive day schedule logic overhaul — mornings now show departure context (leave ~8 AM), on-road lunch stop, arrival at destination; explore days unchanged. Fixed ddmArrivalTime midnight wrap bug ("13:00 PM" → correct "1:00 AM"). Added time format setting (12h/24h), departure time setting, and latest arrival time setting to Trip Settings. Added weather highs/lows to blue phase header bars (shows avg high/low from loaded weather data, with 🌡️ load button if no data). Added Escape key to close all modals. Added 🗑️ Remove button to phase headers to fully remove a stop from the schedule (with ↩ Restore capability).
 
 ---
 
@@ -69,6 +68,9 @@ tripgenie/
 - Multiple mockup versions kept for reference rather than deleted
 - Mobile-first design with desktop enhancements
 - Leaflet chosen for mapping (open source, no API key required)
+- Drive day schedule: depart at configurable time (default 8 AM), on-road meals, destination activities only post-arrival
+- Time helpers: `_fmtHour(h)`, `_fmtTimeStr(str)` centralize all time display formatting respecting user's 12h/24h preference
+- Stop removal: `appState.removedStops[stopId]` flag + `phaseExtraDays[stopId] = -allDays` hides entire phase; restore clears both
 
 ---
 
@@ -76,13 +78,13 @@ tripgenie/
 - Multiple mockup versions exist — needs consolidation decision (which is canonical?)
 - `saveTripSettings()` re-dates TRIP_DAYS in memory only; custom trip (AI-built) trips have their own date logic via `customTripData` — date change behavior for custom trips not yet tested
 - rv-app.zip contents unknown — may be redundant
+- AI info modal ("Could not load info") root cause not fully resolved — improved error diagnostics added but may need API key refresh or Gemini model URL update
 
 ---
 
 ## Suggested Next Steps
-- Decide which HTML file is the primary/canonical app going forward
-- Clean up or archive older mockup versions
-- Add more trip data / stops to the planner
-- Push latest index.html to GitHub → auto-deploys to Netlify (run: git add index.html PROJECT_CONTEXT.md && git commit -m "..." && git push)
-- Test the new Planner tab (Days/Stops toggle) on mobile
-- Consider adding a map view as a third segment in the Planner tab
+- Test drive day schedule on Day 1 (Warwick → Luray): should now show 7 AM breakfast before leaving, 8 AM depart, ~2 PM lunch on road, ~2 PM arrive
+- Load weather for each stop via the 🌡️ button in the blue phase headers
+- Test Escape key on all modals
+- Test Remove Stop flow (remove Kansas City, verify days hidden, restore works)
+- Push to GitHub → auto-deploys to Netlify

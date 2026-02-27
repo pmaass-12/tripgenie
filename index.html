@@ -2500,6 +2500,12 @@
   </div>
 </div>
 
+<!-- UPDATE BANNER -->
+<div id="update-banner" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;background:var(--blue);color:#fff;align-items:center;justify-content:center;gap:12px;padding:11px 20px;font-size:.88rem;font-weight:700;box-shadow:0 2px 10px rgba(0,0,0,.25);" onclick="location.reload(true)">
+  <span>🆕 New version ready — tap to reload</span>
+  <button onclick="event.stopPropagation();document.getElementById('update-banner').style.display='none'" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:3px 12px;font-size:.76rem;font-weight:700;cursor:pointer;font-family:var(--font);">Dismiss</button>
+</div>
+
 <!-- TOAST -->
 <div id="toast"></div>
 
@@ -3529,7 +3535,7 @@ function enterTestMode() {
   _realAppState = appState;
   appState = {
     arrivals:{}, departures:{}, dayNotes:{}, planned:{}, weather:{},
-    drivers:{}, sleepOverrides:{}, phaseExtraDays:{},
+    drivers:{}, sleepOverrides:{}, phaseExtraDays:{}, removedStops:{},
     listChecked:{ todo:{}, pack:{} }, listHidden:{ todo:{}, pack:{} },
     customListItems:{ todo:[], pack:[] }, listSortOrder:{ todo:[], pack:[] },
     bookingStatus:{}, customBookings:[], savedPostcards:[], journal:{},
@@ -3607,23 +3613,26 @@ function doLogin() {
     _authed = true;
     _isFriend = false;
     _isViewer = false;
+    _userName = window._loginProfile || '';
+    _saveSession('family', _userName);
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     showToast('&#9729;&#65039; Loading your trip data…', 1800);
-    _userName = window._loginProfile || '';
     loadFromCloud(function() { initApp(); _updateHeaderProfile(); if (_userName) { _setSyncStatus('&#9729;', 'Hi ' + _userName + '!', 'rgba(255,255,255,.7)'); setTimeout(function(){ _setSyncStatus('&#9729;','Saved (' + _userName + ')','rgba(255,255,255,.45)'); }, 2500); } });
   } else if (val === CONFIG.viewerPassword) {
     _authed = true;
     _isFriend = false;
     _isViewer = true;
+    _userName = window._loginProfile || '';
+    _saveSession('viewer', _userName);
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
-    _userName = window._loginProfile || '';
     loadFromCloud(function() { initApp(); _updateHeaderProfile(); applyViewerMode(); });
   } else if (val === CONFIG.friendsPassword) {
     _authed = true;
     _isFriend = true;
     _isViewer = false;
+    _saveSession('friend', '');
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     loadFromCloud(function() { initApp(); applyFriendMode(); });
@@ -3663,10 +3672,132 @@ function applyViewerMode() {
 
 document.getElementById('logout-btn').addEventListener('click', function() {
   _authed = false;
+  localStorage.removeItem('rv_session');
   document.getElementById('app').classList.add('hidden');
   document.getElementById('login-screen').classList.remove('hidden');
   document.getElementById('password-input').value = '';
 });
+
+/* ── AUTO-LOGIN: persist session across reloads (30-day TTL) ─────── */
+function _saveSession(mode, userName) {
+  try {
+    localStorage.setItem('rv_session', JSON.stringify({
+      mode: mode, userName: userName, savedAt: Date.now()
+    }));
+  } catch(e) {}
+}
+
+function _tryAutoLogin() {
+  try {
+    var raw = localStorage.getItem('rv_session');
+    if (!raw) return false;
+    var s = JSON.parse(raw);
+    if (!s || !s.mode) return false;
+    // 30-day TTL
+    if (Date.now() - s.savedAt > 30 * 24 * 60 * 60 * 1000) {
+      localStorage.removeItem('rv_session');
+      return false;
+    }
+    _authed   = true;
+    _userName = s.userName || '';
+    _isFriend = (s.mode === 'friend');
+    _isViewer = (s.mode === 'viewer');
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    if (s.mode === 'family') {
+      loadFromCloud(function() {
+        initApp(); _updateHeaderProfile();
+        if (_userName) { _setSyncStatus('☁', 'Hi ' + _userName + '!', 'rgba(255,255,255,.7)'); setTimeout(function(){ _setSyncStatus('☁','Saved (' + _userName + ')','rgba(255,255,255,.45)'); }, 2500); }
+      });
+    } else if (s.mode === 'viewer') {
+      loadFromCloud(function() { initApp(); _updateHeaderProfile(); applyViewerMode(); });
+    } else if (s.mode === 'friend') {
+      loadFromCloud(function() { initApp(); applyFriendMode(); });
+    }
+    return true;
+  } catch(e) { return false; }
+}
+
+/* ── VERSION CHECK: poll for new Netlify deploy every 5 minutes ─── */
+var _appEtag = null;
+var _updateCheckTimer = null;
+
+/* ── Global Escape key handler ─────────────────────────────────── */
+document.addEventListener('keydown', function(e) {
+  if (e.key !== 'Escape') return;
+  /* Close modals in priority order */
+  var closers = [
+    function() {
+      var m = document.getElementById('ai-info-modal');
+      if (m && !m.classList.contains('hidden')) { closePlaceInfo(); return true; }
+    },
+    function() {
+      var m = document.getElementById('day-detail-modal');
+      if (m && !m.classList.contains('hidden')) { closeDayDetail(); return true; }
+    },
+    function() {
+      var m = document.getElementById('music-modal');
+      if (m && !m.classList.contains('hidden')) { closeLocalMusic(); return true; }
+    },
+    function() {
+      var m = document.getElementById('help-search-overlay');
+      if (m && m.style.display !== 'none') { closeHelpSearch(); return true; }
+    },
+    function() {
+      var m = document.getElementById('change-plan-overlay');
+      if (m && m.style.display !== 'none') { closeChangePlanModal(); return true; }
+    },
+    function() {
+      var m = document.getElementById('pause-day-modal');
+      if (m && !m.classList.contains('hidden')) { closePauseDayModal(); return true; }
+    },
+    function() {
+      var m = document.getElementById('photo-modal');
+      if (m && m.style.display !== 'none') { closePhotoModal(); return true; }
+    },
+    function() {
+      var m = document.getElementById('photo-gallery-modal');
+      if (m && m.style.display !== 'none') { closePhotoGallery(); return true; }
+    },
+    function() {
+      var m = document.getElementById('forecast-modal-wrapper');
+      if (m && m.style.display !== 'none') { _closeForecastModal(); return true; }
+    }
+  ];
+  for (var ci = 0; ci < closers.length; ci++) {
+    if (closers[ci]()) { e.preventDefault(); break; }
+  }
+});
+
+function _initVersionCheck() {
+  // Record initial ETag on load
+  fetch(location.href + '?_vc=' + Date.now(), { method: 'HEAD', cache: 'no-store' })
+    .then(function(r) {
+      _appEtag = r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length') || '';
+    })
+    .catch(function() {});
+
+  // Poll every 5 minutes
+  _updateCheckTimer = setInterval(function() {
+    fetch(location.href + '?_vc=' + Date.now(), { method: 'HEAD', cache: 'no-store' })
+      .then(function(r) {
+        var fresh = r.headers.get('etag') || r.headers.get('last-modified') || r.headers.get('content-length') || '';
+        if (_appEtag && fresh && fresh !== _appEtag) {
+          clearInterval(_updateCheckTimer);
+          document.getElementById('update-banner').style.display = 'flex';
+        }
+      })
+      .catch(function() {});
+  }, 5 * 60 * 1000);
+}
+
+/* ── PAGE LOAD STARTUP ──────────────────────────────────────────── */
+(function() {
+  _initVersionCheck();
+  if (!_tryAutoLogin()) {
+    // No saved session — show login screen as normal (it's already visible in HTML)
+  }
+})();
 
 /* ── TAB NAVIGATION ───────────────────────────────────────────────── */
 document.querySelectorAll('.nav-tab').forEach(btn => {
@@ -4606,20 +4737,56 @@ function saveSleep(dayNum) {
 function phaseHeaderHtml(phase, firstDay) {
   var pStop = getStop(firstDay.stopId);
   var totalMi = 0;
+  var phaseDays = TRIP_DAYS.filter(function(d) { return d.phase === phase; });
   for (var i = 0; i < TRIP_DAYS.length; i++) {
     if (TRIP_DAYS[i].phase === phase) totalMi += TRIP_DAYS[i].miles;
   }
-  var nights = TRIP_DAYS.filter(function(d) { return d.phase === phase; }).length;
+  var nights = phaseDays.length;
   var extras = (appState.phaseExtraDays && appState.phaseExtraDays[firstDay.stopId]) || 0;
   var totalNights = nights + extras;
   var btnStyle = 'background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:50%;width:26px;height:26px;font-size:1rem;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:var(--font);line-height:1;flex-shrink:0;';
-  return '<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--blue);color:#fff;border-radius:var(--radius-s);margin:20px 0 8px;">'
+
+  /* Compute average high/low temps for this phase from weather data */
+  var _wxHtml = '';
+  var _wxData = appState.weather && appState.weather[firstDay.stopId];
+  if (_wxData && phaseDays.length > 0) {
+    var _highs = [], _lows = [], _codes = [];
+    phaseDays.forEach(function(pd) {
+      var wx = _wxData[pd.date];
+      if (wx) {
+        if (wx.high !== undefined) _highs.push(wx.high);
+        if (wx.low  !== undefined) _lows.push(wx.low);
+        if (wx.code !== undefined) _codes.push(wx.code);
+      }
+    });
+    if (_highs.length > 0) {
+      var _avgHigh = Math.round(_highs.reduce(function(a,b){return a+b;},0) / _highs.length);
+      var _avgLow  = Math.round(_lows.reduce(function(a,b){return a+b;},0) / _lows.length);
+      /* Pick most-common weather code for icon */
+      var _codeCount = {}; _codes.forEach(function(c){ _codeCount[c]=(_codeCount[c]||0)+1; });
+      var _topCode = _codes.length ? parseInt(Object.keys(_codeCount).sort(function(a,b){return _codeCount[b]-_codeCount[a];})[0]) : null;
+      var _wxIcon = _topCode === null ? '🌡️' : (_topCode <= 1 ? '☀️' : _topCode <= 3 ? '⛅' : _topCode <= 49 ? '🌫️' : _topCode <= 67 ? '🌧️' : _topCode <= 77 ? '❄️' : '🌩️');
+      var _wxType = (_wxData[phaseDays[0].date] && _wxData[phaseDays[0].date].type === 'forecast') ? 'Forecast' : 'Typical';
+      _wxHtml = '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.15);border-radius:20px;padding:3px 9px;flex-shrink:0;cursor:pointer;" onclick="event.stopPropagation();showStopForecastModal(' + firstDay.stopId + ')" title="' + _wxType + ' weather — tap for full forecast">'
+        + '<span style="font-size:.85rem;">' + _wxIcon + '</span>'
+        + '<span style="font-size:.76rem;font-weight:800;color:#fff;white-space:nowrap;">' + _avgHigh + '° / ' + _avgLow + '°</span>'
+        + '</div>';
+    } else {
+      /* No data yet — show load button */
+      _wxHtml = '<button onclick="event.stopPropagation();loadStopWeather(' + firstDay.stopId + ')" style="background:rgba(255,255,255,.12);border:1px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.7);border-radius:20px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Load weather">🌡️ Weather</button>';
+    }
+  } else if (pStop && pStop.lat) {
+    _wxHtml = '<button onclick="event.stopPropagation();loadStopWeather(' + firstDay.stopId + ')" style="background:rgba(255,255,255,.12);border:1px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.7);border-radius:20px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Load weather">🌡️ Weather</button>';
+  }
+
+  return '<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--blue);color:#fff;border-radius:var(--radius-s);margin:20px 0 8px;flex-wrap:wrap;">'
     + '<span style="font-size:1.3rem">' + (pStop ? pStop.emoji : '&#128663;') + '</span>'
-    + '<div style="flex:1;">'
-    + '<div style="font-weight:800;font-size:.97rem">' + phase + '</div>'
+    + '<div style="flex:1;min-width:0;">'
+    + '<div style="font-weight:800;font-size:.97rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + phase + '</div>'
     + '<div style="font-size:.76rem;opacity:.8;">' + totalNights + ' nights' + (totalMi > 0 ? ' \u00b7 ' + totalMi + ' mi' : '') + (extras > 0 ? ' (+' + extras + ' added)' : extras < 0 ? ' (' + extras + ' shortened)' : '') + '</div>'
     + '</div>'
-    + (firstDay.springBreak ? '<span style="background:rgba(255,255,255,.2);border-radius:20px;padding:3px 10px;font-size:.73rem;font-weight:700;">&#127775; Spring Break</span>' : '')
+    + (firstDay.springBreak ? '<span style="background:rgba(255,255,255,.2);border-radius:20px;padding:3px 10px;font-size:.73rem;font-weight:700;flex-shrink:0;">&#127775; Spring Break</span>' : '')
+    + _wxHtml
     + '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;">'
     + '<span style="font-size:.6rem;font-weight:800;opacity:.75;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap;">Days</span>'
     + '<div style="display:flex;align-items:center;gap:4px;">'
@@ -4628,6 +4795,7 @@ function phaseHeaderHtml(phase, firstDay) {
     + '<button onclick="event.stopPropagation();addPhaseDay(' + firstDay.stopId + ')" style="' + btnStyle + '" title="Add a day">&#43;</button>'
     + '</div>'
     + '</div>'
+    + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + phase.replace(/'/g, "\\'") + '\')" style="background:rgba(220,80,60,.35);border:1px solid rgba(255,100,80,.5);color:#fff;border-radius:100px;padding:5px 10px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Remove this stop from trip">🗑️ Remove</button>'
     + '<button onclick="event.stopPropagation();openAreaInfo(\'' + phase.replace(/'/g, "\\'") + '\',' + firstDay.stopId + ')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 10px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">&#128269; Area Info</button>'
     + '<button onclick="event.stopPropagation();_openMusicForStop(' + firstDay.stopId + ')" title="Local Music" style="background:#1DB954;border:2px solid rgba(255,255,255,.5);color:#fff;border-radius:50%;width:32px;height:32px;font-size:.9rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1;padding:0;">&#127926;</button>'
     + '</div>';
@@ -4651,6 +4819,39 @@ function removePhaseDay(stopId) {
 }
 
 /* ── RENDER PAUSE SCHEDULE BLOCK ─────────────────────────────────── */
+/* Remove an entire stop/phase from the trip (hides all days for that stop) */
+function removeStopFromTrip(stopId, phaseName) {
+  var phaseDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
+  if (phaseDays.length === 0) { showToast('Stop not found', 1600); return; }
+  /* Confirm */
+  if (!confirm('Remove "' + phaseName + '" from your trip? This hides all ' + phaseDays.length + ' days at this stop. You can restore it by adding days back with the + button.')) return;
+  if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
+  /* Set phaseExtraDays to -(phaseDays.length - 1) so only 1 day remains hidden in minimum logic
+     Actually we want to hide ALL days, so we set a special flag: removedStop */
+  if (!appState.removedStops) appState.removedStops = {};
+  appState.removedStops[stopId] = true;
+  /* Also set phaseExtraDays to max negative to collapse days via existing logic */
+  appState.phaseExtraDays[stopId] = -(phaseDays.length);
+  saveState(appState);
+  renderSchedule();
+  showToast('🗑️ ' + phaseName + ' removed from schedule. Use + to restore days.', 2800);
+}
+
+function restoreStopToTrip(stopId) {
+  if (!appState.removedStops) appState.removedStops = {};
+  delete appState.removedStops[stopId];
+  if (appState.phaseExtraDays) appState.phaseExtraDays[stopId] = 0;
+  saveState(appState);
+  renderSchedule();
+  showToast('↩ Stop restored to schedule!', 1800);
+}
+
+/* Wrapper to trigger weather load and re-render */
+function loadStopWeather(stopId) {
+  showToast('🌡️ Loading weather…', 1800);
+  _loadStopWeatherSilent(stopId, function() { renderSchedule(); showToast('✅ Weather loaded!', 1800); });
+}
+
 function _renderPauseScheduleBlock(pd, nights) {
   var nightStr = nights + ' night' + (nights !== 1 ? 's' : '');
   var dateRange = pd.startDate ? pd.startDate + (pd.endDate ? ' → ' + pd.endDate : '') : '';
@@ -4685,6 +4886,7 @@ function renderSchedule() {
 
   /* Pre-compute which day numbers are hidden because a stop had days removed */
   var skipDayNums = {};
+  var removedStopIds = appState.removedStops || {};
   if (appState.phaseExtraDays) {
     var stopDayMap = {};
     TRIP_DAYS.forEach(function(d) {
@@ -4695,7 +4897,8 @@ function renderSchedule() {
       var extra = appState.phaseExtraDays[sid];
       if (extra < 0) {
         var days = stopDayMap[sid] || [];
-        var skip = Math.min(Math.abs(extra), days.length - 1);
+        /* If stop is fully removed, skip ALL days; otherwise keep at least 1 */
+        var skip = removedStopIds[sid] ? days.length : Math.min(Math.abs(extra), days.length - 1);
         for (var si = days.length - skip; si < days.length; si++) {
           skipDayNums[days[si].day] = true;
         }
@@ -4742,11 +4945,21 @@ function renderSchedule() {
 
     // Phase header when phase changes (always show even if first day is skipped)
     if (d.phase !== lastPhase) {
-      html += phaseHeaderHtml(d.phase, d);
+      if (removedStopIds[d.stopId]) {
+        /* Show a compact restore banner instead of full phase header */
+        var _rStop = getStop(d.stopId);
+        html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;background:#e0e0e0;color:#555;border-radius:var(--radius-s);margin:12px 0 4px;opacity:.7;">'
+          + '<span style="font-size:1.1rem">' + (_rStop ? _rStop.emoji : '📍') + '</span>'
+          + '<div style="flex:1;font-size:.85rem;font-weight:700;">' + d.phase + ' <span style="font-weight:400;font-size:.78rem;">(removed from schedule)</span></div>'
+          + '<button onclick="restoreStopToTrip(' + d.stopId + ')" style="background:var(--green);color:#fff;border:none;border-radius:100px;padding:5px 12px;font-size:.75rem;font-weight:700;cursor:pointer;font-family:var(--font);">↩ Restore</button>'
+          + '</div>';
+      } else {
+        html += phaseHeaderHtml(d.phase, d);
+      }
       lastPhase = d.phase;
     }
 
-    // Skip this day if it was hidden by the - button
+    // Skip this day if it was hidden by the - button or full stop removal
     if (skipDayNums[d.day]) continue;
 
     // Card background — border-free, whitespace + light shadow as separator
@@ -4797,7 +5010,7 @@ function renderSchedule() {
       var _driveDisp = _splitResolved ? (_splitHours + 'h each leg') : (d.driveHours + 'h' + _sbExtra);
       html += '<span style="font-size:.75rem;color:var(--orange);font-weight:600;"><i class="fa-solid fa-car-side"></i> ' + d.miles + ' mi · ' + _driveDisp + '</span>';
       if (_splitResolved) {
-        html += '<span style="background:var(--green);color:#fff;font-size:.66rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;">✓ Split Planned</span>';
+        html += '<span style="background:var(--green);color:#fff;font-size:.66rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;">✓ Drive Time Split</span>';
       } else if (_isLongDrive) {
         html += '<span style="background:var(--orange);color:#fff;font-size:.66rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;cursor:pointer;" onclick="openDayDetail(' + d.day + ')"><i class="fa-solid fa-triangle-exclamation"></i> Long Drive — tap to split</span>';
       }
@@ -8726,14 +8939,59 @@ function closeDayDetail() {
   document.body.style.overflow = '';
 }
 
-function ddmArrivalTime(driveHours) {
-  var arrH = 19 + driveHours;
-  var h = Math.floor(arrH);
-  var m = Math.round((arrH - h) * 60);
-  var ampm = h >= 12 ? 'PM' : 'AM';
-  var dh = h > 12 ? h - 12 : (h === 0 ? 12 : h);
-  return dh + ':' + (m < 10 ? '0' + m : m) + ' ' + ampm;
+/* ── Time formatting helpers ───────────────────────────────────── */
+function _getTimeFormat() {
+  return (appState.tripSettings && appState.tripSettings.timeFormat) || '12h';
 }
+function _getDepartureHour() {
+  var dep = (appState.tripSettings && appState.tripSettings.departureTime) || '08:00';
+  var parts = dep.split(':');
+  return parseInt(parts[0]) + (parseInt(parts[1] || 0) / 60);
+}
+function _getLatestArrivalHour() {
+  var la = (appState.tripSettings && appState.tripSettings.latestArrival) || '20:00';
+  var parts = la.split(':');
+  return parseInt(parts[0]) + (parseInt(parts[1] || 0) / 60);
+}
+/* Format a fractional hour (e.g. 14.5 = 2:30 PM) as a time string */
+function _fmtHour(h) {
+  var hWrapped = ((h % 24) + 24) % 24; // wrap midnight
+  var hInt = Math.floor(hWrapped);
+  var m = Math.round((hWrapped - hInt) * 60);
+  if (m === 60) { hInt++; m = 0; hWrapped = ((hInt % 24) + 24) % 24; hInt = Math.floor(hWrapped); }
+  if (_getTimeFormat() === '24h') {
+    return String(hInt).padStart(2,'0') + ':' + (m < 10 ? '0'+m : m);
+  }
+  var ampm = hInt >= 12 ? 'PM' : 'AM';
+  var dh = hInt > 12 ? hInt - 12 : (hInt === 0 ? 12 : hInt);
+  return dh + ':' + (m < 10 ? '0'+m : m) + ' ' + ampm;
+}
+/* Convert stored "7:00 AM" / "14:30" strings to display using current format */
+function _fmtTimeStr(timeStr) {
+  if (!timeStr) return timeStr;
+  // Try to parse "H:MM AM/PM"
+  var m12 = timeStr.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (m12) {
+    var h = parseInt(m12[1]);
+    var mn = parseInt(m12[2]);
+    var ap = m12[3].toUpperCase();
+    if (ap === 'PM' && h !== 12) h += 12;
+    if (ap === 'AM' && h === 12) h = 0;
+    return _fmtHour(h + mn / 60);
+  }
+  // Try to parse "HH:MM" 24h
+  var m24 = timeStr.match(/^(\d{1,2}):(\d{2})$/);
+  if (m24) {
+    return _fmtHour(parseInt(m24[1]) + parseInt(m24[2]) / 60);
+  }
+  return timeStr;
+}
+function ddmArrivalTime(driveHours) {
+  var depH = _getDepartureHour();
+  var arrH = depH + driveHours;
+  return _fmtHour(arrH);
+}
+function _depTimeStr() { return _fmtHour(_getDepartureHour()); }
 
 function renderDayTimeBlocks(d, stop) {
   var html = '';
@@ -8931,60 +9189,108 @@ function renderDayTimeBlocks(d, stop) {
   /* Build items array for default or custom-ordered rendering */
   var _items = [];
 
-  var bTime = ovTime('breakfast','7:00 AM');
-  var bSub  = bRest ? ovSub('breakfast', (bRest.item.hours || '') + (bRest.item.address ? ' &middot; ' + bRest.item.address : '')) : 'Make breakfast in the RV';
-  var bBtn  = (bRest && stop) ? tbbAiBtn('r', stop.id, bRest.idx) : '';
-  var bSkip = (bRest && stop && rests.length > 1) ? 'skipMeal(' + d.day + ',\'breakfast\')' : '';
-  _items.push({ key:'breakfast', html: tbbRow(bTime,'&#127749;',
-    ovTitle('breakfast','Breakfast' + (bRest ? ' \u2014 ' + bRest.item.name : ' at the RV')),
-    bSub,'eat',bRest&&bRest.planned,bBtn,bSkip,'breakfast') });
-
-  if (acts[0]) {
-    var a0 = acts[0];
-    var a0sub = ovSub('act0', (a0.item.duration ? a0.item.duration : '') + (a0.item.desc ? ' &middot; ' + a0.item.desc.substring(0,100) + (a0.item.desc.length > 100 ? '&hellip;' : '') : ''));
-    _items.push({ key:'act0', html: tbbRow(ovTime('act0','9:00 AM'),'&#127775;',ovTitle('act0',a0.item.name),a0sub,'explore',a0.planned,stop ? tbbAiBtn('a',stop.id,a0.idx) : '','','act0') });
-  } else if (stop) {
-    _items.push({ key:'act0', html: tbbRow(ovTime('act0','9:00 AM'),'&#127775;',ovTitle('act0','Morning at '+stop.name),ovSub('act0','Explore the area'),'explore',false,'','','act0') });
-  }
-
-  if (lRest) {
-    var lSub  = ovSub('lunch', (lRest.item.type || '') + (lRest.item.price ? ' &middot; ' + lRest.item.price : '') + (lRest.item.address ? ' &middot; ' + lRest.item.address : ''));
-    var lSkip = (stop && rests.length > 2) ? 'skipMeal(' + d.day + ',\'lunch\')' : '';
-    _items.push({ key:'lunch', html: tbbRow(ovTime('lunch','12:00 PM'),'&#127828;',ovTitle('lunch','Lunch \u2014 '+lRest.item.name),lSub,'eat',lRest.planned,stop ? tbbAiBtn('r',stop.id,lRest.idx) : '',lSkip,'lunch') });
-  }
-
-  if (acts.length > 1) {
-    var a1 = acts[1];
-    var a1sub = ovSub('act1', (a1.item.duration ? a1.item.duration : '') + (a1.item.desc ? ' &middot; ' + a1.item.desc.substring(0,100) + (a1.item.desc.length > 100 ? '&hellip;' : '') : ''));
-    _items.push({ key:'act1', html: tbbRow(ovTime('act1','2:00 PM'),'&#128506;',ovTitle('act1',a1.item.name),a1sub,'explore',a1.planned,stop ? tbbAiBtn('a',stop.id,a1.idx) : '','','act1') });
-  }
-
-  if (dRest) {
-    var dSub  = ovSub('dinner', (dRest.item.type || '') + (dRest.item.price ? ' &middot; ' + dRest.item.price : '') + (dRest.item.hours ? ' &middot; ' + dRest.item.hours : ''));
-    var dSkip = (stop && rests.length > 2) ? 'skipMeal(' + d.day + ',\'dinner\')' : '';
-    _items.push({ key:'dinner', html: tbbRow(ovTime('dinner','5:30 PM'),'&#127869;',ovTitle('dinner','Dinner \u2014 '+dRest.item.name),dSub,'eat',dRest.planned,stop ? tbbAiBtn('r',stop.id,dRest.idx) : '',dSkip,'dinner') });
-  }
-
-  /* Drive or evening/sleep */
+  /* ── Drive day vs explore day item builder ─────────────────────── */
   if (d.driveDay && d.miles > 0) {
-    var nextName = '';
+    /* DRIVE DAY: morning departure, on-road meals, arrive at destination by evening */
+    var _depH   = _getDepartureHour();
+    var _arrH   = _depH + d.driveHours;
+    var _latestH = _getLatestArrivalHour();
+    var _depStr = _fmtHour(_depH);
+    var _arrStr = ddmArrivalTime(d.driveHours);
+
+    /* Late arrival warning banner */
+    if (_arrH > _latestH) {
+      var _overMins = Math.round((_arrH - _latestH) * 60);
+      html += '<div style="background:#fff3cd;border:1.5px solid #ffc107;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:.83rem;line-height:1.55;">'
+        + '<strong>⚠️ Late Arrival Warning</strong><br>'
+        + 'Estimated arrival ' + _arrStr + ' is ' + _overMins + ' min after your ' + _fmtHour(_latestH) + ' latest check-in. '
+        + 'Consider splitting the drive or departing earlier.'
+        + '</div>';
+    }
+
+    /* Pre-departure: breakfast at origin (no destination restaurant) */
+    var bTimeDrive = ovTime('breakfast', _fmtHour(_depH - 1));
+    _items.push({ key:'breakfast', html: tbbRow(bTimeDrive,'&#127749;',
+      ovTitle('breakfast','Breakfast — Before You Leave'),
+      ovSub('breakfast','Quick meal before hitting the road'),
+      'eat',false,'','','breakfast') });
+
+    /* Depart block */
+    var nextNameD = '';
     for (var ni = d.day; ni < TRIP_DAYS.length; ni++) {
       if (TRIP_DAYS[ni].stopId !== d.stopId) {
         var ns2 = getStop(TRIP_DAYS[ni].stopId);
-        if (ns2) nextName = ns2.name;
+        if (ns2) nextNameD = ns2.name;
         break;
       }
     }
-    _items.push({ key:'drive', html: tbbRow(ovTime('drive','7:00 PM'),'&#128656;',
-      'Drive' + (nextName ? ' \u2192 ' + nextName : ''),
-      d.miles + ' miles &middot; ~' + d.driveHours + 'h &middot; Arrive ~' + ddmArrivalTime(d.driveHours),
+    _items.push({ key:'drive', html: tbbRow(ovTime('drive', _depStr),'&#128656;',
+      'Depart' + (nextNameD ? ' \u2192 ' + nextNameD : ''),
+      d.miles + ' miles \u00b7 ~' + d.driveHours + 'h drive \u00b7 Arrive ~' + _arrStr,
       'drive',false,'','','drive') });
-    _items.push({ key:'sleep', html: tbbRow(ddmArrivalTime(d.driveHours),'&#127957;',
-      ovTitle('sleep','Arrive &amp; Set Up Camp'),
+
+    /* On-road lunch stop */
+    var _lunchH = _depH + (d.driveHours / 2);
+    _items.push({ key:'lunch', html: tbbRow(ovTime('lunch', _fmtHour(_lunchH)),'&#127828;',
+      ovTitle('lunch','Lunch — Road Stop'),
+      ovSub('lunch','Find a diner or drive-through on the way'),
+      'eat',false,'','','lunch') });
+
+    /* Arrive & check in */
+    _items.push({ key:'sleep', html: tbbRow(_arrStr,'&#127957;',
+      ovTitle('sleep','Arrive & Check In'),
       ovSub('sleep', d.sleep || 'Next campsite'),
       null,false,'openCampInfo('+d.day+')','','sleep') });
+
+    /* Post-arrival dinner (only if arriving before 6 PM) */
+    if (_arrH < 18 && dRest) {
+      var dSub2  = ovSub('dinner', (dRest.item.type || '') + (dRest.item.price ? ' \u00b7 ' + dRest.item.price : '') + (dRest.item.hours ? ' \u00b7 ' + dRest.item.hours : ''));
+      var dSkip2 = (stop && rests.length > 2) ? 'skipMeal(' + d.day + ',\'dinner\')' : '';
+      var _dinH  = Math.max(_arrH + 1.5, 17.5);
+      _items.push({ key:'dinner', html: tbbRow(ovTime('dinner', _fmtHour(_dinH)),'&#127869;',
+        ovTitle('dinner','Dinner \u2014 '+dRest.item.name),dSub2,'eat',dRest.planned,stop ? tbbAiBtn('r',stop.id,dRest.idx) : '',dSkip2,'dinner') });
+    } else if (_arrH < 18) {
+      _items.push({ key:'dinner', html: tbbRow(ovTime('dinner', _fmtHour(Math.max(_arrH + 1.5, 17.5))),'&#127869;',
+        ovTitle('dinner','Dinner'),ovSub('dinner','Explore dining near the campground'),'eat',false,'','','dinner') });
+    }
+
   } else {
-    _items.push({ key:'sleep', html: tbbRow(ovTime('sleep','7:00 PM'),'&#127769;',
+    /* ── EXPLORE DAY ──────────────────────────────────────────────── */
+    var bTime = ovTime('breakfast', _fmtHour(7));
+    var bSub  = bRest ? ovSub('breakfast', (bRest.item.hours || '') + (bRest.item.address ? ' &middot; ' + bRest.item.address : '')) : 'Make breakfast in the RV';
+    var bBtn  = (bRest && stop) ? tbbAiBtn('r', stop.id, bRest.idx) : '';
+    var bSkip = (bRest && stop && rests.length > 1) ? 'skipMeal(' + d.day + ',\'breakfast\')' : '';
+    _items.push({ key:'breakfast', html: tbbRow(bTime,'&#127749;',
+      ovTitle('breakfast','Breakfast' + (bRest ? ' \u2014 ' + bRest.item.name : ' at the RV')),
+      bSub,'eat',bRest&&bRest.planned,bBtn,bSkip,'breakfast') });
+
+    if (acts[0]) {
+      var a0 = acts[0];
+      var a0sub = ovSub('act0', (a0.item.duration ? a0.item.duration : '') + (a0.item.desc ? ' &middot; ' + a0.item.desc.substring(0,100) + (a0.item.desc.length > 100 ? '&hellip;' : '') : ''));
+      _items.push({ key:'act0', html: tbbRow(ovTime('act0', _fmtHour(9)),'&#127775;',ovTitle('act0',a0.item.name),a0sub,'explore',a0.planned,stop ? tbbAiBtn('a',stop.id,a0.idx) : '','','act0') });
+    } else if (stop) {
+      _items.push({ key:'act0', html: tbbRow(ovTime('act0', _fmtHour(9)),'&#127775;',ovTitle('act0','Morning at '+stop.name),ovSub('act0','Explore the area'),'explore',false,'','','act0') });
+    }
+
+    if (lRest) {
+      var lSub  = ovSub('lunch', (lRest.item.type || '') + (lRest.item.price ? ' &middot; ' + lRest.item.price : '') + (lRest.item.address ? ' &middot; ' + lRest.item.address : ''));
+      var lSkip = (stop && rests.length > 2) ? 'skipMeal(' + d.day + ',\'lunch\')' : '';
+      _items.push({ key:'lunch', html: tbbRow(ovTime('lunch', _fmtHour(12)),'&#127828;',ovTitle('lunch','Lunch \u2014 '+lRest.item.name),lSub,'eat',lRest.planned,stop ? tbbAiBtn('r',stop.id,lRest.idx) : '',lSkip,'lunch') });
+    }
+
+    if (acts.length > 1) {
+      var a1 = acts[1];
+      var a1sub = ovSub('act1', (a1.item.duration ? a1.item.duration : '') + (a1.item.desc ? ' &middot; ' + a1.item.desc.substring(0,100) + (a1.item.desc.length > 100 ? '&hellip;' : '') : ''));
+      _items.push({ key:'act1', html: tbbRow(ovTime('act1', _fmtHour(14)),'&#128506;',ovTitle('act1',a1.item.name),a1sub,'explore',a1.planned,stop ? tbbAiBtn('a',stop.id,a1.idx) : '','','act1') });
+    }
+
+    if (dRest) {
+      var dSub  = ovSub('dinner', (dRest.item.type || '') + (dRest.item.price ? ' &middot; ' + dRest.item.price : '') + (dRest.item.hours ? ' &middot; ' + dRest.item.hours : ''));
+      var dSkip = (stop && rests.length > 2) ? 'skipMeal(' + d.day + ',\'dinner\')' : '';
+      _items.push({ key:'dinner', html: tbbRow(ovTime('dinner', _fmtHour(17.5)),'&#127869;',ovTitle('dinner','Dinner \u2014 '+dRest.item.name),dSub,'eat',dRest.planned,stop ? tbbAiBtn('r',stop.id,dRest.idx) : '',dSkip,'dinner') });
+    }
+
+    _items.push({ key:'sleep', html: tbbRow(ovTime('sleep', _fmtHour(19)),'&#127769;',
       ovTitle('sleep','Evening at Camp'),
       ovSub('sleep', d.sleep || 'Relax and unwind'),
       null,false,'openCampInfo('+d.day+')','','sleep') });
@@ -9241,9 +9547,11 @@ function suggestItemAlternative() {
     var nameM   = text.match(/NAME:\s*([^\|]+)/i);
     var whyM    = text.match(/WHY:\s*([^\|]+)/i);
     var detailM = text.match(/DETAIL:\s*(.+)/i);
-    var suggName   = nameM   ? nameM[1].trim()   : text.substring(0,60);
+    var suggName   = nameM   ? nameM[1].trim()   : text.split(/\|/)[0].trim().substring(0,80);
     var suggWhy    = whyM    ? whyM[1].trim()    : '';
     var suggDetail = detailM ? detailM[1].trim() : '';
+    // Strip markdown bold markers and any leaked WHY:/DETAIL: from the name
+    suggName = suggName.replace(/\*\*/g, '').replace(/WHY:.*$/i, '').replace(/DETAIL:.*$/i, '').replace(/:$/, '').trim();
     if (altEl) {
       altEl.style.display = 'block';
       altEl.innerHTML = '<div style="font-weight:800;font-size:.88rem;color:var(--text);margin-bottom:4px;">✨ ' + suggName + '</div>'
@@ -9946,7 +10254,14 @@ function fetchGeminiInfo(item, stop, type) {
     var text = '';
     try { text = data.candidates[0].content.parts[0].text || ''; } catch(e) {}
     if (!text) {
-      document.getElementById('aim-body').innerHTML = '<div style="color:var(--red);padding:16px;line-height:1.6;">Could not load info — the AI may be temporarily busy.<br><small style="color:var(--text-3);">Close this and try again in a moment. If it keeps failing, check your internet connection.</small></div>';
+      var _apiErr = '';
+      try {
+        if (data.error) _apiErr = data.error.message || JSON.stringify(data.error);
+        else if (data.promptFeedback && data.promptFeedback.blockReason) _apiErr = 'Blocked: ' + data.promptFeedback.blockReason;
+        else if (data.candidates && data.candidates[0] && data.candidates[0].finishReason) _apiErr = 'Finish reason: ' + data.candidates[0].finishReason;
+        else _apiErr = JSON.stringify(data).substring(0, 300);
+      } catch(e2) {}
+      document.getElementById('aim-body').innerHTML = '<div style="color:var(--red);padding:16px;line-height:1.6;">Could not load info.<br><small style="color:var(--text-3);font-size:.78rem;word-break:break-all;">' + (_apiErr || 'Empty response from API') + '</small></div>';
       return;
     }
 
@@ -11028,6 +11343,32 @@ function renderTripSettings() {
   html += '<div style="font-size:.75rem;color:var(--text-3);margin-top:4px;">Used by AI to check hookup compatibility at campgrounds.</div>';
   html += '</div>';
 
+  // Time Format
+  var _tsFmt = (appState.tripSettings && appState.tripSettings.timeFormat) ? appState.tripSettings.timeFormat : '12h';
+  html += '<div>';
+  html += '<label style="font-size:.72rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">&#128336; Time Display Format</label>';
+  html += '<select id="ts-timefmt" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-s);font-size:.95rem;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;">';
+  html += '<option value="12h"' + (_tsFmt === '12h' ? ' selected' : '') + '>12-hour (7:30 AM / 5:00 PM)</option>';
+  html += '<option value="24h"' + (_tsFmt === '24h' ? ' selected' : '') + '>24-hour (07:30 / 17:00)</option>';
+  html += '</select>';
+  html += '</div>';
+
+  // Departure Time (drive days)
+  var _tsDep = (appState.tripSettings && appState.tripSettings.departureTime) ? appState.tripSettings.departureTime : '08:00';
+  html += '<div>';
+  html += '<label style="font-size:.72rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">&#128666; Drive Day Departure Time</label>';
+  html += '<input id="ts-deptime" type="time" value="' + _tsDep + '" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-s);font-size:.95rem;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;" />';
+  html += '<div style="font-size:.75rem;color:var(--text-3);margin-top:4px;">What time you aim to leave on driving days.</div>';
+  html += '</div>';
+
+  // Latest Arrival Time
+  var _tsLate = (appState.tripSettings && appState.tripSettings.latestArrival) ? appState.tripSettings.latestArrival : '20:00';
+  html += '<div>';
+  html += '<label style="font-size:.72rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">&#127759; Latest Campground Arrival</label>';
+  html += '<input id="ts-latearrival" type="time" value="' + _tsLate + '" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-s);font-size:.95rem;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;" />';
+  html += '<div style="font-size:.75rem;color:var(--text-3);margin-top:4px;">Drive days that arrive later will show a warning.</div>';
+  html += '</div>';
+
   // Save button
   html += '<button onclick="saveTripSettings()" style="width:100%;background:var(--orange);color:#fff;border:none;border-radius:var(--radius-s);padding:13px;font-size:.95rem;font-weight:800;cursor:pointer;font-family:var(--font);">&#10003; Save Trip Settings</button>';
 
@@ -11478,8 +11819,11 @@ function saveTripSettings() {
   var newDays = Math.max(1, Math.round((new Date(newEnd + 'T12:00:00') - new Date(newStart + 'T12:00:00')) / 86400000) + 1);
 
   // Persist to appState (no startCity/endCity — those come from TRIP_STOPS[0]/[last])
-  var _saveAmps = parseInt(((document.getElementById('ts-amps') || {}).value) || '50') || 50;
-  appState.tripSettings = { startDate: newStart, endDate: newEnd, tripName: newName, totalDays: newDays, rvAmps: _saveAmps };
+  var _saveAmps     = parseInt(((document.getElementById('ts-amps') || {}).value) || '50') || 50;
+  var _saveTimeFmt  = ((document.getElementById('ts-timefmt') || {}).value) || '12h';
+  var _saveDepTime  = ((document.getElementById('ts-deptime') || {}).value) || '08:00';
+  var _saveLateArr  = ((document.getElementById('ts-latearrival') || {}).value) || '20:00';
+  appState.tripSettings = { startDate: newStart, endDate: newEnd, tripName: newName, totalDays: newDays, rvAmps: _saveAmps, timeFormat: _saveTimeFmt, departureTime: _saveDepTime, latestArrival: _saveLateArr };
   saveState(appState);
 
   // Apply to live CONFIG so everything recalculates immediately
