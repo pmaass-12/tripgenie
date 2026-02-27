@@ -4362,24 +4362,42 @@ function renderDashboard() {
       + '</div>'
       + '</div>'
     : (function() {
-        var _fs   = TRIP_STOPS.find(function(s){return s.id===1;}) || TRIP_STOPS[0];
-        var _fsWx = (STOP_WEATHER && STOP_WEATHER[_fs ? _fs.id : 1]) || {};
-        var _fsWxStr = (_fsWx.icon && _fsWx.lo != null && _fsWx.hi != null)
-          ? (_fsWx.icon + ' ' + Math.round(_fsWx.lo) + '°–' + Math.round(_fsWx.hi) + '°F')
-          : '—';
-        var _fsName = _fs ? (_fs.emoji + ' ' + _fs.name + ', ' + _fs.state) : 'Shenandoah Valley, VA';
-        var _fsSleep = (_fs && _fs.sleepOptions && _fs.sleepOptions.length) ? _fs.sleepOptions[0] : 'Luray KOA Holiday';
+        /* Pre-trip: show first stop info with real weather if loaded */
+        var _fs      = TRIP_STOPS.find(function(s){return s.id===1;}) || TRIP_STOPS[0];
+        var _fsId    = _fs ? _fs.id : 1;
+        var _fsDay1  = TRIP_DAYS[0]; // Day 1 date
+        /* Prefer live/forecast weather from appState, fall back to static STOP_WEATHER */
+        var _fsWxLive = (appState.weather && appState.weather[_fsId] && _fsDay1)
+          ? appState.weather[_fsId][_fsDay1.date] : null;
+        var _fsWxLabel = '';
+        var _fsWxStr   = '—';
+        if (_fsWxLive && _fsWxLive.high != null) {
+          var _wxIcons = [null,'☀️','🌤️','⛅','🌥️','','','','','🌫️','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','','🌧️','','','','','🌨️','','','🌩️'];
+          var _wIc = (_fsWxLive.code != null && _wxIcons[_fsWxLive.code]) ? _wxIcons[_fsWxLive.code] : '🌡️';
+          _fsWxStr   = _wIc + ' ' + _fsWxLive.high + '° / ' + _fsWxLive.low + '°F';
+          _fsWxLabel = _fsWxLive.type === 'forecast' ? 'Day 1 Forecast' : 'Typical Weather';
+        } else {
+          var _fsWxFallback = (STOP_WEATHER && STOP_WEATHER[_fsId]) || {};
+          if (_fsWxFallback.icon && _fsWxFallback.lo != null) {
+            _fsWxStr   = _fsWxFallback.icon + ' ' + Math.round(_fsWxFallback.lo) + '°–' + Math.round(_fsWxFallback.hi) + '°F';
+            _fsWxLabel = 'Typical Weather';
+          } else {
+            _fsWxLabel = 'Typical Weather';
+          }
+        }
+        var _fsName  = _fs ? (_fs.emoji + ' ' + _fs.name + ', ' + _fs.state) : 'Shenandoah Valley, VA';
+        var _fsSleep = _fsDay1 ? (_fsDay1.sleep || 'First campground') : 'Luray RV Resort';
         return '<div style="display:flex;gap:8px;margin-top:12px;">'
-          + '<div style="' + _boxStyle + 'background:var(--green-l);border:1px solid #a5d6a7;">'
+          + '<div style="' + _boxStyle + 'background:var(--green-l);border:1px solid #a5d6a7;cursor:pointer;" onclick="showStopForecastModal(' + _fsId + ')">'
             + '<div style="font-size:.6rem;font-weight:800;color:#2e7d32;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">First Stop</div>'
             + '<div style="font-weight:800;font-size:.78rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _fsName + '</div>'
           + '</div>'
-          + '<div style="' + _boxStyle + 'background:var(--blue-l);border:1px solid rgba(44,95,138,.2);">'
-            + '<div style="font-size:.6rem;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Sleep</div>'
+          + '<div style="' + _boxStyle + 'background:var(--blue-l);border:1px solid rgba(44,95,138,.2);cursor:pointer;" onclick="openCampInfo(1)" title="Tap for AI campground info">'
+            + '<div style="font-size:.6rem;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Sleep ✨</div>'
             + '<div style="font-weight:700;font-size:.76rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _fsSleep + '</div>'
           + '</div>'
-          + '<div style="' + _boxStyle + 'background:var(--orange-l);border:1px solid rgba(232,129,58,.25);">'
-            + '<div style="font-size:.6rem;font-weight:800;color:var(--orange-d);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Typical Wx</div>'
+          + '<div style="' + _boxStyle + 'background:var(--orange-l);border:1px solid rgba(232,129,58,.25);cursor:pointer;" onclick="showStopForecastModal(' + _fsId + ')">'
+            + '<div style="font-size:.6rem;font-weight:800;color:var(--orange-d);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">' + _fsWxLabel + '</div>'
             + '<div style="font-weight:700;font-size:.8rem;color:var(--text);">' + _fsWxStr + '</div>'
           + '</div>'
           + '</div>';
