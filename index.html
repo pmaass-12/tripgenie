@@ -1414,6 +1414,40 @@
   #sm .nav-btn span { font-size: .65rem; font-weight: 700; letter-spacing: .02em; }
   #sm .nav-btn.active { color: var(--orange); }
   #sm .nav-btn:hover { background: var(--orange-l); }
+  @media (max-width: 380px) {
+    #sm .nav-btn { padding: 6px 6px; min-width: 44px; }
+    #sm .nav-btn span { font-size: .58rem; letter-spacing: 0; }
+  }
+  /* Segmented toggle for combined Schedule+Stops screen */
+  .sm-seg-bar {
+    display: flex;
+    gap: 6px;
+    padding: 10px 16px 4px;
+    background: var(--bg);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    border-bottom: 1px solid var(--border);
+  }
+  .sm-seg-btn {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1.5px solid var(--border);
+    border-radius: 50px;
+    background: var(--card);
+    color: var(--text-2);
+    font-family: var(--font);
+    font-size: .78rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all .15s;
+    text-align: center;
+  }
+  .sm-seg-btn.active {
+    background: var(--orange);
+    border-color: var(--orange);
+    color: #fff;
+  }
 
   #sm /* ── TYPOGRAPHY ── */
   .screen-eyebrow {
@@ -8186,6 +8220,16 @@ function initApp() {
       if (ts.startDate) CONFIG.startDate = ts.startDate;
       if (ts.endDate)   CONFIG.endDate   = ts.endDate;
       if (ts.totalDays) CONFIG.totalDays = ts.totalDays;
+      // Re-date TRIP_DAYS so dates match the saved start date across reloads
+      if (ts.startDate) {
+        var _tsMs = new Date(ts.startDate + 'T00:00:00').getTime();
+        TRIP_DAYS.forEach(function(d, i) {
+          var _tsD = new Date(_tsMs + i * 86400000);
+          d.date = _tsD.getFullYear() + '-'
+            + String(_tsD.getMonth() + 1).padStart(2, '0') + '-'
+            + String(_tsD.getDate()).padStart(2, '0');
+        });
+      }
     }
   }
 
@@ -11410,6 +11454,15 @@ function saveTripSettings() {
   CONFIG.endDate   = newEnd;
   CONFIG.totalDays = newDays;
   if (newName) CONFIG.tripName = newName;
+
+  // Re-date all TRIP_DAYS from the new start date so schedule shows correct dates
+  var _rdMs = new Date(newStart + 'T00:00:00').getTime();
+  TRIP_DAYS.forEach(function(d, i) {
+    var _rdD = new Date(_rdMs + i * 86400000);
+    d.date = _rdD.getFullYear() + '-'
+      + String(_rdD.getMonth() + 1).padStart(2, '0') + '-'
+      + String(_rdD.getDate()).padStart(2, '0');
+  });
   _updateTripSelector();
 
   // Refresh header stats
@@ -15349,6 +15402,26 @@ var _activeScreen = 's-today';
 var _activeNav    = 'nav-today';
 var _navStack     = [];  /* history stack for back button */
 
+function _smSeg(which) {
+  var schDiv = document.getElementById('sm-schedule-content');
+  var stpDiv = document.getElementById('sm-stops-content');
+  var btnSch = document.getElementById('seg-btn-schedule');
+  var btnStp = document.getElementById('seg-btn-stops');
+  if (!schDiv || !stpDiv) return;
+  if (which === 'schedule') {
+    schDiv.style.display = 'block';
+    stpDiv.style.display = 'none';
+    if (btnSch) { btnSch.classList.add('active'); }
+    if (btnStp) { btnStp.classList.remove('active'); }
+  } else {
+    schDiv.style.display = 'none';
+    stpDiv.style.display = 'block';
+    if (btnSch) { btnSch.classList.remove('active'); }
+    if (btnStp) { btnStp.classList.add('active'); }
+    renderStops();
+  }
+}
+
 function switchNav(screenId, navId, title) {
   /* If going to a deep screen, clear the back stack */
   if (_activeScreen !== screenId) {
@@ -15359,6 +15432,20 @@ function switchNav(screenId, navId, title) {
   document.querySelectorAll('.nav-btn').forEach(function(b) { b.classList.remove('active'); });
   document.getElementById(navId).classList.add('active');
   _activeNav = navId;
+
+  /* If navigating to the planner screen, reset to days view if not already in stops */
+  if (screenId === 's-schedule') {
+    var _segSchDiv = document.getElementById('sm-schedule-content');
+    var _segStpDiv = document.getElementById('sm-stops-content');
+    if (_segSchDiv && _segStpDiv && _segStpDiv.style.display !== 'block') {
+      _segSchDiv.style.display = 'block';
+      _segStpDiv.style.display = 'none';
+      var _segBtnSch = document.getElementById('seg-btn-schedule');
+      var _segBtnStp = document.getElementById('seg-btn-stops');
+      if (_segBtnSch) _segBtnSch.classList.add('active');
+      if (_segBtnStp) _segBtnStp.classList.remove('active');
+    }
+  }
 
   /* Update top bar */
   document.getElementById('top-title').textContent = 'Maass Family RV 2026';
@@ -15585,7 +15672,7 @@ function _smRenderToday() {
 
   /* Tonight's stop hero */
   var heroHtml = '<h2 class="section-head">Tonight</h2>'
-    + '<div class="hero-card" onclick="switchNav(\'s-stops\',\'nav-stops\',\'Stops\')">'
+    + '<div class="hero-card" onclick="switchNav(\'s-schedule\',\'nav-schedule\',\'Planner\'); _smSeg(\'stops\')">'
     + '<div class="hero-bg"></div><div class="hero-overlay"></div>'
     + '<div class="hero-label"><i class="fa-solid fa-location-dot"></i> Tonight\'s stop</div>'
     + '<div class="hero-title">' + (stop.emoji || '📍') + ' ' + (stop.name || 'Unknown') + (stop.state ? ', ' + stop.state : '') + '</div>'
@@ -15737,7 +15824,7 @@ function _smRenderStops() {
 
     var tonightBadge = isTonight ? '<span class="pill pill-orange" style="font-size:.62rem;padding:3px 7px;margin-left:4px;">Tonight</span>' : '';
 
-    html += '<div class="list-row" style="' + rowStyle + '" onclick="switchNav(\'s-stops\',\'nav-stops\',\'Stops\')">'
+    html += '<div class="list-row" style="' + rowStyle + '" onclick="switchNav(\'s-schedule\',\'nav-schedule\',\'Planner\'); _smSeg(\'stops\')">'
       + '<div class="row-icon" style="background:' + iconBg + ';color:' + iconColor + ';font-size:1rem;">' + (stop.emoji || '<i class="fa-solid ' + iconEl + '"></i>') + '</div>'
       + '<div class="row-body">'
       + '<div class="row-title">' + (stop.name || 'Unknown') + (stop.state ? ', ' + stop.state : '') + tonightBadge + '</div>'
@@ -15804,16 +15891,15 @@ function _smRenderAll() {
     </div><!-- /s-today -->
 
 
-    <!-- ══ SCREEN: SCHEDULE ══ -->
+    <!-- ══ SCREEN: SCHEDULE + STOPS (combined) ══ -->
     <div class="screen" id="s-schedule">
-      <div id="sm-schedule-content"><div style="padding:40px 0;text-align:center;color:var(--text-3);font-size:.9rem;">Loading…</div></div>
-    </div><!-- /s-schedule -->
-
-
-    <!-- ══ SCREEN: STOPS ══ -->
-    <div class="screen" id="s-stops">
-      <div id="sm-stops-content"><div style="padding:40px 0;text-align:center;color:var(--text-3);font-size:.9rem;">Loading…</div></div>
-    </div><!-- /s-stops -->
+      <div class="sm-seg-bar">
+        <button id="seg-btn-schedule" class="sm-seg-btn active" onclick="_smSeg('schedule')"><i class="fa-solid fa-calendar-days"></i> Days</button>
+        <button id="seg-btn-stops" class="sm-seg-btn" onclick="_smSeg('stops')"><i class="fa-solid fa-campground"></i> Stops</button>
+      </div>
+      <div id="sm-schedule-content" style="display:block"><div style="padding:40px 0;text-align:center;color:var(--text-3);font-size:.9rem;">Loading…</div></div>
+      <div id="sm-stops-content" style="display:none"><div style="padding:40px 0;text-align:center;color:var(--text-3);font-size:.9rem;">Loading…</div></div>
+    </div><!-- /s-schedule+stops -->
 
 
     <!-- ══ SCREEN: STOP DETAIL ══ -->
@@ -16195,13 +16281,9 @@ function _smRenderAll() {
       <i class="fa-solid fa-house"></i>
       <span>Today</span>
     </button>
-    <button class="nav-btn" id="nav-schedule" onclick="switchNav('s-schedule','nav-schedule','Schedule')">
-      <i class="fa-solid fa-calendar-days"></i>
-      <span>Schedule</span>
-    </button>
-    <button class="nav-btn" id="nav-stops" onclick="switchNav('s-stops','nav-stops','Stops')">
-      <i class="fa-solid fa-campground"></i>
-      <span>Stops</span>
+    <button class="nav-btn" id="nav-schedule" onclick="switchNav('s-schedule','nav-schedule','Planner')">
+      <i class="fa-solid fa-route"></i>
+      <span>Planner</span>
     </button>
     <button class="nav-btn" id="nav-journal" onclick="switchNav('s-journal','nav-journal','Journal')">
       <i class="fa-solid fa-book"></i>
