@@ -9324,30 +9324,32 @@ function renderDayTimeBlocks(d, stop) {
       ovSub('drive', _driveSub),
       'drive',false,'','','drive') });
 
-    /* On-road lunch stop */
-    var _lunchH = _depH + (_dispHours / 2);
+    /* On-road lunch stop — minimum noon so we never show "Lunch at 10:45 AM" */
+    var _lunchH = Math.max(12, _depH + (_dispHours / 2));
     _items.push({ key:'lunch', html: tbbRow(ovTime('lunch', _fmtHour(_lunchH)),'&#127828;',
       ovTitle('lunch','Lunch — Road Stop'),
       ovSub('lunch','Find a diner or drive-through on the way'),
       'eat',false,'','','lunch') });
 
-    /* Arrive & check in */
-    _items.push({ key:'sleep', html: tbbRow(_arrStr,'&#127957;',
+    /* Check-in time — RV parks / hotels typically open at 3 PM regardless of arrival time */
+    var _checkInH   = Math.max(_arrH, 15);   /* 3 PM floor */
+    var _checkInStr = _fmtHour(_checkInH);
+    var _earlyNote  = _arrH < 15 ? 'Check-in from 3:00 PM \u00b7 ' : '';
+    _items.push({ key:'sleep', html: tbbRow(_checkInStr,'&#127957;',
       ovTitle('sleep','Arrive & Check In'),
-      ovSub('sleep', d.sleep || 'Next campsite'),
+      ovSub('sleep', _earlyNote + (d.sleep || 'Next campsite')),
       null,false,'openCampInfo('+d.day+')','','sleep') });
 
-    /* Post-arrival activities — show planned (or first available) activities
-       in the window between check-in and dinner when arriving before 5 PM */
-    var _postActStart = _arrH + 0.75; /* ~45 min after check-in to settle in */
-    if (_arrH < 17 && acts.length > 0) {
+    /* Post-arrival activities — anchored to check-in time (min 3 PM), not physical arrival */
+    var _postActStart = _checkInH + 0.75; /* ~45 min after check-in to settle in */
+    if (_checkInH < 17 && acts.length > 0) {
       var pa0 = acts[0];
       var pa0sub = ovSub('act0', (pa0.item.duration ? pa0.item.duration : '') + (pa0.item.desc ? ' \u00b7 ' + pa0.item.desc.substring(0, 100) + (pa0.item.desc.length > 100 ? '\u2026' : '') : ''));
       _items.push({ key:'act0', html: tbbRow(ovTime('act0', _fmtHour(_postActStart)),'&#127775;',
         ovTitle('act0', pa0.item.name), pa0sub, 'explore', pa0.planned,
         stop ? tbbAiBtn('a', stop.id, pa0.idx) : '', '', 'act0') });
-      /* Second activity if there's room (arriving before 3 PM) */
-      if (acts.length > 1 && _arrH < 15) {
+      /* Second activity if check-in leaves enough time */
+      if (acts.length > 1 && _checkInH < 15.5) {
         var pa1 = acts[1];
         var pa1sub = ovSub('act1', (pa1.item.duration ? pa1.item.duration : '') + (pa1.item.desc ? ' \u00b7 ' + pa1.item.desc.substring(0, 100) + (pa1.item.desc.length > 100 ? '\u2026' : '') : ''));
         _items.push({ key:'act1', html: tbbRow(ovTime('act1', _fmtHour(_postActStart + 2)),'&#128506;',
@@ -9356,11 +9358,11 @@ function renderDayTimeBlocks(d, stop) {
       }
     }
 
-    /* Post-arrival dinner (only if arriving before 6 PM) */
-    if (_arrH < 18 && dRest) {
+    /* Post-arrival dinner — based on check-in time, not physical arrival */
+    if (_checkInH < 18 && dRest) {
       var dSub2  = ovSub('dinner', (dRest.item.type || '') + (dRest.item.price ? ' \u00b7 ' + dRest.item.price : '') + (dRest.item.hours ? ' \u00b7 ' + dRest.item.hours : ''));
       var dSkip2 = (stop && rests.length > 2) ? 'skipMeal(' + d.day + ',\'dinner\')' : '';
-      var _dinH  = Math.max(_arrH + 1.5, 17.5);
+      var _dinH  = Math.max(_checkInH + 1.5, 17.5);
       _items.push({ key:'dinner', html: tbbRow(ovTime('dinner', _fmtHour(_dinH)),'&#127869;',
         ovTitle('dinner','Dinner \u2014 '+dRest.item.name),dSub2,'eat',dRest.planned,stop ? tbbAiBtn('r',stop.id,dRest.idx) : '',dSkip2,'dinner') });
     } else if (_arrH < 18) {

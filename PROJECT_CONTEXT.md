@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-02-27 (Session 5)
+2026-02-27 (Session 6)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -62,6 +62,7 @@ tripgenie/
 - Session 4 (2026-02-27): Drive day schedule logic overhaul — mornings now show departure context (leave ~8 AM), on-road lunch stop, arrival at destination; explore days unchanged. Fixed ddmArrivalTime midnight wrap bug ("13:00 PM" → correct "1:00 AM"). Added time format setting (12h/24h), departure time setting, and latest arrival time setting to Trip Settings. Added weather highs/lows to blue phase header bars (shows avg high/low from loaded weather data, with 🌡️ load button if no data). Added Escape key to close all modals. Added 🗑️ Remove button to phase headers to fully remove a stop from the schedule (with ↩ Restore capability).
 - Session 5 (2026-02-27): Fixed Drive Time Split not reflecting in day detail modal. `renderDayTimeBlocks` now reads `_overrides.splitResolved` and `_overrides.splitHours` to compute `_dispHours`; depart subtitle shows "225 mi · ~3.5h (Leg 1 of 2) · Arrive midpoint ~11:30 AM" when split is active. Also: renamed Simple→Driving / Advanced→Planning mode toggle labels; fixed Gemini API key leak (revoked key + Netlify serverless proxy + env var); built 110-test regression suite (regression_test.js) with snapshots, edge cases, mutation, serialization, and CI (GitHub Actions); fixed _getDepartureHour() NaN on invalid input.
 - Session 4 continued: Fixed "Starts in X days" banner departure city (was "Shenandoah Valley", now correctly shows home stop "Warwick, NY" via _tripHomeStop() scanning TRIP_DAYS for sleepType='home'). Fixed "Warwick, NY, NY" double-state everywhere via _sn(stop)/_snE(stop) helpers. Fixed drive day item order (saved dayOrder skipped for drive days). Fixed drive day destination name (was finding wrong stop, now uses current day's stop). Fixed drive day breakfast showing destination restaurant name (ignores customPlace override on drive days). Fixed login page dates not updating (now dynamic via _updateLoginDisplay() called from saveTripSettings and initApp). Fixed Add Destination flow: AI now returns city/region not attraction name; ATTRACTION field parsed and stored; stop created with city name, attraction added as first activity.
+- Session 6 (2026-02-27): Fixed CONFIG.startDate/endDate desync with TRIP_DAYS — now synced from TRIP_DAYS[0] in initApp() so dashboard banner shows correct departure date. Fixed planned activities from Day Planner tab not appearing in drive day schedule (renderDayTimeBlocks now passes d.day to getPlannedForStop). Fixed activity day-bleed (Dollywood + Gatlinburg Strip both showing on same day). Renamed "Stops" segment to "Day Planner". Weather forecast modal now auto-refreshes on open (no Refresh button) + blue phase bar weather updates after refresh. Fixed removed-stop (Kansas City) still appearing in drive day title — new _getDriveDayTitle(d) helper skips removed stops when computing origin city. Fixed removed stop appearing in AI "Change the Plan" context. Removed the "Removed from Schedule" banner from schedule list; restore now lives in Audit Log. Drive day timing fixes: lunch minimum noon (Math.max(12, depH + driveH/2)), check-in minimum 3 PM (Math.max(arrH, 15)) with "Check-in from 3:00 PM" sub-note when arriving early, post-arrival activities and dinner anchored to checkInH not arrH.
 
 ---
 
@@ -70,9 +71,10 @@ tripgenie/
 - Multiple mockup versions kept for reference rather than deleted
 - Mobile-first design with desktop enhancements
 - Leaflet chosen for mapping (open source, no API key required)
-- Drive day schedule: depart at configurable time (default 8 AM), on-road meals, destination activities only post-arrival
+- Drive day schedule: depart at configurable time (default 8 AM), on-road meals, destination activities only post-arrival; lunch floor = noon; check-in floor = 3 PM
 - Time helpers: `_fmtHour(h)`, `_fmtTimeStr(str)` centralize all time display formatting respecting user's 12h/24h preference
-- Stop removal: `appState.removedStops[stopId]` flag + `phaseExtraDays[stopId] = -allDays` hides entire phase; restore clears both
+- Stop removal: `appState.removedStops[stopId]` flag + `phaseExtraDays[stopId] = -allDays` hides entire phase; restore clears both; Restore UI lives in Audit Log tab
+- `_getDriveDayTitle(d)` helper scans TRIP_DAYS backward skipping removed stops to compute correct "City A → City B" title
 
 ---
 
@@ -82,13 +84,13 @@ tripgenie/
 - rv-app.zip contents unknown — may be redundant
 - **User must set up new Gemini API key**: old key was revoked (leaked in public repo). Get a new key at aistudio.google.com/apikey, then add `GEMINI_KEY` env var in Netlify dashboard (Site Settings → Environment Variables), then trigger a redeploy.
 - Drive Time Split: Leg 2 arrival time not displayed in the schedule (only Leg 1 is shown); a full "Leg 2" row could be added in a future session
-- Regression test snapshots may need regeneration after drive time split fix (drive day HTML changed)
+- Regression test snapshots may need regeneration after drive time split + timing fixes (drive day HTML changed)
+- Future: fetch actual check-in time from campground/hotel data to replace hardcoded 3 PM floor (user noted as future improvement)
 
 ---
 
 ## Suggested Next Steps
 - **Set up new Gemini API key** (required for all AI features): aistudio.google.com/apikey → Netlify env var `GEMINI_KEY` → redeploy
-- Push current index.html to GitHub → auto-deploys to Netlify
-- Test Day 7 (Gatlinburg → Ozarks) in the app: day detail modal should now show "225 mi · ~3.5h (Leg 1 of 2) · Arrive midpoint ~11:30 AM"
+- Test drive day timing: open a drive day modal — lunch should be ≥ noon, check-in should be ≥ 3 PM, activities/dinner should follow from 3 PM
 - Optionally add a "Leg 2" drive row in the schedule for the afternoon portion of split drive days
-- Delete or archive old snapshots dir and regenerate with `node regression_test.js` after pushing
+- Regenerate regression_test.js snapshots with `node regression_test.js` after verifying app looks correct
