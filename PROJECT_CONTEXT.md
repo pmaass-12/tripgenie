@@ -82,7 +82,6 @@ tripgenie/
 - Multiple mockup versions exist — needs consolidation decision (which is canonical?)
 - `saveTripSettings()` re-dates TRIP_DAYS in memory only; custom trip (AI-built) trips have their own date logic via `customTripData` — date change behavior for custom trips not yet tested
 - rv-app.zip contents unknown — may be redundant
-- **User must set up new Gemini API key**: old key was revoked (leaked in public repo). Get a new key at aistudio.google.com/apikey, then add `GEMINI_KEY` env var in Netlify dashboard (Site Settings → Environment Variables), then trigger a redeploy.
 - Drive Time Split: Leg 2 arrival time not displayed in the schedule (only Leg 1 is shown); a full "Leg 2" row could be added in a future session
 - Regression test snapshots may need regeneration after drive time split + timing fixes (drive day HTML changed)
 - Future: fetch actual check-in time from campground/hotel data to replace hardcoded 3 PM floor (user noted as future improvement)
@@ -90,7 +89,6 @@ tripgenie/
 ---
 
 ## Suggested Next Steps
-- **Set up new Gemini API key** (required for all AI features): aistudio.google.com/apikey → Netlify env var `GEMINI_KEY` → redeploy
 - Test drive day timing: open a drive day modal — lunch should be ≥ noon, check-in should be ≥ 3 PM, activities/dinner should follow from 3 PM
 - Optionally add a "Leg 2" drive row in the schedule for the afternoon portion of split drive days
 - Regenerate regression_test.js snapshots with `node regression_test.js` after verifying app looks correct
