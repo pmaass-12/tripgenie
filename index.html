@@ -3866,6 +3866,30 @@ function _tripCityLabel(s) {
   if (stateStr && s.name.slice(-stateStr.length) === stateStr) return s.name;
   return s.name + stateStr;
 }
+/* Returns the effective display title for a drive day, substituting the correct
+   origin city name when an intermediate stop has been removed from the schedule.
+   e.g. If KC is removed, "Kansas City → Nashville" becomes "Oklahoma City → Nashville". */
+function _getDriveDayTitle(d) {
+  if (!d || !d.driveDay) return d ? d.title : '';
+  var removedIds = appState.removedStops || {};
+  var destStop = getStop(d.stopId);
+  var destName = destStop ? _sn(destStop) : (d.phase || 'destination');
+  // Scan backward for the last non-removed stop with a different stopId
+  for (var bi = d.day - 2; bi >= 0; bi--) {
+    var prev = TRIP_DAYS[bi];
+    if (!prev) continue;
+    if (removedIds[prev.stopId]) continue;  // skip removed stops
+    if (prev.stopId === d.stopId) continue; // same stop, keep scanning
+    var originStop = getStop(prev.stopId);
+    if (originStop) {
+      var originName = _sn(originStop);
+      return originName + ' \u2192 ' + destName;
+    }
+    break;
+  }
+  return d.title; // fallback to hardcoded title
+}
+
 function _tripHomeStop() {
   for (var _hi = TRIP_DAYS.length - 1; _hi >= 0; _hi--) {
     if (TRIP_DAYS[_hi].sleepType === 'home') return getStop(TRIP_DAYS[_hi].stopId);
@@ -5034,7 +5058,7 @@ function renderSchedule() {
     html += '<div style="padding:10px 14px;cursor:pointer;" onclick="openDayDetail(' + d.day + ')" title="View day schedule">';
     html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">';
     if (stop) html += '<span style="font-size:.95rem">' + stop.emoji + '</span>';
-    html += '<span style="font-weight:700;font-size:1rem;color:var(--text);line-height:1.3;">' + d.title + '</span>';
+    html += '<span style="font-weight:700;font-size:1rem;color:var(--text);line-height:1.3;">' + (d.driveDay ? _getDriveDayTitle(d) : d.title) + '</span>';
     if (isToday) html += '<span style="background:var(--orange);color:#fff;font-size:.68rem;font-weight:800;padding:2px 8px;border-radius:100px;text-transform:uppercase;">Today</span>';
     if (_isOverflow) html += '<span style="background:#c62828;color:#fff;font-size:.65rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;">🔺 Over Schedule</span>';
     html += '</div>';
@@ -8970,7 +8994,7 @@ function openDayDetail(dayNum) {
   var stop = getStop(d.stopId);
   _ddmDayNum = dayNum;
   document.getElementById('ddm-phase').textContent = d.phase || '';
-  document.getElementById('ddm-title').textContent = d.title;
+  document.getElementById('ddm-title').textContent = d.driveDay ? _getDriveDayTitle(d) : d.title;
   var metaParts = [];
   if (d.driveDay && d.miles > 0) metaParts.push('&#128665; ' + d.miles + ' mi &middot; ~' + d.driveHours + 'h drive');
   else metaParts.push('&#127957; Explore day at ' + (stop ? stop.name : 'camp'));
@@ -14257,11 +14281,14 @@ function _adjGetSuggestions() {
   if (results) { results.innerHTML = ''; }
 
   /* Build a rich stop summary for the AI — include id, name, state, region, coords, current nights */
+  /* Filter out stops that have been removed from the schedule */
   /* Mark first and last stops as protected so Genie never suggests removing them */
-  var _adjFirstId = TRIP_STOPS.length ? TRIP_STOPS[0].id : null;
-  var _adjLastId  = TRIP_STOPS.length ? TRIP_STOPS[TRIP_STOPS.length - 1].id : null;
+  var _adjRemovedIds = appState.removedStops || {};
+  var _adjActiveStops = TRIP_STOPS.filter(function(s) { return !_adjRemovedIds[s.id]; });
+  var _adjFirstId = _adjActiveStops.length ? _adjActiveStops[0].id : null;
+  var _adjLastId  = _adjActiveStops.length ? _adjActiveStops[_adjActiveStops.length - 1].id : null;
   var _adjRound   = _tripIsRoundTrip();
-  var stopSummaryArr = TRIP_STOPS.map(function(s) {
+  var stopSummaryArr = _adjActiveStops.map(function(s) {
     var nights = TRIP_DAYS.filter(function(d) { return d.stopId === s.id && !d.driveDay; }).length;
     var isStart = (s.id === _adjFirstId);
     var isEnd   = (!_adjRound && s.id === _adjLastId);
