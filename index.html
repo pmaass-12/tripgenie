@@ -4911,6 +4911,9 @@ function restoreStopToTrip(stopId) {
   if (appState.phaseExtraDays) appState.phaseExtraDays[stopId] = 0;
   saveState(appState);
   renderSchedule();
+  /* Re-render audit log if it's currently visible so the removed-stops section updates */
+  var toolsSub = document.getElementById('tools-sub-content');
+  if (toolsSub && toolsSub.innerHTML.indexOf('Removed from Schedule') !== -1) renderAuditLog();
   showToast('↩ Stop restored to schedule!', 1800);
 }
 
@@ -5011,17 +5014,9 @@ function renderSchedule() {
     var isToday  = _live && d.day === todayNum;
     var isBefore = _live && d.day < todayNum;
 
-    // Phase header when phase changes (always show even if first day is skipped)
+    // Phase header when phase changes — skip entirely for removed stops (restore lives in Audit Log)
     if (d.phase !== lastPhase) {
-      if (removedStopIds[d.stopId]) {
-        /* Show a compact restore banner instead of full phase header */
-        var _rStop = getStop(d.stopId);
-        html += '<div style="display:flex;align-items:center;gap:10px;padding:8px 14px;background:#e0e0e0;color:#555;border-radius:var(--radius-s);margin:12px 0 4px;opacity:.7;">'
-          + '<span style="font-size:1.1rem">' + (_rStop ? _rStop.emoji : '📍') + '</span>'
-          + '<div style="flex:1;font-size:.85rem;font-weight:700;">' + d.phase + ' <span style="font-weight:400;font-size:.78rem;">(removed from schedule)</span></div>'
-          + '<button onclick="restoreStopToTrip(' + d.stopId + ')" style="background:var(--green);color:#fff;border:none;border-radius:100px;padding:5px 12px;font-size:.75rem;font-weight:700;cursor:pointer;font-family:var(--font);">↩ Restore</button>'
-          + '</div>';
-      } else {
+      if (!removedStopIds[d.stopId]) {
         html += phaseHeaderHtml(d.phase, d);
       }
       lastPhase = d.phase;
@@ -11127,6 +11122,23 @@ function renderAuditLog() {
   var log = appState.auditLog || [];
   var html = '<h2 class="section-title"><i class="fa-solid fa-clock-rotate-left"></i> Change History</h2>';
   html += '<p style="font-size:.83rem;color:var(--text-2);margin-bottom:16px;line-height:1.5;">A record of significant changes made to the trip plan.</p>';
+
+  /* ── Removed stops section ── */
+  var _removedIds = appState.removedStops || {};
+  var _removedStops = TRIP_STOPS.filter(function(s) { return _removedIds[s.id]; });
+  if (_removedStops.length) {
+    html += '<div style="background:#fff3f3;border:1.5px solid #f5c6c6;border-radius:var(--radius-s);padding:12px 16px;margin-bottom:20px;">'
+      + '<div style="font-size:.72rem;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">🗑 Removed from Schedule</div>'
+      + '<div style="display:flex;flex-direction:column;gap:8px;">';
+    _removedStops.forEach(function(rs) {
+      html += '<div style="display:flex;align-items:center;gap:10px;">'
+        + '<span style="font-size:1.1rem">' + (rs.emoji || '📍') + '</span>'
+        + '<div style="flex:1;font-size:.85rem;font-weight:700;color:var(--text);">' + rs.name + (rs.state ? ', ' + rs.state : '') + '</div>'
+        + '<button onclick="restoreStopToTrip(' + rs.id + ')" style="background:var(--green);color:#fff;border:none;border-radius:100px;padding:5px 14px;font-size:.78rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;">↩ Restore</button>'
+        + '</div>';
+    });
+    html += '</div></div>';
+  }
 
   if (!log.length) {
     html += '<div style="text-align:center;padding:40px 20px;color:var(--text-3);">'
