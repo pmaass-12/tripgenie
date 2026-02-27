@@ -9243,14 +9243,19 @@ function renderDayTimeBlocks(d, stop) {
   /* ── Drive day vs explore day item builder ─────────────────────── */
   if (d.driveDay && d.miles > 0) {
     /* DRIVE DAY: morning departure, on-road meals, arrive at destination by evening */
+    /* Check if drive time split was applied */
+    var _splitRes  = _overrides.splitResolved;
+    var _splitH    = _splitRes ? (_overrides.splitHours || Math.round(d.driveHours / 2 * 10) / 10) : d.driveHours;
+    var _dispHours = _splitH;  /* hours to display in schedule (leg 1 if split, full if not) */
+
     var _depH   = _getDepartureHour();
-    var _arrH   = _depH + d.driveHours;
+    var _arrH   = _depH + _dispHours;
     var _latestH = _getLatestArrivalHour();
     var _depStr = _fmtHour(_depH);
-    var _arrStr = ddmArrivalTime(d.driveHours);
+    var _arrStr = _fmtHour(_arrH);
 
-    /* Late arrival warning banner */
-    if (_arrH > _latestH) {
+    /* Late arrival warning banner (only when NOT split — split arrival is midpoint) */
+    if (!_splitRes && _arrH > _latestH) {
       var _overMins = Math.round((_arrH - _latestH) * 60);
       html += '<div style="background:#fff3cd;border:1.5px solid #ffc107;border-radius:10px;padding:12px 14px;margin-bottom:12px;font-size:.83rem;line-height:1.55;">'
         + '<strong>⚠️ Late Arrival Warning</strong><br>'
@@ -9274,13 +9279,16 @@ function renderDayTimeBlocks(d, stop) {
 
     /* Depart block */
     var nextNameD = stop ? stop.name : '';
+    var _driveSub = _splitRes
+      ? (Math.round(d.miles / 2) + ' mi \u00b7 ~' + _dispHours + 'h (Leg 1 of 2) \u00b7 Arrive midpoint ~' + _arrStr)
+      : (d.miles + ' miles \u00b7 ~' + d.driveHours + 'h drive \u00b7 Arrive ~' + _arrStr);
     _items.push({ key:'drive', html: tbbRow(ovTime('drive', _depStr),'&#128656;',
       'Depart' + (nextNameD ? ' \u2192 ' + nextNameD : ''),
-      d.miles + ' miles \u00b7 ~' + d.driveHours + 'h drive \u00b7 Arrive ~' + _arrStr,
+      ovSub('drive', _driveSub),
       'drive',false,'','','drive') });
 
     /* On-road lunch stop */
-    var _lunchH = _depH + (d.driveHours / 2);
+    var _lunchH = _depH + (_dispHours / 2);
     _items.push({ key:'lunch', html: tbbRow(ovTime('lunch', _fmtHour(_lunchH)),'&#127828;',
       ovTitle('lunch','Lunch — Road Stop'),
       ovSub('lunch','Find a diner or drive-through on the way'),
