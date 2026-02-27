@@ -8992,12 +8992,14 @@ function _getTimeFormat() {
 function _getDepartureHour() {
   var dep = (appState.tripSettings && appState.tripSettings.departureTime) || '08:00';
   var parts = dep.split(':');
-  return parseInt(parts[0]) + (parseInt(parts[1] || 0) / 60);
+  var h = parseInt(parts[0]), m = parseInt(parts[1] || 0);
+  return (isNaN(h) ? 8 : h) + (isNaN(m) ? 0 : m) / 60;
 }
 function _getLatestArrivalHour() {
   var la = (appState.tripSettings && appState.tripSettings.latestArrival) || '20:00';
   var parts = la.split(':');
-  return parseInt(parts[0]) + (parseInt(parts[1] || 0) / 60);
+  var h = parseInt(parts[0]), m = parseInt(parts[1] || 0);
+  return (isNaN(h) ? 20 : h) + (isNaN(m) ? 0 : m) / 60;
 }
 /* Format a fractional hour (e.g. 14.5 = 2:30 PM) as a time string */
 function _fmtHour(h) {
