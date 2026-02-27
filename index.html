@@ -9412,8 +9412,8 @@ function renderDayTimeBlocks(d, stop) {
       null,false,'openCampInfo('+d.day+')','','sleep') });
   }
 
-  /* Apply custom order if set */
-  if (_orderKeys && _orderKeys.length && !d.driveDay) {
+  /* Apply custom order if set — applies to both explore days and drive days */
+  if (_orderKeys && _orderKeys.length) {
     var _ordered = [];
     _orderKeys.forEach(function(k) {
       var found = _items.filter(function(it) { return it.key === k; })[0];
