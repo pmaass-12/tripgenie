@@ -6210,7 +6210,7 @@ function aiCleanupJournal() {
     + 'Organize into a clear narrative (2-4 paragraphs). Don\'t add things that aren\'t in the notes. '
     + 'Return ONLY the cleaned-up journal text — no introduction, no explanation, just the entry itself.';
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:600, temperature:0.65} });
-  fetch(GEMINI_URL + GEMINI_KEY, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
+  fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
   .then(function(r){ return r.json(); })
   .then(function(data) {
     var cleaned = '';
@@ -7478,7 +7478,7 @@ function generatePostcardText() {
     + 'No asterisks, no headers, just two paragraphs of postcard text. Max 120 words total.';
 
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:200,temperature:0.88} });
-  fetch(GEMINI_URL + GEMINI_KEY, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
+  fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
   .then(function(r) { return r.json(); })
   .then(function(data) {
     var text = '';
@@ -7824,7 +7824,7 @@ function lookupDestination() {
     + 'DAYS: [recommended number of days to spend, just a single digit like 2]';
 
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:200,temperature:0.3} });
-  fetch(GEMINI_URL + GEMINI_KEY, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
+  fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
   .then(function(r) { return r.json(); })
   .then(function(data) {
     var text = ''; try { text = data.candidates[0].content.parts[0].text.trim(); } catch(e) {}
@@ -7880,7 +7880,7 @@ function analyzeDestination() {
     + 'IMPACT: [brief impact label, e.g. "+ ' + _admDaysNeeded + ' days added"]';
 
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:300,temperature:0.6} });
-  fetch(GEMINI_URL + GEMINI_KEY, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
+  fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
   .then(function(r) { return r.json(); })
   .then(function(data) {
     var text = ''; try { text = data.candidates[0].content.parts[0].text.trim(); } catch(e) {}
@@ -8401,7 +8401,7 @@ function _buildTripWithAI(description) {
     + '- Keep drive days under the user\'s stated max (default 6h if not specified)\n'
     + '- Return ONLY the JSON. No other text.';
 
-  fetch(GEMINI_URL + GEMINI_KEY, {
+  fetch(GEMINI_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -8714,8 +8714,11 @@ document.querySelector('[data-tab="map"]').addEventListener('click', function() 
 /* ── If storage is unavailable, edits simply won't persist on reload ── */
 
 /* ── GEMINI CONFIG ──────────────────────────────────────────────── */
-var GEMINI_KEY = 'AIzaSyBNvbxqgEWFOSz0CDT0XWU7kA6ENp96VkY';
-var GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=';
+/* Gemini API is proxied through /.netlify/functions/gemini so the key
+   never appears in the browser or the public repo.
+   Set GEMINI_KEY in Netlify → Site Settings → Environment Variables. */
+var GEMINI_KEY = '';  // unused — key lives on the server
+var GEMINI_URL = '/.netlify/functions/gemini';
 
 /* ── MEAL SUITABILITY HELPERS ───────────────────────────────────── */
 function mealScore(rest, meal) {
@@ -8837,7 +8840,7 @@ function _fetchLocalMusic(stop) {
     generationConfig: { maxOutputTokens: 700, temperature: 0.6 }
   });
 
-  fetch(GEMINI_URL + GEMINI_KEY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
+  fetch(GEMINI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
   .then(function(r) { return r.json(); })
   .then(function(data) {
     var text = '';
@@ -9584,7 +9587,7 @@ function suggestItemAlternative() {
     + 'Be specific — give the actual name and a 1-2 sentence reason why it\'s good. '
     + 'Format: NAME: [name] | WHY: [reason] | DETAIL: [address or hours or price if known]';
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:200,temperature:0.8} });
-  fetch(GEMINI_URL + GEMINI_KEY, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
+  fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
   .then(function(r) { return r.json(); })
   .then(function(data) {
     var text = '';
@@ -9632,7 +9635,7 @@ function searchItemPlace() {
     + 'If it exists, output exactly: NAME: [official name] | TYPE: [type] | ADDRESS: [address] | HOURS: [brief hours] | NOTE: [1 sentence]\n'
     + 'If it does not exist or you are unsure, output: NOTFOUND: [suggestion]';
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:200,temperature:0.3} });
-  fetch(GEMINI_URL + GEMINI_KEY, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
+  fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
   .then(function(r) { return r.json(); })
   .then(function(data) {
     var text = '';
@@ -9962,7 +9965,7 @@ function fetchAreaInfo(phase, location) {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { maxOutputTokens: 800, temperature: 0.75 }
   });
-  fetch(GEMINI_URL + GEMINI_KEY, { method:'POST', headers:{'Content-Type':'application/json'}, body: body })
+  fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: body })
   .then(function(r) { return r.json(); })
   .then(function(data) {
     var text = '';
@@ -10076,7 +10079,7 @@ function fetchCampInfo(campName, location) {
     + '**Quick Facts** (4 surprising one-liner facts about this campground or nearby area, each on its own line starting with an emoji)\n'
     + 'Friendly, helpful tone. No markdown code fences anywhere.';
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:800,temperature:0.6} });
-  fetch(GEMINI_URL + GEMINI_KEY, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
+  fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
   .then(function(r) { return r.json(); })
   .then(function(data) {
     var text = '';
@@ -10176,7 +10179,7 @@ function loadStopEvents(stopId) {
     generationConfig: { maxOutputTokens: 700, temperature: 0.4 }
   });
 
-  fetch(GEMINI_URL + GEMINI_KEY, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
+  fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
   .then(function(r) { return r.json(); })
   .then(function(data) {
     var text = '';
@@ -10291,7 +10294,7 @@ function fetchGeminiInfo(item, stop, type) {
     generationConfig: { maxOutputTokens: 900, temperature: 0.7 }
   });
 
-  fetch(GEMINI_URL + GEMINI_KEY, {
+  fetch(GEMINI_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: body
@@ -10860,7 +10863,7 @@ function fetchTrivia() {
     + ']\n'
     + 'correct is the 0-based index of the right option. Make questions fun and family-friendly. Mix history, nature, and pop culture.';
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:700,temperature:0.8} });
-  fetch(GEMINI_URL + GEMINI_KEY, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
+  fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
   .then(function(r){ return r.json(); })
   .then(function(data) {
     var raw = data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]&&data.candidates[0].content.parts[0].text || '[]';
@@ -12088,7 +12091,7 @@ function scanExpenseReceipt(e) {
       contents:[{ parts:[{ text: prompt },{ inline_data:{ mime_type: mime, data: b64 }}]}],
       generationConfig:{ maxOutputTokens:120, temperature:0.2 }
     });
-    fetch(GEMINI_URL + GEMINI_KEY, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
+    fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
     .then(function(r){ return r.json(); })
     .then(function(data) {
       var raw = data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts&&data.candidates[0].content.parts[0]&&data.candidates[0].content.parts[0].text||'{}';
@@ -12948,7 +12951,7 @@ function loadWYR() {
   box.innerHTML = '<em style="color:var(--text-3);">🤔 Asking AI...</em>';
   var prompt = 'Give a single funny, family-friendly "Would You Rather?" question for a road trip with kids ages 2, 4, and 9. Road-trip or nature theme. Output ONLY the question in format: "Would you rather [A] or [B]?"';
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:100,temperature:1.0} });
-  fetch(GEMINI_URL + GEMINI_KEY, {method:'POST',headers:{'Content-Type':'application/json'},body:body})
+  fetch(GEMINI_URL, {method:'POST',headers:{'Content-Type':'application/json'},body:body})
     .then(function(r){return r.json();})
     .then(function(data){
       var t = ''; try{t=data.candidates[0].content.parts[0].text.trim();}catch(e){}
@@ -12976,7 +12979,7 @@ function loadAIQuest(type) {
     ? 'Create a fun 8-question trivia quiz about ' + place + ' (' + region + ') for a family road trip with kids ages 2, 4, and 9. Mix easy and medium difficulty. Format each question as:\nQ1. [Question]\nA: [Answer]\n\nKeep answers short. Make it educational and exciting!'
     : 'Create a 10-item roadside scavenger hunt list for a family driving near ' + place + ' (' + region + '). Each item should be something realistic to spot from the car or at a rest stop. Format as:\n1. [Item to find]\n2. [Item to find]\n...and so on. Include a mix of nature, signs, vehicles, and local culture. Make it fun for kids ages 2-9!';
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:500,temperature:0.9} });
-  fetch(GEMINI_URL + GEMINI_KEY, {method:'POST',headers:{'Content-Type':'application/json'},body:body})
+  fetch(GEMINI_URL, {method:'POST',headers:{'Content-Type':'application/json'},body:body})
     .then(function(r){return r.json();})
     .then(function(data){
       var t = ''; try{t=data.candidates[0].content.parts[0].text.trim();}catch(e){}
@@ -13281,7 +13284,7 @@ function askTripGenie() {
     generationConfig: { maxOutputTokens: 600, temperature: 0.75 }
   });
 
-  fetch(GEMINI_URL + GEMINI_KEY, {
+  fetch(GEMINI_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: body
@@ -13480,7 +13483,7 @@ function geminiAdjustSchedule(dayNum, type, stop, hoursAdj) {
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { maxOutputTokens: 500, temperature: 0.7 }
   });
-  fetch(GEMINI_URL + GEMINI_KEY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
+  fetch(GEMINI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var text = '';
@@ -13535,7 +13538,7 @@ function openRecommendationInfo(info) {
   var diet = (typeof getDietContext === 'function') ? getDietContext() : '';
   var prompt = 'I am on a family RV trip visiting: ' + stops + '. ' + diet + 'I have a trip recommendation: "' + (info.title||'') + '". Details: ' + (info.detail||'') + '. Impact: ' + (info.impact||'') + '. Give me a rich, helpful breakdown of this recommendation for a family with kids — what it means, pros and cons, how to execute it, and any tips. Format with clear sections. Keep it practical and friendly. Under 300 words.';
   var body2 = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:600,temperature:0.7} });
-  fetch(GEMINI_URL + GEMINI_KEY, {method:'POST',headers:{'Content-Type':'application/json'},body:body2})
+  fetch(GEMINI_URL, {method:'POST',headers:{'Content-Type':'application/json'},body:body2})
     .then(function(r){return r.json();})
     .then(function(data){
       var text='';try{text=data.candidates[0].content.parts[0].text.trim();}catch(e){}
@@ -13898,7 +13901,7 @@ function _applyGenieChangeWithAI(suggestion, btnId) {
 
   var body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] });
 
-  fetch(GEMINI_URL + GEMINI_KEY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
+  fetch(GEMINI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var rawText = ((data.candidates[0].content.parts[0].text) || '').trim();
@@ -14258,7 +14261,7 @@ function _adjGetSuggestions() {
 
   var body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] });
 
-  fetch(GEMINI_URL + GEMINI_KEY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
+  fetch(GEMINI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var rawText = ((data.candidates[0].content.parts[0].text) || '').trim();
@@ -14690,7 +14693,7 @@ function _ideasEnhance() {
   if (!raw) { showToast('Write your idea first, then polish it!', 2000); return; }
   if (btn) { btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>'; btn.disabled = true; }
   var prompt = 'Polish this product/app idea into a clear, concise 1-3 sentence suggestion. Keep the original intent exactly. Fix grammar, improve clarity. Return only the polished text, no preamble:\n\n"' + raw.replace(/"/g, "'") + '"';
-  fetch(GEMINI_URL + GEMINI_KEY, {
+  fetch(GEMINI_URL, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
   })
@@ -15357,7 +15360,7 @@ function cleanupJournalEntry(id) {
     generationConfig: { maxOutputTokens: 600, temperature: 0.5 }
   });
 
-  fetch(GEMINI_URL + GEMINI_KEY, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
+  fetch(GEMINI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       var cleaned = '';
