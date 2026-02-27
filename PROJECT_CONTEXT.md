@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-02-27
+2026-02-27 (Session 4 continued)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -60,6 +60,7 @@ tripgenie/
 - Session 2: Set up GitHub repo (pmaass-12/tripgenie) and Netlify CI/CD auto-deploy from main branch
 - Session 3 (2026-02-27): Fixed trip start date not updating schedule; combined Schedule+Stops into Planner tab; mobile nav spacing fixes; full app nav merged; login persistence (30-day rv_session); update banner with ETag polling; RV Amps setting; campground AI prompt with hookup/laundromat/check-in; Drive Time Split rename; WHY: markdown strip in suggestItemAlternative; improved AI error diagnostics
 - Session 4 (2026-02-27): Drive day schedule logic overhaul — mornings now show departure context (leave ~8 AM), on-road lunch stop, arrival at destination; explore days unchanged. Fixed ddmArrivalTime midnight wrap bug ("13:00 PM" → correct "1:00 AM"). Added time format setting (12h/24h), departure time setting, and latest arrival time setting to Trip Settings. Added weather highs/lows to blue phase header bars (shows avg high/low from loaded weather data, with 🌡️ load button if no data). Added Escape key to close all modals. Added 🗑️ Remove button to phase headers to fully remove a stop from the schedule (with ↩ Restore capability).
+- Session 4 continued: Fixed "Starts in X days" banner departure city (was "Shenandoah Valley", now correctly shows home stop "Warwick, NY" via _tripHomeStop() scanning TRIP_DAYS for sleepType='home'). Fixed "Warwick, NY, NY" double-state everywhere via _sn(stop)/_snE(stop) helpers. Fixed drive day item order (saved dayOrder skipped for drive days). Fixed drive day destination name (was finding wrong stop, now uses current day's stop). Fixed drive day breakfast showing destination restaurant name (ignores customPlace override on drive days). Fixed login page dates not updating (now dynamic via _updateLoginDisplay() called from saveTripSettings and initApp). Fixed Add Destination flow: AI now returns city/region not attraction name; ATTRACTION field parsed and stored; stop created with city name, attraction added as first activity.
 
 ---
 
@@ -83,8 +84,10 @@ tripgenie/
 ---
 
 ## Suggested Next Steps
-- Test drive day schedule on Day 1 (Warwick → Luray): should now show 7 AM breakfast before leaving, 8 AM depart, ~2 PM lunch on road, ~2 PM arrive
+- Test drive day schedule on Day 1 (Warwick → Luray): should show pre-departure breakfast, 8 AM depart to "Shenandoah Valley", on-road lunch, arrival
+- Test "Starts in X days" banner on dashboard — should now say "Departing Warwick, NY"
+- Test login page: change start date in Trip Settings, verify login page header updates
+- Test Add Destination: type "The Plaza Theater" — should confirm "El Paso, TX" with 🎯 badge, stop named "El Paso" with Plaza Theater as activity
+- Verify Stops page shows "Warwick, NY" (no double state) for all stops
 - Load weather for each stop via the 🌡️ button in the blue phase headers
-- Test Escape key on all modals
-- Test Remove Stop flow (remove Kansas City, verify days hidden, restore works)
 - Push to GitHub → auto-deploys to Netlify

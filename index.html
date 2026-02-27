@@ -8479,6 +8479,7 @@ function initApp() {
       }
     }
   }
+  _updateLoginDisplay();
 
   // Update trip selector in header
   _updateTripSelector();
@@ -8760,7 +8761,7 @@ function openLocalMusic() {
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
 
-  document.getElementById('music-location-title').textContent = stop.name + ', ' + stop.state;
+  document.getElementById('music-location-title').textContent = _sn(stop);
   document.getElementById('music-scene-desc').textContent = '';
   document.getElementById('music-genres-row').style.display = 'none';
 
@@ -8900,7 +8901,7 @@ function _openMusicForStop(stopId) {
   var modal = document.getElementById('music-modal');
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
-  document.getElementById('music-location-title').textContent = stop.name + ', ' + stop.state;
+  document.getElementById('music-location-title').textContent = _sn(stop);
   document.getElementById('music-scene-desc').textContent = '';
   document.getElementById('music-genres-row').style.display = 'none';
   if (_musicCache[stop.id]) { _renderMusicResults(_musicCache[stop.id]); return; }
@@ -11878,6 +11879,7 @@ function saveTripSettings() {
     if (tab === 'stops')       renderStops();
   }
 
+  _updateLoginDisplay();
   showToast('✅ Trip settings saved! Dates updated across the whole app.', 3000);
 }
 
