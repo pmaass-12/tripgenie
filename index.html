@@ -9311,6 +9311,25 @@ function renderDayTimeBlocks(d, stop) {
       ovSub('sleep', d.sleep || 'Next campsite'),
       null,false,'openCampInfo('+d.day+')','','sleep') });
 
+    /* Post-arrival activities — show planned (or first available) activities
+       in the window between check-in and dinner when arriving before 5 PM */
+    var _postActStart = _arrH + 0.75; /* ~45 min after check-in to settle in */
+    if (_arrH < 17 && acts.length > 0) {
+      var pa0 = acts[0];
+      var pa0sub = ovSub('act0', (pa0.item.duration ? pa0.item.duration : '') + (pa0.item.desc ? ' \u00b7 ' + pa0.item.desc.substring(0, 100) + (pa0.item.desc.length > 100 ? '\u2026' : '') : ''));
+      _items.push({ key:'act0', html: tbbRow(ovTime('act0', _fmtHour(_postActStart)),'&#127775;',
+        ovTitle('act0', pa0.item.name), pa0sub, 'explore', pa0.planned,
+        stop ? tbbAiBtn('a', stop.id, pa0.idx) : '', '', 'act0') });
+      /* Second activity if there's room (arriving before 3 PM) */
+      if (acts.length > 1 && _arrH < 15) {
+        var pa1 = acts[1];
+        var pa1sub = ovSub('act1', (pa1.item.duration ? pa1.item.duration : '') + (pa1.item.desc ? ' \u00b7 ' + pa1.item.desc.substring(0, 100) + (pa1.item.desc.length > 100 ? '\u2026' : '') : ''));
+        _items.push({ key:'act1', html: tbbRow(ovTime('act1', _fmtHour(_postActStart + 2)),'&#128506;',
+          ovTitle('act1', pa1.item.name), pa1sub, 'explore', pa1.planned,
+          stop ? tbbAiBtn('a', stop.id, pa1.idx) : '', '', 'act1') });
+      }
+    }
+
     /* Post-arrival dinner (only if arriving before 6 PM) */
     if (_arrH < 18 && dRest) {
       var dSub2  = ovSub('dinner', (dRest.item.type || '') + (dRest.item.price ? ' \u00b7 ' + dRest.item.price : '') + (dRest.item.hours ? ' \u00b7 ' + dRest.item.hours : ''));
