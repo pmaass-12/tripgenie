@@ -3973,6 +3973,7 @@ function _loadStopWeather(stopId) {
     }
     saveState(appState);
     renderStops();
+    if (typeof renderSchedule === 'function') renderSchedule();
     showToast('&#9989; Weather loaded for ' + stop.name, 2000);
   }).catch(function(){
     showToast('&#9888;&#65039; Weather load failed. Check your connection.', 2800);
@@ -4000,6 +4001,7 @@ function _loadStopWeather(stopId) {
         }
       }
       saveState(); renderStops();
+      if (typeof renderSchedule === 'function') renderSchedule();
     }).catch(function(){});
   }
 }
@@ -4009,13 +4011,13 @@ function showStopForecastModal(stopId) {
   var stop = getStop(stopId);
   if (!stop) return;
   var hasData = appState.weather && appState.weather[stopId] && Object.keys(appState.weather[stopId]).length > 0;
-  if (hasData) {
-    _renderForecastModal(stopId);
-  } else {
-    // Load first, then show modal
-    showToast('🌡️ Loading forecast for ' + stop.name + '…', 2000);
-    _loadStopWeatherSilent(stopId, function() { _renderForecastModal(stopId); });
-  }
+  // Always show whatever data we have immediately (or a loading state)
+  _renderForecastModal(stopId, true /* isRefreshing */);
+  // Always kick off a fresh fetch — modal re-renders when data arrives
+  _loadStopWeatherSilent(stopId, function() {
+    _closeForecastModal();
+    _renderForecastModal(stopId, false);
+  });
 }
 
 function _loadStopWeatherSilent(stopId, callback) {
@@ -4045,7 +4047,10 @@ function _loadStopWeatherSilent(stopId, callback) {
         };
       }
     }
-    saveState(appState); renderStops();
+    saveState(appState);
+    renderStops();
+    // Also refresh the schedule's blue phase-header weather bar
+    if (typeof renderSchedule === 'function') renderSchedule();
     if (callback) callback();
   }).catch(function(){
     showToast('⚠️ Could not load weather data. Check your connection.', 2800);
@@ -4053,7 +4058,7 @@ function _loadStopWeatherSilent(stopId, callback) {
   });
 }
 
-function _renderForecastModal(stopId) {
+function _renderForecastModal(stopId, isRefreshing) {
   var stop = getStop(stopId);
   if (!stop) return;
   var stopDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
@@ -4097,29 +4102,31 @@ function _renderForecastModal(stopId) {
   var inner = document.createElement('div');
   inner.style.cssText = 'background:var(--card);border-radius:16px;max-width:440px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,.35);';
 
+  // Determine data type label from first day's data
+  var _firstWx = stopDays.length ? wxData[stopDays[0].date] : null;
+  var _hasForecast = Object.values ? Object.values(wxData).some(function(w){return w && w.type==='forecast';})
+    : (function(){ for(var k in wxData){if(wxData[k]&&wxData[k].type==='forecast')return true;} return false; })();
+  var _dataLabel = _hasForecast ? 'Live forecast' : (Object.keys(wxData).length ? 'Historical/Typical' : 'No data yet');
+  var _refreshBadge = isRefreshing
+    ? '<span style="font-size:.65rem;background:rgba(255,255,255,.2);border-radius:100px;padding:2px 7px;margin-left:6px;animation:pulse 1s infinite;">🔄 Updating…</span>'
+    : '<span style="font-size:.65rem;background:rgba(255,255,255,.15);border-radius:100px;padding:2px 7px;margin-left:6px;">✓ Fresh</span>';
+
   inner.innerHTML = '<div style="background:var(--blue);color:#fff;padding:16px 18px;border-radius:16px 16px 0 0;display:flex;align-items:center;justify-content:space-between;">'
     + '<div><div style="font-size:1.0rem;font-weight:900;">' + stop.emoji + ' ' + _sn(stop) + '</div>'
-    + '<div style="font-size:.75rem;opacity:.8;">' + (stopDays.length ? formatDate(stopDays[0].date) + ' – ' + formatDate(stopDays[stopDays.length-1].date) : '') + ' · ' + stopDays.length + ' nights · Historical/Typical</div></div>'
+    + '<div style="font-size:.75rem;opacity:.8;display:flex;align-items:center;flex-wrap:wrap;gap:2px;">'
+    + (stopDays.length ? formatDate(stopDays[0].date) + ' – ' + formatDate(stopDays[stopDays.length-1].date) + ' · ' + stopDays.length + ' nights' : '')
+    + ' · ' + _dataLabel + _refreshBadge
+    + '</div></div>'
     + '<button id="forecast-modal-close" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:4px 10px;font-size:.9rem;cursor:pointer;">✕</button>'
     + '</div>'
     + '<div style="padding:16px 18px;">'
-    + rows
-    + '<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">'
-    + '<button id="forecast-modal-refresh" style="flex:1;min-width:140px;display:flex;align-items:center;justify-content:center;gap:7px;padding:9px 14px;background:var(--orange-l);border:1px solid #f0c898;border-radius:100px;font-size:.82rem;font-weight:700;color:var(--orange);cursor:pointer;font-family:var(--font);">🔄 Refresh Data</button>'
-    + '</div></div>';
+    + (rows || '<div style="padding:20px 0;text-align:center;color:var(--text-3);font-size:.85rem;">Loading weather data…</div>')
+    + '</div>';
 
   wrapper.appendChild(inner);
   document.body.appendChild(wrapper);
 
-  // Wire up close and refresh with real event listeners (no inline onclick)
   document.getElementById('forecast-modal-close').addEventListener('click', _closeForecastModal);
-  document.getElementById('forecast-modal-refresh').addEventListener('click', function() {
-    showToast('🔄 Refreshing weather data…', 1800);
-    _loadStopWeatherSilent(stopId, function() {
-      _closeForecastModal();
-      _renderForecastModal(stopId);
-    });
-  });
 }
 
 function _closeForecastModal() {
