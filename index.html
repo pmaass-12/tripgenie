@@ -2035,11 +2035,11 @@
 <div id="login-screen">
   <div class="login-card">
     <span class="login-rv-icon">🚐</span>
-    <div class="login-title">Maass Family<br>RV 2026</div>
-    <div class="login-sub">Your 46-day cross-country road trip</div>
+    <div class="login-title" id="login-trip-title">Maass Family<br>RV 2026</div>
+    <div class="login-sub" id="login-trip-sub">Your 46-day cross-country road trip</div>
     <div class="login-dates">
       <i class="fa-solid fa-calendar-days"></i>
-      Feb 28 – Apr 14, 2026
+      <span id="login-trip-dates">Feb 28 – Apr 14, 2026</span>
     </div>
 
     <!-- Profile picker — choose who you are FIRST -->
@@ -2150,8 +2150,8 @@
       <span id="hdr-progress-pct" style="display:none;"></span>
       <span id="sync-status" style="font-size:.7rem;color:rgba(255,255,255,.45);white-space:nowrap;display:flex;align-items:center;gap:4px;" title="Cloud sync status"></span>
       <div title="Switch view" style="display:flex;align-items:center;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:3px;gap:2px;flex-shrink:0;">
-        <span style="background:rgba(255,255,255,.18);color:#fff;border-radius:100px;padding:4px 11px;font-size:.72rem;font-weight:800;cursor:pointer;white-space:nowrap;font-family:var(--font);" onclick="_showSimpleMode()"><i class="fa-solid fa-mobile-screen-button"></i> Simple</span>
-        <span style="background:var(--orange);color:#fff;border-radius:100px;padding:4px 11px;font-size:.72rem;font-weight:800;white-space:nowrap;font-family:var(--font);"><i class="fa-solid fa-sliders"></i> Advanced</span>
+        <span style="background:rgba(255,255,255,.18);color:#fff;border-radius:100px;padding:4px 11px;font-size:.72rem;font-weight:800;cursor:pointer;white-space:nowrap;font-family:var(--font);" onclick="_showSimpleMode()"><i class="fa-solid fa-mobile-screen-button"></i> Driving</span>
+        <span style="background:var(--orange);color:#fff;border-radius:100px;padding:4px 11px;font-size:.72rem;font-weight:800;white-space:nowrap;font-family:var(--font);"><i class="fa-solid fa-sliders"></i> Planning</span>
       </div>
       <button onclick="openHelpSearch()" title="Search the app — ask anything" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:100px;padding:5px 11px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-magnifying-glass"></i> Help</button>
       <button id="dark-mode-btn" onclick="toggleDarkMode()" title="Toggle dark/light mode" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:1rem;cursor:pointer;line-height:1;display:flex;align-items:center;">🌙</button>
@@ -3866,16 +3866,35 @@ function _tripCityLabel(s) {
   if (stateStr && s.name.slice(-stateStr.length) === stateStr) return s.name;
   return s.name + stateStr;
 }
+function _tripHomeStop() {
+  for (var _hi = TRIP_DAYS.length - 1; _hi >= 0; _hi--) {
+    if (TRIP_DAYS[_hi].sleepType === 'home') return getStop(TRIP_DAYS[_hi].stopId);
+  }
+  return null;
+}
+function _sn(stop) {
+  if (!stop) return '';
+  if (!stop.state) return stop.name || '';
+  var suffix = ', ' + stop.state;
+  if ((stop.name || '').slice(-suffix.length) === suffix) return stop.name;
+  return (stop.name || '') + suffix;
+}
+function _snE(stop) {
+  return stop ? ((stop.emoji ? stop.emoji + ' ' : '') + _sn(stop)) : '';
+}
 function _tripStartCity() {
+  var home = _tripHomeStop();
+  if (home) return _tripCityLabel(home);
   return TRIP_STOPS.length ? _tripCityLabel(TRIP_STOPS[0]) : 'home';
+}
+function _tripIsRoundTrip() {
+  if (_tripHomeStop()) return true;
+  return TRIP_STOPS.length < 2 || TRIP_STOPS[0].id === TRIP_STOPS[TRIP_STOPS.length - 1].id;
 }
 function _tripEndCity() {
   return TRIP_STOPS.length ? _tripCityLabel(TRIP_STOPS[TRIP_STOPS.length - 1]) : _tripStartCity();
 }
-function _tripIsRoundTrip() {
-  return TRIP_STOPS.length < 2 ||
-         TRIP_STOPS[0].id === TRIP_STOPS[TRIP_STOPS.length - 1].id;
-}
+/* _tripIsRoundTrip moved above */
 
 /* ══════════════════════════════════════════════════════════════════
    CHUNK 3 — DASHBOARD + MAP
@@ -4079,7 +4098,7 @@ function _renderForecastModal(stopId) {
   inner.style.cssText = 'background:var(--card);border-radius:16px;max-width:440px;width:100%;max-height:80vh;overflow-y:auto;box-shadow:0 16px 48px rgba(0,0,0,.35);';
 
   inner.innerHTML = '<div style="background:var(--blue);color:#fff;padding:16px 18px;border-radius:16px 16px 0 0;display:flex;align-items:center;justify-content:space-between;">'
-    + '<div><div style="font-size:1.0rem;font-weight:900;">' + stop.emoji + ' ' + stop.name + ', ' + stop.state + '</div>'
+    + '<div><div style="font-size:1.0rem;font-weight:900;">' + stop.emoji + ' ' + _sn(stop) + '</div>'
     + '<div style="font-size:.75rem;opacity:.8;">' + (stopDays.length ? formatDate(stopDays[0].date) + ' – ' + formatDate(stopDays[stopDays.length-1].date) : '') + ' · ' + stopDays.length + ' nights · Historical/Typical</div></div>'
     + '<button id="forecast-modal-close" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:4px 10px;font-size:.9rem;cursor:pointer;">✕</button>'
     + '</div>'
@@ -5262,7 +5281,7 @@ function renderSchool() {
     html += '<div style="padding:9px 12px;">';
     html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">';
     if (stop) html += '<span>' + stop.emoji + '</span>';
-    html += '<span style="font-weight:700;font-size:.875rem;">' + formatDate(d.date) + ' — ' + stop.name + ', ' + stop.state + '</span>';
+    html += '<span style="font-weight:700;font-size:.875rem;">' + formatDate(d.date) + ' — ' + _sn(stop) + '</span>';
     if (isToday) html += '<span style="background:var(--orange);color:#fff;font-size:.65rem;font-weight:800;padding:1px 6px;border-radius:100px;">Today</span>';
     html += '</div>';
 
@@ -5559,7 +5578,7 @@ function renderStops() {
     // Col 2: name + inline subtitle (always visible)
     html += '<div class="sc-name-col">';
     html += '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:5px;margin-bottom:1px;">'
-      + '<span style="font-weight:800;font-size:1rem;">' + stop.name + ', ' + stop.state + '</span>';
+      + '<span style="font-weight:800;font-size:1rem;">' + _sn(stop) + '</span>';
     if (isCurrentStop)  html += '<span style="background:var(--orange);color:#fff;font-size:.6rem;font-weight:800;padding:2px 7px;border-radius:100px;">HERE NOW</span>';
     else if (isPastStop) html += '<span style="background:#888;color:#fff;font-size:.6rem;font-weight:800;padding:2px 7px;border-radius:100px;">&#10003; Visited</span>';
     if (plannedCount > 0) html += '<span style="background:var(--green);color:#fff;font-size:.6rem;font-weight:800;padding:2px 7px;border-radius:100px;">&#9989; ' + plannedCount + ' planned</span>';
@@ -5895,7 +5914,7 @@ function renderJournalEntries() {
   for (var i = 0; i < sorted.length; i++) {
     var entry = sorted[i];
     var stop  = getStop(entry.stopId);
-    var stopLabel = entry.location || (stop ? (stop.emoji + ' ' + stop.name + ', ' + stop.state) : '');
+    var stopLabel = entry.location || (stop ? (stop.emoji + ' ' + _sn(stop)) : '');
 
     html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);">';
 
@@ -6434,7 +6453,7 @@ function _renderGallery() {
     if (!e.photos || !e.photos.length) return;
     if (_galleryFilter !== 'all' && String(e.stopId) !== String(_galleryFilter)) return;
     var stop = getStop(e.stopId);
-    var locLabel = e.location || (stop ? stop.name + ', ' + stop.state : '');
+    var locLabel = e.location || (stop ? _sn(stop) : '');
     e.photos.forEach(function(photo) {
       var src  = (photo && photo.dataUrl) ? photo.dataUrl : photo;
       var exif = (photo && photo.exif)    ? photo.exif    : null;
@@ -7360,7 +7379,7 @@ function pcSelectStop(val) {
   _pcDraft.stopId = val ? parseInt(val) : null;
   var stop = val ? getStop(parseInt(val)) : null;
   if (stop) {
-    _pcDraft.locationLabel = 'Postcard from ' + stop.name + ', ' + stop.state;
+    _pcDraft.locationLabel = 'Postcard from ' + _sn(stop);
     var inp = document.getElementById('pc-custom-loc');
     if (inp) inp.value = _pcDraft.locationLabel;
   }
@@ -7746,6 +7765,7 @@ function deleteSavedPostcard(idx) {
 var _admConfirmedName = '';
 var _admConfirmedDesc = '';
 var _admDaysNeeded    = 2;
+var _admConfirmedAttraction = '';
 var _admAnalysisText  = '';
 
 function _admSetStep(n) {
@@ -7769,7 +7789,7 @@ function _admSetStep(n) {
 }
 
 function openAddDest() {
-  _admConfirmedName = ''; _admConfirmedDesc = ''; _admDaysNeeded = 2; _admAnalysisText = '';
+  _admConfirmedName = ''; _admConfirmedDesc = ''; _admDaysNeeded = 2; _admConfirmedAttraction = ''; _admAnalysisText = '';
   document.getElementById('add-dest-modal').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
   document.getElementById('adm-city').value = '';
@@ -7793,11 +7813,14 @@ function lookupDestination() {
   _admSetStep('loading');
 
   var prompt = 'A family is planning an RV road trip and typed: "' + city + '".\n\n'
-    + 'First, identify the most likely US destination they mean (correct any misspellings or vague names).\n'
-    + 'Then respond in this EXACT format with no extra text:\n'
-    + 'CONFIRMED: [Full official place name, e.g. "Nashville, Tennessee"]\n'
-    + 'VALID: [yes or no — is this a real visitable place in the US?]\n'
-    + 'DESC: [1-2 sentences about why this place is great for a family with young kids on an RV trip]\n'
+    + 'Identify the best US destination CITY or REGION they should visit.\n'
+    + 'IMPORTANT: If they typed a specific attraction, venue, or landmark (not a city/region), '
+    + 'return the CITY it is located in \u2014 not the attraction itself.\n\n'
+    + 'Respond in this EXACT format with no extra text:\n'
+    + 'CONFIRMED: [City or Region, e.g. "El Paso, Texas" \u2014 never a specific venue]\n'
+    + 'ATTRACTION: [the specific venue/attraction name if they typed one, otherwise leave blank]\n'
+    + 'VALID: [yes or no \u2014 is this a real visitable place in the US?]\n'
+    + 'DESC: [1-2 sentences about why this city/region is great for a family with young kids on an RV trip]\n'
     + 'DAYS: [recommended number of days to spend, just a single digit like 2]';
 
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:200,temperature:0.3} });
@@ -7807,13 +7830,15 @@ function lookupDestination() {
     var text = ''; try { text = data.candidates[0].content.parts[0].text.trim(); } catch(e) {}
     if (!text) { _admSetStep(1); showToast('Could not verify place. Try again.', 2500); return; }
 
-    var confirmed = (text.match(/CONFIRMED:\s*(.+)/i)||[])[1] || city;
-    var valid     = (text.match(/VALID:\s*(\w+)/i)||[])[1] || 'yes';
-    var desc      = (text.match(/DESC:\s*(.+)/i)||[])[1] || '';
-    var days      = parseInt((text.match(/DAYS:\s*(\d)/i)||[])[1]) || 2;
+    var confirmed   = (text.match(/CONFIRMED:\s*(.+)/i)||[])[1] || city;
+    var attraction  = (text.match(/ATTRACTION:\s*(.+)/i)||[])[1] || '';
+    var valid       = (text.match(/VALID:\s*(\w+)/i)||[])[1] || 'yes';
+    var desc        = (text.match(/DESC:\s*(.+)/i)||[])[1] || '';
+    var days        = parseInt((text.match(/DAYS:\s*(\d)/i)||[])[1]) || 2;
 
-    confirmed = confirmed.trim().replace(/^"|"$/g,'');
-    desc      = desc.trim();
+    confirmed  = confirmed.trim().replace(/^"|"$/g,'');
+    attraction = attraction.trim().replace(/^"|"$/g,'');
+    desc       = desc.trim();
 
     if (valid.toLowerCase() === 'no') {
       _admSetStep(1);
@@ -7821,9 +7846,10 @@ function lookupDestination() {
       return;
     }
 
-    _admConfirmedName = confirmed;
-    _admConfirmedDesc = desc;
-    _admDaysNeeded    = days;
+    _admConfirmedName       = confirmed;
+    _admConfirmedDesc       = desc;
+    _admDaysNeeded          = days;
+    _admConfirmedAttraction = attraction;
 
     var cardHtml = '<div style="display:flex;align-items:flex-start;gap:12px;">'
       + '<div style="font-size:1.8rem;flex-shrink:0;">&#128205;</div>'
@@ -7914,6 +7940,7 @@ function addDestToAdjustments(withTradeoff) {
     isNewDest:   true,
     daysNeeded:  _admDaysNeeded,
     destName:    _admConfirmedName,
+    attraction:  _admConfirmedAttraction,
     acceptedTradeoff: !!withTradeoff
   };
   appState.aiSuggestions.unshift(sugg);
@@ -8591,7 +8618,7 @@ var HELP_ITEMS = [
   {q:'How do I add a stop?',            a:'Open the Stops tab and tap "Add Destination" — or use TripGenie to suggest additions based on your route.',               tab:'stops',      icon:'fa-location-dot'},
   {q:'What is the audit log?',          a:'Go to Tools → Audit Log to see a timestamp history of every change made to your trip plan.',                               tab:'tools',      icon:'fa-clock-rotate-left'},
   {q:'How do I duplicate a trip?',      a:'Open the trip selector dropdown in the top bar, then tap "New Trip" to create a copy or start fresh.',                     tab:'dashboard',  icon:'fa-copy'},
-  {q:'How do I switch to simple mode?', a:'Tap the "Simple" button in the top right of the header to switch to the simpler one-page-at-a-time view.',                tab:'dashboard',  icon:'fa-mobile-screen-button'},
+  {q:'How do I switch to driving mode?', a:'Tap the "Driving" button in the top right of the header to switch to the simplified one-page-at-a-time view.',                tab:'dashboard',  icon:'fa-mobile-screen-button'},
   {q:'Where are family profiles?',      a:'Go to Tools → Profiles to view and edit each family member\'s profile including interests and age.',                       tab:'tools',      icon:'fa-people-group'},
   {q:'How do I see upcoming days?',     a:'The Dashboard shows the next 3 days. For the full view, open the Schedule tab.',                                           tab:'schedule',   icon:'fa-forward'},
   {q:'What is the school tab?',         a:'The School tab has a homeschool curriculum tied to each stop — field trips, geography, history, and science lessons.',     tab:'school',     icon:'fa-graduation-cap'},
@@ -8787,7 +8814,7 @@ function closeLocalMusic() {
 }
 
 function _fetchLocalMusic(stop) {
-  var prompt = 'You are a music curator for a family road trip. The family is visiting ' + stop.name + ', ' + stop.state + '.\n\n'
+  var prompt = 'You are a music curator for a family road trip. The family is visiting ' + _sn(stop) + '.\n\n'
     + 'Suggest 5 artists or bands that are FROM this region or strongly associated with this area\'s music culture.\n'
     + 'Be accurate — only suggest real artists genuinely connected to this place.\n'
     + 'Include a mix: maybe one famous artist, a few well-known regional ones, and one hidden gem.\n\n'
@@ -9233,16 +9260,15 @@ function renderDayTimeBlocks(d, stop) {
       ovTitle('breakfast','Breakfast — Before You Leave'),
       ovSub('breakfast','Quick meal before hitting the road'),
       'eat',false,'','','breakfast') });
+    /* Override: if a customPlace was saved for breakfast on a drive day (destination restaurant),
+       ignore it — breakfast is eaten at home before leaving */
+    if (_overrides['breakfast'] && _overrides['breakfast'].customPlace && d.driveDay) {
+      _items[_items.length-1].html = _items[_items.length-1].html.replace(
+        _overrides['breakfast'].customPlace, 'Breakfast Before You Leave');
+    }
 
     /* Depart block */
-    var nextNameD = '';
-    for (var ni = d.day; ni < TRIP_DAYS.length; ni++) {
-      if (TRIP_DAYS[ni].stopId !== d.stopId) {
-        var ns2 = getStop(TRIP_DAYS[ni].stopId);
-        if (ns2) nextNameD = ns2.name;
-        break;
-      }
-    }
+    var nextNameD = stop ? stop.name : '';
     _items.push({ key:'drive', html: tbbRow(ovTime('drive', _depStr),'&#128656;',
       'Depart' + (nextNameD ? ' \u2192 ' + nextNameD : ''),
       d.miles + ' miles \u00b7 ~' + d.driveHours + 'h drive \u00b7 Arrive ~' + _arrStr,
@@ -9316,7 +9342,7 @@ function renderDayTimeBlocks(d, stop) {
   }
 
   /* Apply custom order if set */
-  if (_orderKeys && _orderKeys.length) {
+  if (_orderKeys && _orderKeys.length && !d.driveDay) {
     var _ordered = [];
     _orderKeys.forEach(function(k) {
       var found = _items.filter(function(it) { return it.key === k; })[0];
@@ -9548,7 +9574,7 @@ function suggestItemAlternative() {
   var d = getDay(_ieDay);
   var stop = d ? getStop(d.stopId) : null;
   var slotLabel = { breakfast:'breakfast place', lunch:'lunch spot', dinner:'dinner restaurant', act0:'morning activity', act1:'afternoon activity', sleep:'campground or overnight spot', drive:'driving route' }[_ieKey] || _ieKey;
-  var locName = stop ? stop.name + ', ' + stop.state : 'the current location';
+  var locName = stop ? _sn(stop) : 'the current location';
   var altEl = document.getElementById('iem-alt-result');
   if (altEl) { altEl.style.display = 'block'; altEl.innerHTML = '<div style="color:var(--text-2);font-size:.82rem;">✨ Asking TripGenie…</div>'; }
 
@@ -9596,7 +9622,7 @@ function searchItemPlace() {
   if (!query.trim()) return;
   var d = getDay(_ieDay);
   var stop = d ? getStop(d.stopId) : null;
-  var locHint = stop ? ' near ' + stop.name + ', ' + stop.state : '';
+  var locHint = stop ? ' near ' + _sn(stop) : '';
   var resEl = document.getElementById('iem-search-result');
   if (resEl) { resEl.style.display = 'block'; resEl.innerHTML = '<div style="color:var(--text-2);font-size:.82rem;">🔍 Looking up…</div>'; }
 
@@ -9987,7 +10013,7 @@ function openMapStopInfo(stopId) {
   /* Close the Leaflet popup first */
   if (window.mainMap) mainMap.closePopup();
   /* Open the AI area info modal */
-  openAreaInfo(stop.name + ', ' + stop.state, stopId);
+  openAreaInfo(_sn(stop), stopId);
   /* Inject weather badge into modal header */
   var wx = STOP_WEATHER[stop.id];
   var wxRow = document.getElementById('aim-weather-row');
@@ -10011,7 +10037,7 @@ function openCampInfo(dayNum) {
   if (!d || !d.sleep) return;
   var stop = getStop(d.stopId);
   var campName = d.sleep;
-  var loc = stop ? stop.name + ', ' + stop.state : d.phase;
+  var loc = stop ? _sn(stop) : d.phase;
   document.getElementById('aim-title').textContent = campName;
   document.getElementById('aim-sub').textContent = '\u26FA ' + loc;
   document.getElementById('aim-address-link').style.display = 'none';
@@ -10128,7 +10154,7 @@ function loadStopEvents(stopId) {
   }
 
   var prompt = 'You are a local events guide. List 5 real, specific family-friendly events '
-    + 'near ' + stop.name + ', ' + stop.state + ' that typically happen during '
+    + 'near ' + _sn(stop) + ' that typically happen during '
     + (arrivalDate ? formatDate(arrivalDate) : 'spring') + '.'
     + visitRange
     + ' We have kids ages 2, 4, and 9. Include annual festivals, fairs, farmers markets, '
@@ -10232,7 +10258,7 @@ function planStopEvent(planId, evName, stopId) {
 
 function fetchGeminiInfo(item, stop, type) {
   var typeLabel = type === 'r' ? 'restaurant' : 'attraction';
-  var loc = stop.name + ', ' + stop.state;
+  var loc = _sn(stop);
   var isRest = type === 'r';
 
   var prompt = 'You are a knowledgeable travel guide. Create a detailed info page for '
@@ -11820,6 +11846,31 @@ function saveDrivingPrefs() {
   showToast('✅ Driving preferences saved!', 2200);
   renderSchedule();
   renderTripSettings();
+}
+
+/* Update the login page header to reflect current trip settings */
+function _updateLoginDisplay() {
+  var ts    = appState.tripSettings || {};
+  var name  = ts.tripName  || 'Maass Family RV 2026';
+  var start = ts.startDate || CONFIG.startDate;
+  var end   = ts.endDate   || CONFIG.endDate;
+  var days  = ts.totalDays || CONFIG.totalDays || 46;
+  function _ldf(d) {
+    return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
+  }
+  var year      = start ? start.slice(0,4) : new Date().getFullYear();
+  var dateRange = (start && end) ? _ldf(start) + ' – ' + _ldf(end) + ', ' + year : '';
+  var parts   = name.split(' ');
+  var mid     = Math.ceil(parts.length / 2);
+  var nameHtml = parts.length > 2
+    ? parts.slice(0,mid).join(' ') + '<br>' + parts.slice(mid).join(' ')
+    : name;
+  var titleEl = document.getElementById('login-trip-title');
+  var subEl   = document.getElementById('login-trip-sub');
+  var datesEl = document.getElementById('login-trip-dates');
+  if (titleEl) titleEl.innerHTML = nameHtml;
+  if (subEl)   subEl.textContent = 'Your ' + days + '-day cross-country road trip';
+  if (datesEl) datesEl.textContent = dateRange;
 }
 
 function saveTripSettings() {
@@ -13417,7 +13468,7 @@ function geminiAdjustSchedule(dayNum, type, stop, hoursAdj) {
                 : 'roughly ON schedule';
   var prompt = 'We are on a 46-day family RV road trip (kids 9, 4, 2). Today: ' + new Date().toLocaleDateString() + '.\n'
     + 'We just ' + (type === 'arrive' ? 'ARRIVED at' : 'DEPARTED from') + ' '
-    + (stop ? stop.name + ', ' + stop.state : 'a stop') + ' and are ' + direction + '.\n\n'
+    + (stop ? _sn(stop) : 'a stop') + ' and are ' + direction + '.\n\n'
     + 'Remaining schedule:\n' + remaining.join('\n') + '\n\n'
     + 'Return a JSON array of 3-4 practical trip adjustment suggestions:\n'
     + '[{"id":"s1","title":"Short action","detail":"1-2 sentence explanation","impact":"e.g. Saves 1 day","affectedDays":[14,15]}]\n'
@@ -14407,22 +14458,27 @@ function _addNewStop(item, sourceBtn) {
   var newStopId = maxId + 1;
 
   var nights = Math.max(1, parseInt(item.nights, 10) || 2);
+  var _attraction = item.attraction || _admConfirmedAttraction || '';
+  var _cityName   = item.city || item.name || 'New Stop';
+  var _initActs   = _attraction
+    ? [{ name: _attraction, desc: 'A must-see in ' + _cityName + '.', duration: '2-3 hours', type: 'attraction', mustDo: true }]
+    : [];
 
   var newStop = {
     id:          newStopId,
-    name:        item.name        || 'New Stop',
+    name:        _cityName,
     state:       item.state       || '',
     region:      item.region      || '',
     lat:         parseFloat(item.lat)  || 0,
     lng:         parseFloat(item.lng)  || 0,
     tag:         item.tag         || 'attraction',
     emoji:       item.emoji       || '📍',
-    desc:        (item.name || 'New Stop') + ' — added via Change Plan',
-    description: (item.name || 'New Stop') + ' — a new stop added during trip planning.',
-    activities:  [],
+    desc:        _cityName + (_attraction ? ' — featuring ' + _attraction : '') + ' — added via Change Plan',
+    description: _cityName + (_attraction ? ' — featuring ' + _attraction + '.' : '.') + ' Added during trip planning.',
+    activities:  _initActs,
     restaurants: [],
     sleepOptions: [],
-    highlights:   []
+    highlights:   _attraction ? [_attraction] : []
   };
 
   /* Clone stops and insert after afterStopId */
@@ -16272,8 +16328,8 @@ function _smRenderAll() {
     <div id="top-title">Maass Family RV 2026</div>
     <button id="top-action" class="show" onclick="handleTopAction()">✨ Ask</button>
     <div title="Switch view" style="display:flex;align-items:center;background:rgba(30,77,123,.08);border:1.5px solid rgba(30,77,123,.2);border-radius:12px;padding:3px;gap:2px;flex-shrink:0;">
-      <span style="background:var(--orange);color:#fff;border-radius:100px;padding:4px 11px;font-size:.7rem;font-weight:800;white-space:nowrap;font-family:inherit;"><i class="fa-solid fa-mobile-screen-button"></i> Simple</span>
-      <span style="background:transparent;color:var(--blue);border-radius:100px;padding:4px 11px;font-size:.7rem;font-weight:800;cursor:pointer;white-space:nowrap;font-family:inherit;" onclick="_hideSimpleMode()"><i class="fa-solid fa-sliders"></i> Advanced</span>
+      <span style="background:var(--orange);color:#fff;border-radius:100px;padding:4px 11px;font-size:.7rem;font-weight:800;white-space:nowrap;font-family:inherit;"><i class="fa-solid fa-mobile-screen-button"></i> Driving</span>
+      <span style="background:transparent;color:var(--blue);border-radius:100px;padding:4px 11px;font-size:.7rem;font-weight:800;cursor:pointer;white-space:nowrap;font-family:inherit;" onclick="_hideSimpleMode()"><i class="fa-solid fa-sliders"></i> Planning</span>
     </div>
   </div>
 
