@@ -2305,7 +2305,7 @@
     <div class="tab-panel" id="tab-planner">
       <div style="display:flex;gap:8px;margin-bottom:20px;padding-top:4px;">
         <button id="plan-seg-schedule" onclick="_mainSeg('schedule')" style="flex:1;padding:9px 16px;border:1.5px solid var(--orange);border-radius:50px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-calendar-days"></i> Schedule</button>
-        <button id="plan-seg-stops" onclick="_mainSeg('stops')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-campground"></i> Stops</button>
+        <button id="plan-seg-stops" onclick="_mainSeg('stops')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-map-pin"></i> Day Planner</button>
       </div>
       <div id="schedule-content" style="display:block"></div>
       <div id="stops-content" style="display:none"></div>
@@ -9118,7 +9118,7 @@ function renderDayTimeBlocks(d, stop) {
     }
   }
 
-  var planned = (stop && typeof getPlannedForStop === 'function') ? getPlannedForStop(stop.id) : { activities: [], restaurants: [] };
+  var planned = (stop && typeof getPlannedForStop === 'function') ? getPlannedForStop(stop.id, d.day) : { activities: [], restaurants: [] };
 
   /* build sorted act list: planned first */
   var acts = [];
@@ -9438,7 +9438,7 @@ function skipMeal(dayNum, meal) {
   if (!skips.dinner)    skips.dinner    = [];
 
   /* rebuild rests list same way renderDayTimeBlocks does */
-  var planned = (typeof getPlannedForStop === 'function') ? getPlannedForStop(stop.id) : { activities: [], restaurants: [] };
+  var planned = (typeof getPlannedForStop === 'function') ? getPlannedForStop(stop.id, d.day) : { activities: [], restaurants: [] };
   var rests = [];
   for (var pri = 0; pri < planned.restaurants.length; pri++) {
     var pr = stop.restaurants[planned.restaurants[pri]];
