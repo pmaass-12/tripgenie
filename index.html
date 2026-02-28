@@ -2382,6 +2382,7 @@
             <span style="display:flex;align-items:center;gap:5px;"><span style="width:20px;height:3px;background:var(--blue);display:inline-block;border-radius:2px"></span> Outbound</span>
             <span style="display:flex;align-items:center;gap:5px;"><span style="width:20px;height:0;border-top:3px dashed #a855f7;display:inline-block;border-radius:2px"></span> Return</span>
             <button onclick="forceRefreshMap(this)" style="display:flex;align-items:center;gap:5px;background:var(--blue-l);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:var(--blue);cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-rotate"></i> Refresh</button>
+            <button onclick="printTripPlan()" style="display:flex;align-items:center;gap:5px;background:var(--orange-l);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:var(--orange);cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-print"></i> Print PDF</button>
           </div>
         </div>
         <!-- Nav + Map row -->
@@ -5432,6 +5433,223 @@ function refreshMainMap() {
   if (!mainMap) return; // map hasn't been opened yet — nothing to do
   mainMap.invalidateSize();
   _clearAndRebuildMapMarkers(mainMap);
+}
+
+/* Print Trip Plan button — generates and opens HTML print document in new window */
+function printTripPlan() {
+  var tripName = (appState.tripSettings && appState.tripSettings.tripName) || CONFIG.tripName || 'Family RV Adventure 2026';
+  var startDate = (appState.tripSettings && appState.tripSettings.startDate) || CONFIG.startDate || '';
+  var endDate = (appState.tripSettings && appState.tripSettings.endDate) || CONFIG.endDate || '';
+  var _removedIds = appState.removedStops || {};
+  var _homeStop = (typeof _tripHomeStop === 'function') ? _tripHomeStop() : null;
+  var _homeId = _homeStop ? _homeStop.id : 15;
+
+  /* Helper: format date string YYYY-MM-DD → "Mon Mar 4" */
+  function _fmtDate(ds) {
+    if (!ds) return '';
+    var p = ds.split('-');
+    if (p.length < 3) return ds;
+    var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var d = new Date(parseInt(p[0]), parseInt(p[1])-1, parseInt(p[2]));
+    return days[d.getDay()] + ', ' + months[d.getMonth()] + ' ' + d.getDate();
+  }
+
+  /* Build stop list (unique, ordered, non-home, non-removed) */
+  var _seenIds = {}, _orderedStopIds = [];
+  TRIP_DAYS.forEach(function(d) {
+    if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeId || d.sleepType === 'home') return;
+    if (!_seenIds[d.stopId]) { _seenIds[d.stopId] = true; _orderedStopIds.push(d.stopId); }
+  });
+
+  /* Aggregate days per stop */
+  var stopDaysMap = {};
+  TRIP_DAYS.forEach(function(d) {
+    if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeId) return;
+    if (!stopDaysMap[d.stopId]) stopDaysMap[d.stopId] = [];
+    stopDaysMap[d.stopId].push(d);
+  });
+
+  /* Count total drive days and miles */
+  var totalMiles = 0, driveDayCount = 0;
+  TRIP_DAYS.forEach(function(d) {
+    if (d.driveDay && d.miles) { totalMiles += (d.miles || 0); driveDayCount++; }
+  });
+
+  /* Count visible days (excluding removed stops) */
+  var visibleDays = TRIP_DAYS.filter(function(d) {
+    return !_removedIds[d.stopId] && d.sleepType !== 'home';
+  }).length;
+
+  /* Build HTML for each stop section */
+  var stopsHtml = '';
+  _orderedStopIds.forEach(function(stopId, idx) {
+    var stop = getStop(stopId);
+    var days = stopDaysMap[stopId] || [];
+    if (!days.length) return;
+
+    var stayDays = days.filter(function(d) { return !d.driveDay; });
+    var driveDays = days.filter(function(d) { return d.driveDay; });
+    var nights = stayDays.length;
+    var firstDay = days[0];
+    var lastStayDay = stayDays.length ? stayDays[stayDays.length - 1] : days[days.length - 1];
+    var stayType = (typeof _getStayMeta === 'function') ? _getStayMeta(stopId) : { label: 'Campground' };
+    var stopName = stop ? (stop.name + (stop.state ? ', ' + stop.state : '')) : ('Stop ' + (idx+1));
+
+    stopsHtml += '<div class="stop-section">';
+    stopsHtml += '<div class="stop-header">';
+    stopsHtml += '<div class="stop-num">' + (idx+1) + '</div>';
+    stopsHtml += '<div class="stop-title-block">';
+    stopsHtml += '<div class="stop-name">' + stopName + '</div>';
+    stopsHtml += '<div class="stop-meta">';
+    if (nights > 0) stopsHtml += nights + ' night' + (nights !== 1 ? 's' : '');
+    if (firstDay && lastStayDay && firstDay.date && lastStayDay.date) {
+      stopsHtml += ' &nbsp;·&nbsp; ' + _fmtDate(firstDay.date) + ' – ' + _fmtDate(lastStayDay.date);
+    }
+    stopsHtml += ' &nbsp;·&nbsp; ' + (stayType.label || 'Campground');
+    stopsHtml += '</div></div></div>';
+
+    /* Drive days into this stop */
+    driveDays.forEach(function(d) {
+      var title = (typeof _getDriveDayTitle === 'function') ? _getDriveDayTitle(d) : (d.title || d.name || 'Drive day');
+      stopsHtml += '<div class="drive-row">';
+      stopsHtml += '<span class="drive-icon">🚐</span>';
+      stopsHtml += '<span class="drive-title">' + title + '</span>';
+      if (d.miles) stopsHtml += ' <span class="drive-meta">' + Math.round(d.miles) + ' mi · ' + (d.driveHours ? d.driveHours.toFixed(1) + 'h' : '') + '</span>';
+      stopsHtml += '</div>';
+    });
+
+    /* Stay days */
+    stayDays.forEach(function(d) {
+      stopsHtml += '<div class="stay-row">';
+      stopsHtml += '<span class="day-badge">Day ' + d.day + '</span>';
+      stopsHtml += '<span class="day-date">' + _fmtDate(d.date) + '</span>';
+      var dayTitle = d.title || d.name || 'Explore ' + (stop ? stop.name : '');
+      stopsHtml += '<span class="day-title">' + dayTitle + '</span>';
+      /* Show scheduled items if any */
+      var customItems = (d.items || []).filter(function(it) { return it.custom; });
+      if (customItems.length) {
+        stopsHtml += '<ul class="day-items">';
+        customItems.slice(0, 4).forEach(function(it) {
+          stopsHtml += '<li>' + (it.label || it.title || '') + '</li>';
+        });
+        stopsHtml += '</ul>';
+      }
+      stopsHtml += '</div>';
+    });
+
+    stopsHtml += '</div>';
+  });
+
+  /* Return trip section */
+  var homeDays = TRIP_DAYS.filter(function(d) { return d.stopId === _homeId || d.sleepType === 'home'; });
+  if (homeDays.length) {
+    stopsHtml += '<div class="stop-section return-section">';
+    stopsHtml += '<div class="stop-header"><div class="stop-num home-num">🏠</div>';
+    stopsHtml += '<div class="stop-title-block"><div class="stop-name">Return Home</div>';
+    var hFirst = homeDays[0], hLast = homeDays[homeDays.length-1];
+    if (hFirst && hFirst.date) stopsHtml += '<div class="stop-meta">' + _fmtDate(hFirst.date) + (hLast && hLast.date && hLast.date !== hFirst.date ? ' – ' + _fmtDate(hLast.date) : '') + '</div>';
+    stopsHtml += '</div></div>';
+    homeDays.forEach(function(d) {
+      if (!d.driveDay) return;
+      var title = (typeof _getDriveDayTitle === 'function') ? _getDriveDayTitle(d) : (d.title || 'Drive home');
+      stopsHtml += '<div class="drive-row"><span class="drive-icon">🚐</span><span class="drive-title">' + title + '</span>';
+      if (d.miles) stopsHtml += ' <span class="drive-meta">' + Math.round(d.miles) + ' mi</span>';
+      stopsHtml += '</div>';
+    });
+    stopsHtml += '</div>';
+  }
+
+  var html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>${tripName} — Trip Plan</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a2e; background: #fff; font-size: 11pt; line-height: 1.5; }
+  .page { max-width: 750px; margin: 0 auto; padding: 32px 40px; }
+
+  /* Header */
+  .trip-header { border-bottom: 3px solid #E8813A; padding-bottom: 18px; margin-bottom: 24px; }
+  .trip-header h1 { font-size: 26pt; font-weight: 900; color: #E8813A; letter-spacing: -.5px; line-height: 1.1; }
+  .trip-header .dates { font-size: 12pt; color: #555; margin-top: 4px; }
+  .trip-stats { display: flex; gap: 32px; margin-top: 14px; flex-wrap: wrap; }
+  .stat { text-align: center; }
+  .stat-num { font-size: 20pt; font-weight: 900; color: #2C5F8A; }
+  .stat-lbl { font-size: 8pt; color: #777; text-transform: uppercase; letter-spacing: .08em; }
+
+  /* Stop sections */
+  .stop-section { margin-bottom: 24px; break-inside: avoid; border: 1px solid #e0e0e0; border-radius: 10px; overflow: hidden; }
+  .stop-header { display: flex; align-items: flex-start; gap: 12px; background: #2C5F8A; color: #fff; padding: 12px 16px; }
+  .return-section .stop-header { background: #4a6741; }
+  .stop-num { width: 28px; height: 28px; background: #E8813A; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13pt; font-weight: 900; flex-shrink: 0; margin-top: 1px; }
+  .home-num { background: transparent; font-size: 18pt; }
+  .stop-name { font-size: 15pt; font-weight: 800; line-height: 1.2; }
+  .stop-meta { font-size: 9pt; opacity: .85; margin-top: 2px; }
+  .drive-row { display: flex; align-items: baseline; gap: 8px; padding: 7px 16px; background: #f7f4ef; border-bottom: 1px solid #eee; font-size: 9.5pt; }
+  .drive-icon { font-size: 11pt; }
+  .drive-title { font-weight: 600; flex: 1; }
+  .drive-meta { color: #888; font-size: 8.5pt; white-space: nowrap; }
+  .stay-row { padding: 8px 16px 6px; border-bottom: 1px solid #f0f0f0; }
+  .stay-row:last-child { border-bottom: none; }
+  .day-badge { background: #2C5F8A; color: #fff; font-size: 7pt; font-weight: 800; padding: 2px 7px; border-radius: 100px; text-transform: uppercase; letter-spacing: .05em; margin-right: 6px; }
+  .day-date { font-size: 9pt; color: #777; margin-right: 8px; }
+  .day-title { font-size: 10pt; font-weight: 700; }
+  .day-items { margin: 4px 0 2px 24px; font-size: 9pt; color: #555; }
+  .day-items li { margin-bottom: 1px; }
+
+  /* Footer */
+  .print-footer { margin-top: 28px; padding-top: 12px; border-top: 1px solid #ddd; font-size: 8pt; color: #aaa; display: flex; justify-content: space-between; }
+
+  @media print {
+    body { font-size: 10pt; }
+    .page { padding: 0; max-width: 100%; }
+    .stop-section { break-inside: avoid; }
+    .no-print { display: none; }
+    @page { margin: 18mm 15mm; size: letter; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="no-print" style="background:#E8813A;color:#fff;padding:10px 16px;border-radius:8px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;">
+    <span style="font-weight:700;">🖨️ Ready to print — use your browser's Print (Cmd+P / Ctrl+P) and choose "Save as PDF"</span>
+    <button onclick="window.print()" style="background:#fff;color:#E8813A;border:none;border-radius:6px;padding:6px 14px;font-weight:800;cursor:pointer;">Print / Save PDF</button>
+  </div>
+
+  <div class="trip-header">
+    <h1>${tripName}</h1>
+    <div class="dates">${_fmtDate(startDate)} &nbsp;→&nbsp; ${_fmtDate(endDate)}</div>
+    <div class="trip-stats">
+      <div class="stat"><div class="stat-num">${visibleDays}</div><div class="stat-lbl">Total Days</div></div>
+      <div class="stat"><div class="stat-num">${_orderedStopIds.length}</div><div class="stat-lbl">Stops</div></div>
+      <div class="stat"><div class="stat-num">${Math.round(totalMiles).toLocaleString()}</div><div class="stat-lbl">Est. Miles</div></div>
+      <div class="stat"><div class="stat-num">${driveDayCount}</div><div class="stat-lbl">Drive Days</div></div>
+    </div>
+  </div>
+
+  ${stopsHtml}
+
+  <div class="print-footer">
+    <span>Generated by TripGenie</span>
+    <span>${new Date().toLocaleDateString('en-US', {month:'long', day:'numeric', year:'numeric'})}</span>
+  </div>
+</div>
+<script>
+  // Auto-open print dialog after a short delay so fonts/layout settle
+  setTimeout(function() { window.print(); }, 800);
+</script>
+</body>
+</html>`;
+
+  var w = window.open('', '_blank', 'width=860,height=700');
+  if (w) {
+    w.document.write(html);
+    w.document.close();
+  } else {
+    showToast('Pop-up blocked — please allow pop-ups for this page', 3000);
+  }
 }
 
 /* Called by the Refresh Map button — destroys and re-creates the map from scratch */
