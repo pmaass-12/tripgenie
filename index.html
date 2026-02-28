@@ -2229,6 +2229,27 @@
     </div>
   </div>
 
+  <!-- HOTELS/INNS MODAL -->
+  <div id="hotels-modal" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.5);backdrop-filter:blur(3px);" onclick="if(event.target===this)closeHotelsModal()">
+    <div style="position:absolute;bottom:0;left:0;right:0;max-height:85vh;background:var(--card);border-radius:22px 22px 0 0;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 -8px 40px rgba(0,0,0,.25);">
+      <div id="hotels-modal-head" style="background:linear-gradient(135deg,#7B2FBE,#4A90D9);color:#fff;padding:18px 20px 14px;flex-shrink:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:1.5rem;">🏨</span>
+            <div>
+              <div id="hotels-modal-title" style="font-weight:900;font-size:1.1rem;">Hotels &amp; Inns</div>
+              <div id="hotels-modal-sub" style="font-size:.76rem;opacity:.85;">Popular stays in the area</div>
+            </div>
+          </div>
+          <button onclick="closeHotelsModal()" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:50%;width:32px;height:32px;font-size:1.1rem;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
+        </div>
+      </div>
+      <div id="hotels-modal-body" style="overflow-y:auto;flex:1;padding:16px 18px 32px;">
+        <div style="text-align:center;padding:40px 20px;color:var(--text-3);">✨ Loading recommendations…</div>
+      </div>
+    </div>
+  </div>
+
   <!-- DEBUG CONSOLE OVERLAY -->
   <div id="debug-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);backdrop-filter:blur(2px);" onclick="if(event.target===this)_dbgClose()">
     <div style="position:absolute;top:60px;right:16px;width:min(700px,95vw);max-height:80vh;background:#1a1a2e;border-radius:14px;border:1px solid #444;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6);">
@@ -4318,7 +4339,7 @@ function _renderForecastModal(stopId, isRefreshing) {
     : '<span style="font-size:.65rem;background:rgba(255,255,255,.15);border-radius:100px;padding:2px 7px;margin-left:6px;">✓ Fresh</span>';
 
   inner.innerHTML = '<div style="background:var(--blue);color:#fff;padding:16px 18px;border-radius:16px 16px 0 0;display:flex;align-items:center;justify-content:space-between;">'
-    + '<div><div style="font-size:1.0rem;font-weight:900;">' + stop.emoji + ' ' + _sn(stop) + '</div>'
+    + '<div><div style="font-size:1.0rem;font-weight:900;">' + (stop.emoji ? stop.emoji + ' ' : '') + _sn(stop) + '</div>'
     + '<div style="font-size:.75rem;opacity:.8;display:flex;align-items:center;flex-wrap:wrap;gap:2px;">'
     + (stopDays.length ? formatDate(stopDays[0].date) + ' – ' + formatDate(stopDays[stopDays.length-1].date) + ' · ' + stopDays.length + ' nights' : '')
     + ' · ' + _dataLabel + _refreshBadge
@@ -4982,6 +5003,7 @@ function _mapAddStopSave(name, afterIdx, nights) {
     lat: _mapAddStopLatLng.lat,
     lng: _mapAddStopLatLng.lng,
     phase: stopName,
+    emoji: '📍',
     sleepType: 'campground',
     description: '',
     activities: []
@@ -5156,7 +5178,8 @@ function renderStopNavigator() {
     var stopDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
     /* A waypoint has exactly 1 day and that day has waypoint:true */
     var isWaypoint = stopDays.length === 1 && stopDays[0].waypoint;
-    var nights  = isWaypoint ? 0 : stopDays.length;
+    var _navExtras = isWaypoint ? 0 : ((appState.phaseExtraDays && appState.phaseExtraDays[stopId]) || 0);
+    var nights  = isWaypoint ? 0 : Math.max(0, stopDays.length + _navExtras);
     var firstDate = stopDays.length ? stopDays[0].date : '';
     var lastDate = stopDays.length ? stopDays[stopDays.length-1].date : '';
     var dateRange = '';
@@ -5867,7 +5890,7 @@ function phaseHeaderHtml(phase, firstDay) {
   }
   var nights = phaseDays.length;
   var extras = (appState.phaseExtraDays && appState.phaseExtraDays[firstDay.stopId]) || 0;
-  var totalNights = nights + extras;
+  var totalNights = Math.max(0, nights + extras);
   var btnStyle = 'background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:50%;width:26px;height:26px;font-size:1rem;font-weight:900;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:var(--font);line-height:1;flex-shrink:0;';
 
   /* Compute average high/low temps for this phase from weather data */
@@ -5920,17 +5943,11 @@ function phaseHeaderHtml(phase, firstDay) {
 
   return '<div style="display:flex;align-items:center;gap:0;padding:11px 16px;background:var(--blue);color:#fff;border-radius:10px;margin:18px 0 6px;flex-wrap:wrap;row-gap:8px;">'
 
-    /* ── Left: reorder column ── */
-    + '<div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;margin-right:12px;">'
-    + '<button onclick="event.stopPropagation();movePhase(' + firstDay.stopId + ',\'' + _safePhase + '\',\'up\')" style="' + (_phIsFirst ? _iBtnD : _iBtn) + '" ' + (_phIsFirst ? 'disabled' : '') + ' title="Move earlier"><i class="fa-solid fa-chevron-up"></i></button>'
-    + '<button onclick="event.stopPropagation();movePhase(' + firstDay.stopId + ',\'' + _safePhase + '\',\'down\')" style="' + (_phIsLast ? _iBtnD : _iBtn) + '" ' + (_phIsLast ? 'disabled' : '') + ' title="Move later"><i class="fa-solid fa-chevron-down"></i></button>'
-    + '</div>'
-
     /* ── Center: name + meta ── */
     + '<div style="flex:1;min-width:160px;">'
     + '<div style="font-weight:900;font-size:1.08rem;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;">' + _displayPhase + '</div>'
     + '<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
-    + '<span style="font-size:.75rem;opacity:.7;font-weight:600;">' + totalNights + ' night' + (totalNights !== 1 ? 's' : '') + (extras > 0 ? ' <span style="opacity:.7">(+' + extras + ')</span>' : '') + '</span>'
+    + '<span style="font-size:.75rem;opacity:.7;font-weight:600;">' + (totalNights === 0 ? 'transit stop' : totalNights + ' night' + (totalNights !== 1 ? 's' : '')) + (extras > 0 ? ' <span style="opacity:.7">(+' + extras + ')</span>' : '') + '</span>'
     + '<span style="opacity:.35;font-size:.7rem;">·</span>'
     + '<button onclick="event.stopPropagation();_cycleStayType(' + firstDay.stopId + ')" title="Change accommodation type" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">'
     + _getStayMeta(firstDay.stopId).icon + '&thinsp;' + _getStayMeta(firstDay.stopId).label
@@ -5953,6 +5970,9 @@ function phaseHeaderHtml(phase, firstDay) {
 
     /* Area Info */
     + '<button onclick="event.stopPropagation();openAreaInfo(\'' + _safePhase + '\',' + firstDay.stopId + ')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:5px 11px;font-size:.73rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">&#128269; Area Info</button>'
+
+    /* Hotels */
+    + '<button onclick="event.stopPropagation();openHotelsModal(\'' + _safePhase + '\',' + firstDay.stopId + ')" style="background:rgba(123,47,190,.35);border:1px solid rgba(160,100,220,.5);color:#fff;border-radius:8px;padding:5px 11px;font-size:.73rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">&#127968; Hotels</button>'
 
     /* − Days + */
     + '<div style="display:inline-flex;align-items:center;gap:0;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;overflow:hidden;flex-shrink:0;">'
@@ -6281,7 +6301,7 @@ function renderSchedule() {
     // Middle: title + meta
     html += '<div style="padding:10px 14px;cursor:pointer;" onclick="openDayDetail(' + d.day + ')" title="View day schedule">';
     html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">';
-    if (stop) html += '<span style="font-size:.95rem">' + stop.emoji + '</span>';
+    if (stop && stop.emoji) html += '<span style="font-size:.95rem">' + stop.emoji + '</span>';
     html += '<span style="font-weight:700;font-size:1rem;color:var(--text);line-height:1.3;">' + (d.driveDay ? _getDriveDayTitle(d) : (d.title || d.name || 'Explore ' + (d.phase || 'day'))) + '</span>';
     if (isToday) html += '<span style="background:var(--orange);color:#fff;font-size:.68rem;font-weight:800;padding:2px 8px;border-radius:100px;text-transform:uppercase;">Today</span>';
     if (_isOverflow) html += '<span style="background:#c62828;color:#fff;font-size:.65rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;">🔺 Over Schedule</span>';
@@ -6538,7 +6558,7 @@ function renderSchool() {
     // Title + summary
     html += '<div style="padding:9px 12px;">';
     html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">';
-    if (stop) html += '<span>' + stop.emoji + '</span>';
+    if (stop && stop.emoji) html += '<span>' + stop.emoji + '</span>';
     html += '<span style="font-weight:700;font-size:.875rem;">' + formatDate(d.date) + ' — ' + _sn(stop) + '</span>';
     if (isToday) html += '<span style="background:var(--orange);color:#fff;font-size:.65rem;font-weight:800;padding:1px 6px;border-radius:100px;">Today</span>';
     html += '</div>';
@@ -6829,7 +6849,7 @@ function renderStops() {
 
     // Col 1: emoji strip
     html += '<div class="sc-emoji-col" style="background:' + headerBg + ';color:#fff;">'
-      + '<div style="font-size:1.5rem;line-height:1;">' + stop.emoji + '</div>'
+      + '<div style="font-size:1.5rem;line-height:1;">' + (stop.emoji || '📍') + '</div>'
       + '<div style="font-size:.63rem;opacity:.85;font-weight:700;">#' + stop.id + '</div>'
       + '</div>';
 
@@ -11695,6 +11715,84 @@ function _renderAimFacts(factsText) {
   strip.style.display = 'block';
 }
 
+/* ── HOTELS / INNS MODAL ──────────────────────────────────────────── */
+function openHotelsModal(stopName, stopId) {
+  var modal = document.getElementById('hotels-modal');
+  var titleEl = document.getElementById('hotels-modal-title');
+  var subEl = document.getElementById('hotels-modal-sub');
+  var bodyEl = document.getElementById('hotels-modal-body');
+  if (!modal) return;
+  var stop = getStop(stopId);
+  var displayName = stop ? _sn(stop) : stopName;
+  if (titleEl) titleEl.textContent = 'Hotels & Inns near ' + displayName;
+  if (subEl) subEl.textContent = 'AI-curated picks — tap a link to book';
+  if (bodyEl) bodyEl.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--text-3);">✨ Finding the best stays…</div>';
+  modal.style.display = 'block';
+
+  /* Check cache */
+  if (!appState.hotelsCache) appState.hotelsCache = {};
+  var _cacheKey = stopId + '-hotels';
+  if (appState.hotelsCache[_cacheKey]) {
+    if (bodyEl) bodyEl.innerHTML = appState.hotelsCache[_cacheKey];
+    return;
+  }
+
+  /* Build Gemini prompt */
+  var prompt = 'You are a travel expert. For the area of ' + displayName + ', list exactly 4 popular hotels, inns, or bed & breakfasts that families with kids would enjoy. '
+    + 'For each place provide: name, star rating (1-5 stars), approximate nightly price range (e.g. $120-180/night), a 1-sentence description, and a Google search URL in format https://www.google.com/search?q=HOTEL+NAME+CITY+hotel. '
+    + 'Respond ONLY with valid JSON array, no markdown, no extra text: '
+    + '[{"name":"Hotel Name","stars":4,"price":"$120-180/night","desc":"Short description.","url":"https://www.google.com/search?q=..."}]';
+
+  var body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: 600, temperature: 0.4 }
+  });
+
+  fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: body })
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      var raw = (data.candidates && data.candidates[0] && data.candidates[0].content
+        && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
+        && data.candidates[0].content.parts[0].text) || '[]';
+      /* Strip markdown code fences if present */
+      raw = raw.replace(/^```json\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
+      var hotels;
+      try { hotels = JSON.parse(raw); } catch(e) { hotels = []; }
+      var html = '';
+      if (!hotels.length) {
+        html = '<div style="text-align:center;padding:32px;color:var(--text-3);">⚠️ Couldn\'t load recommendations. Try again later.</div>';
+      } else {
+        hotels.forEach(function(h) {
+          var stars = '';
+          for (var s = 0; s < 5; s++) stars += s < (h.stars||3) ? '★' : '☆';
+          var priceColor = (h.price||'').indexOf('$$$') >= 0 ? '#c62828' : (h.price||'').indexOf('$$') >= 0 ? '#e65100' : '#2e7d32';
+          html += '<a href="' + (h.url||'#') + '" target="_blank" rel="noopener" style="display:block;text-decoration:none;color:inherit;background:var(--bg);border:1.5px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:12px;transition:border-color .15s;" onmouseenter="this.style.borderColor=\'#7B2FBE\'" onmouseleave="this.style.borderColor=\'var(--border)\'">'
+            + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:6px;">'
+            + '<div style="font-weight:800;font-size:.97rem;color:var(--text);line-height:1.3;">' + h.name + '</div>'
+            + '<div style="font-weight:800;font-size:.85rem;color:' + priceColor + ';white-space:nowrap;flex-shrink:0;">' + (h.price||'') + '</div>'
+            + '</div>'
+            + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px;">'
+            + '<span style="color:#f59e0b;font-size:.9rem;letter-spacing:1px;">' + stars + '</span>'
+            + '<span style="font-size:.72rem;color:var(--text-3);">Tap to search & book</span>'
+            + '</div>'
+            + '<div style="font-size:.82rem;color:var(--text-2);line-height:1.5;">' + (h.desc||'') + '</div>'
+            + '</a>';
+        });
+        html += '<div style="text-align:center;font-size:.72rem;color:var(--text-3);margin-top:8px;">Prices are estimates. Verify on booking sites.</div>';
+      }
+      if (appState.hotelsCache) appState.hotelsCache[_cacheKey] = html;
+      if (bodyEl && modal.style.display !== 'none') bodyEl.innerHTML = html;
+    })
+    .catch(function() {
+      if (bodyEl) bodyEl.innerHTML = '<div style="text-align:center;padding:32px;color:var(--text-3);">⚠️ Network error. Check connection and try again.</div>';
+    });
+}
+
+function closeHotelsModal() {
+  var modal = document.getElementById('hotels-modal');
+  if (modal) modal.style.display = 'none';
+}
+
 /* ── AREA INFO (phase header "Area Info" button) ─────────────────── */
 function openAreaInfo(phase, stopId) {
   var pStop = getStop(stopId);
@@ -14961,7 +15059,7 @@ function generateMemoryBook() {
       html += '<div class="entry">'
         + '<div class="entry-header">'
         + '<div class="entry-day">Day ' + (e.dayNum||'?') + (d ? ' &nbsp;·&nbsp; ' + d.date : '') + '</div>'
-        + '<div class="entry-title">' + (stop ? stop.emoji + ' ' + stop.name : 'On the Road') + '</div>'
+        + '<div class="entry-title">' + (stop ? (stop.emoji ? stop.emoji + ' ' : '') + stop.name : 'On the Road') + '</div>'
         + '<div class="entry-meta">' + (e.location || '') + (e.mood ? ' &nbsp;·&nbsp; Mood: ' + e.mood : '') + '</div>'
         + '</div>'
         + '<div class="entry-text">' + (e.text || '').replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</div>';
@@ -17065,6 +17163,21 @@ function _getOverstayedStops(maxDays) {
 
 function tripCleanup() {
   var fixed = 0;
+  /* Reset any phaseExtraDays that would result in negative nights — usually caused by
+     trip restructuring leaving stale adjustments behind */
+  if (appState.phaseExtraDays) {
+    var _stopDayCount = {};
+    TRIP_DAYS.forEach(function(d) { _stopDayCount[d.stopId] = (_stopDayCount[d.stopId] || 0) + 1; });
+    Object.keys(appState.phaseExtraDays).forEach(function(sid) {
+      var _cnt = _stopDayCount[sid] || 0;
+      var _ext = appState.phaseExtraDays[sid] || 0;
+      if (_cnt + _ext < 0) { appState.phaseExtraDays[sid] = 0; fixed++; }
+      /* Also reset if the adjustment would hide ALL non-drive days */
+      var _nonDriveDays = TRIP_DAYS.filter(function(d){ return String(d.stopId) === String(sid) && !d.driveDay; }).length;
+      if (_nonDriveDays > 0 && _nonDriveDays + _ext <= 0) { appState.phaseExtraDays[sid] = 0; fixed++; }
+    });
+  }
+
   TRIP_DAYS.forEach(function(d) {
     if (!d.title) {
       d.title = d.driveDay
