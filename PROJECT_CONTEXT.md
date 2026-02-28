@@ -201,9 +201,19 @@ tripgenie/
   - **File changes**: index.html increased from ~20,132 to ~20,656 lines (524 lines added). All changes are insertions/additions; no existing functionality removed.
 
 
+---
+
+- Session 15 continued (2026-02-28):
+  - **Drive day title fix (return leg)**: `_getDriveDayTitle` and `_cleanSleepLabel` added to correctly handle the 2-day return trip where Day 43 sleepType='walmart' (Fredericksburg, VA) and Day 44 arrives home. Previously both days showed "Badlands → Warwick, NY". Now: Day 43 shows "Badlands → Fredericksburg, VA", Day 44 shows "Fredericksburg, VA → Warwick, NY". `_cleanSleepLabel` strips store name prefixes ("Walmart ", "Flying J ", etc.) from sleep location strings.
+  - **Decisions tab live refresh**: `saveState()` now calls `renderDecisions()` if `#decisions-content` element is visible (offsetParent check). `tripCleanup()` also calls `renderDecisions()` after re-rendering all other tabs. Decisions tab now updates in real-time as the plan changes.
+  - **TripGenie / PauseGenie Gemini proxy fix**: Both `getTripGenieSuggestions()` and `getPauseGenieSuggestions()` were calling the Gemini API directly with `GEMINI_KEY` (always empty `''`), causing "No Gemini key" errors. Fixed both to use `GEMINI_URL` (the Netlify proxy) with proper request body format. `getTripGenieSuggestions` also had a stale `key` variable reference removed.
+  - **Stops tab in Driving mode**: `_smSeg('stops')` called `renderStops()` which targets `#stops-content` (the regular planner div) but the driving mode shows `#sm-stops-content`. Fixed by copying innerHTML from `#stops-content` to `#sm-stops-content` after rendering.
+
 ## Suggested Next Steps
 - **0-day waypoint stops**: User wants stops with 0 nights for driving waypoints (fuel, Walmart overnight, route planning) — not yet built
-- Push to GitHub (git push) when network is available — commits pending from sessions 8-14
+- Push to GitHub (git push) when network is available — commits pending from sessions 8+
 - User needs to create Mapbox public token at mapbox.com (no secret scopes), then enter it in Trip Settings → RV Profile & Map Routing
+- User needs to run Supabase SQL (in PROJECT_CONTEXT) to create `trips` table with RLS for multi-user support
+- User needs to add `SUPABASE_URL` + `SUPABASE_ANON_KEY` env vars to Netlify for multi-user auth to work
 - Consider adding "Nashville" and "Fredericksburg" as proper TRIP_STOPS entries (currently inferred from TRIP_DAYS but no markers on map)
 - Test voice chat on actual iPhone/iPad — may need microphone permission prompt handling

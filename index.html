@@ -3657,6 +3657,9 @@ function saveState(state) {
   localStorage.setItem('rv_state', JSON.stringify(state));
   syncToCloud(state);
   if (_sbUser) _syncToSupabaseTrips(state); // also sync to per-user trips table
+  /* Keep Decisions tab live if it's currently visible */
+  var _decEl = document.getElementById('decisions-content');
+  if (_decEl && _decEl.offsetParent !== null && typeof renderDecisions === 'function') renderDecisions();
 }
 var appState = loadState();
 
@@ -4490,12 +4493,39 @@ function _tripCityLabel(s) {
 /* Returns the effective display title for a drive day, substituting the correct
    origin city name when an intermediate stop has been removed from the schedule.
    e.g. If KC is removed, "Kansas City → Nashville" becomes "Oklahoma City → Nashville". */
+/* Strip store/chain prefix from sleep location so titles say
+   "Fredericksburg, VA → Warwick, NY" instead of
+   "Walmart Fredericksburg, VA → Warwick, NY"                         */
+function _cleanSleepLabel(sleep) {
+  if (!sleep || sleep === 'HOME!') return '';
+  return sleep.replace(/^(Walmart|Cracker Barrel|Flying J|Love's|Pilot|TA Travel Center|Cabela's|Bass Pro|Sam's Club|Costco)\s+/i, '').trim();
+}
+
 function _getDriveDayTitle(d) {
   if (!d || !d.driveDay) return d ? d.title : '';
   var removedIds = appState.removedStops || {};
   var destStop = getStop(d.stopId);
-  var destName = destStop ? _sn(destStop) : (d.phase || 'destination');
-  var myPhase = d.phase || '';
+  var myPhase  = d.phase || '';
+
+  /* Destination: prefer the day's own sleep location for intermediate legs
+     (e.g. "Walmart Fredericksburg" on the night before arriving home).
+     Fall back to the stop's city name for same-day arrival legs.         */
+  var destName;
+  if (d.sleep && d.sleep !== 'HOME!' && d.sleep !== '') {
+    var _cleaned = _cleanSleepLabel(d.sleep);
+    // Only use sleep as destination when it looks like an overnight transit
+    // stop (walmart, boondock, etc.) — not an RV-park inside a destination
+    if (d.sleepType === 'walmart' || d.sleepType === 'boondock' || d.sleepType === 'rest_area') {
+      destName = _cleaned || (destStop ? _sn(destStop) : (d.phase || 'destination'));
+    } else {
+      destName = destStop ? _sn(destStop) : (d.phase || 'destination');
+    }
+  } else if (d.sleep === 'HOME!' || !d.sleep) {
+    destName = destStop ? _sn(destStop) : (d.phase || 'destination');
+  } else {
+    destName = destStop ? _sn(destStop) : (d.phase || 'destination');
+  }
+
   // Find the immediate preceding non-removed day
   var prevDay = null;
   for (var pi = d.day - 2; pi >= 0; pi--) {
@@ -4510,9 +4540,9 @@ function _getDriveDayTitle(d) {
     var originName = prevPhase || (getStop(prevDay.stopId) ? _sn(getStop(prevDay.stopId)) : '');
     return originName ? (originName + ' \u2192 ' + destName) : d.title;
   } else {
-    // Same phase as previous day — this is a multi-leg drive (e.g. Day 2 of return trip).
-    // Use the previous day's sleep location as the departure city.
-    var prevSleep = prevDay.sleep || '';
+    // Same phase as previous day — multi-leg drive (e.g. Day 2 of return trip).
+    // Use the previous day's sleep location (cleaned) as the departure city.
+    var prevSleep = _cleanSleepLabel(prevDay.sleep || '');
     if (prevSleep && prevSleep !== destName) return prevSleep + ' \u2192 ' + destName;
     // Fallback: scan back to the first different-phase day for origin
     for (var bi = d.day - 2; bi >= 0; bi--) {
@@ -17686,6 +17716,7 @@ function tripCleanup() {
   if (typeof renderTools       === 'function') renderTools();
   if (typeof renderTripSettings === 'function') renderTripSettings();
   if (typeof _updateLoginDisplay === 'function') _updateLoginDisplay();
+  if (typeof renderDecisions   === 'function') renderDecisions(); // keep Decisions tab in sync
 
   /* Update header stats (day counter, progress bar) */
   var _hdrDay = document.getElementById('hdr-day');
@@ -18733,8 +18764,6 @@ function renderDecisions() {
 function getPauseGenieSuggestions(pauseId) {
   var pd = (appState.pauseDays || []).find(function(p) { return p.id === pauseId; });
   if (!pd) return;
-  var key = GEMINI_KEY || (CONFIG && CONFIG.geminiKey) || '';
-  if (!key) { showToast('No Gemini key configured', 2000); return; }
   var nights = (pd.startDate && pd.endDate)
     ? Math.max(0, Math.round((new Date(pd.endDate+'T00:00:00') - new Date(pd.startDate+'T00:00:00')) / 86400000))
     : 0;
@@ -18745,9 +18774,9 @@ function getPauseGenieSuggestions(pauseId) {
     return acc;
   }, []).join(', ');
   var prompt = 'I am on a ' + TRIP_DAYS.length + '-day RV road trip visiting: ' + stops + '. I added a trip pause of ' + nights + ' night(s) to fly to ' + (pd.destination || 'a destination') + ' (dates: ' + (pd.startDate||'?') + ' to ' + (pd.endDate||'?') + '). This has added ' + nights + ' extra day(s) to my trip. Give me exactly ' + nights + ' to ' + (nights+1) + ' specific, practical suggestions for how to shorten the RV trip to absorb these extra days — naming specific stops, which nights to cut, and what you\'d still keep. Format as a numbered list. Be direct and concrete. Under 200 words.';
-  fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, {
+  fetch(GEMINI_URL, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 400, temperature: 0.8 } })
   })
   .then(function(r) { return r.json(); })
   .then(function(data) {
@@ -18865,8 +18894,6 @@ function _decisionCard(s) {
 function getTripGenieSuggestions() {
   var vari = computeTripVariance();
   if (!vari || vari.daysDelta <= 0) { showToast('Trip is on schedule — no compression needed!', 2000); return; }
-  var key = GEMINI_KEY || (CONFIG && CONFIG.geminiKey) || '';
-  if (!key) { showToast('No Gemini key configured', 2000); return; }
   appState.tripGenieLoading = true;
   renderDecisions();
   var pauseSummary = (appState.pauseDays || []).map(function(pd) {
@@ -18878,10 +18905,10 @@ function getTripGenieSuggestions() {
     return acc;
   }, []).join(', ');
   var prompt = 'I am on a ' + TRIP_DAYS.length + '-day RV trip visiting: ' + stops + '. I have added ' + vari.pauseNights + ' off-trip pause night(s) for: ' + pauseSummary + '. This has pushed my trip ' + vari.daysDelta + ' day(s) over the original planned end date. Give me exactly ' + vari.daysDelta + ' to ' + (vari.daysDelta + 2) + ' specific, actionable suggestions to compress the trip and get back within the original timeframe. For each suggestion, name the specific stop, how many nights to cut, and what you would NOT miss. Format as a numbered list. Be concrete and practical. Keep it under 250 words.';
-  fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + key, {
+  fetch(GEMINI_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 500, temperature: 0.8 } })
   })
   .then(function(r) { return r.json(); })
   .then(function(data) {
@@ -19683,7 +19710,10 @@ function _smSeg(which) {
     stpDiv.style.display = 'block';
     if (btnSch) { btnSch.classList.remove('active'); }
     if (btnStp) { btnStp.classList.add('active'); }
+    // renderStops() targets #stops-content (regular planner); copy result into #sm-stops-content
     renderStops();
+    var _stpSrc = document.getElementById('stops-content');
+    if (_stpSrc) stpDiv.innerHTML = _stpSrc.innerHTML;
   }
 }
 
