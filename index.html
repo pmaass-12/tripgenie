@@ -2982,6 +2982,7 @@
         <div style="display:flex;flex-direction:column;align-items:flex-end;gap:7px;flex-shrink:0;margin-left:10px;">
           <button onclick="closePlaceInfo()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.4rem;line-height:1;width:34px;height:34px;border-radius:50%;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;">&#215;</button>
           <button id="aim-plan-btn" onclick="" style="display:none;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:.7rem;font-weight:800;padding:5px 10px;border-radius:100px;cursor:pointer;font-family:var(--font);white-space:nowrap;">+ Plan</button>
+          <button id="aim-hotels-btn" onclick="" style="display:none;background:rgba(123,47,190,.5);border:1px solid rgba(180,130,255,.5);color:#fff;font-size:.7rem;font-weight:800;padding:5px 10px;border-radius:100px;cursor:pointer;font-family:var(--font);white-space:nowrap;">🏨 Hotels</button>
         </div>
       </div>
     </div>
@@ -5871,6 +5872,17 @@ function phaseHeaderHtml(phase, firstDay) {
       + '</div>';
   }
 
+  /* ── Home: clean green header, no nights/days/remove controls ── */
+  if (firstDay.sleepType === 'home') {
+    return '<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--green);color:#fff;border-radius:10px;margin:18px 0 6px;">'
+      + '<span style="font-size:1.2rem;flex-shrink:0;">🏠</span>'
+      + '<div style="flex:1;min-width:0;">'
+      + '<div style="font-weight:900;font-size:1.08rem;letter-spacing:-.01em;">Home</div>'
+      + '<div style="font-size:.75rem;opacity:.8;font-weight:600;margin-top:2px;">Welcome back, Maass family! 🎉</div>'
+      + '</div>'
+      + '</div>';
+  }
+
   var pStop = getStop(firstDay.stopId);
   /* Check if this phase spans multiple stops — if so, scope to this stopId only */
   var _allPhaseStopIds = [];
@@ -5970,9 +5982,6 @@ function phaseHeaderHtml(phase, firstDay) {
 
     /* Area Info */
     + '<button onclick="event.stopPropagation();openAreaInfo(\'' + _safePhase + '\',' + firstDay.stopId + ')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:5px 11px;font-size:.73rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">&#128269; Area Info</button>'
-
-    /* Hotels */
-    + '<button onclick="event.stopPropagation();openHotelsModal(\'' + _safePhase + '\',' + firstDay.stopId + ')" style="background:rgba(123,47,190,.35);border:1px solid rgba(160,100,220,.5);color:#fff;border-radius:8px;padding:5px 11px;font-size:.73rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">&#127968; Hotels</button>'
 
     /* − Days + */
     + '<div style="display:inline-flex;align-items:center;gap:0;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;overflow:hidden;flex-shrink:0;">'
@@ -6179,23 +6188,20 @@ function loadStopWeather(stopId) {
 
 function _renderPauseScheduleBlock(pd, nights) {
   var nightStr = nights + ' night' + (nights !== 1 ? 's' : '');
-  var dateRange = pd.startDate ? pd.startDate + (pd.endDate ? ' → ' + pd.endDate : '') : '';
-  return '<div style="background:#fff8e1;border:2px dashed #f57c00;border-radius:10px;margin-bottom:6px;overflow:hidden;">'
-    + '<div style="display:grid;grid-template-columns:76px 1fr;align-items:center;gap:0;">'
-    + '<div style="display:flex;flex-direction:column;align-self:stretch;min-width:76px;">'
-    + '<div style="background:#f57c00;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:1px;padding:6px 8px;">'
-    + '<i class="fa-solid fa-plane-departure" style="font-size:.75rem;font-weight:900;"></i>'
-    + '<span style="font-size:.82rem;font-weight:900;">' + nightStr + '</span>'
-    + '</div>'
-    + '<div style="background:#fff3e0;text-align:center;padding:3px 4px;font-size:.6rem;font-weight:800;color:#f57c00;letter-spacing:.04em;border-top:1px solid #f57c00;white-space:nowrap;">PAUSE</div>'
-    + '</div>'
-    + '<div style="padding:10px 14px;">'
-    + '<div style="font-weight:800;font-size:.88rem;color:#e65100;margin-bottom:3px;"><i class="fa-solid fa-plane-departure"></i> Trip Pause — ' + (pd.destination || 'Away from RV') + '</div>'
-    + '<div style="font-size:.75rem;color:#795548;line-height:1.5;">'
-    + (dateRange ? dateRange + ' · ' : '') + nightStr + ' off the road'
-    + (pd.flightOut ? '<br>✈ Out: ' + pd.flightOut + (pd.flightRet ? ' · In: ' + pd.flightRet : '') : '')
+  var _startD   = pd.startDate ? new Date(pd.startDate + 'T12:00:00') : null;
+  var _dateLabel = _startD ? _startD.toLocaleDateString('en-US', { month:'short', day:'numeric' }) : '';
+  var _dest = pd.destination || 'Away from RV';
+  /* Styled like a phase header but orange — clearly a pause, not a stop */
+  return '<div style="display:flex;align-items:center;gap:0;padding:10px 16px;background:#e65100;color:#fff;border-radius:10px;margin:18px 0 6px;flex-wrap:wrap;row-gap:6px;">'
+    + '<div style="flex:1;min-width:160px;">'
+    + '<div style="font-weight:900;font-size:1.05rem;letter-spacing:-.01em;">✈️ Trip Pause — ' + _dest + '</div>'
+    + '<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+    + (_dateLabel ? '<span style="font-size:.75rem;opacity:.75;font-weight:600;">' + _dateLabel + '</span><span style="opacity:.4;font-size:.7rem;">·</span>' : '')
+    + '<span style="font-size:.75rem;opacity:.75;font-weight:600;">' + nightStr + ' off the road</span>'
+    + (pd.flightOut ? '<span style="opacity:.4;font-size:.7rem;">·</span><span style="font-size:.73rem;opacity:.8;">✈ Out: ' + pd.flightOut + (pd.flightRet ? ' · In: ' + pd.flightRet : '') + '</span>' : '')
     + '</div>'
     + '</div>'
+    + '<span style="font-size:.7rem;font-weight:800;letter-spacing:.06em;opacity:.6;text-transform:uppercase;background:rgba(255,255,255,.15);border-radius:100px;padding:2px 9px;border:1px solid rgba(255,255,255,.25);flex-shrink:0;">PAUSE</span>'
     + '</div>';
 }
 
@@ -6244,7 +6250,11 @@ function renderSchedule() {
     .sort(function(a,b) { return a.startDate < b.startDate ? -1 : 1; });
   var _schPausePtrIdx = 0;
   var _schCumulativeNights = 0;
-  var _plannedEndDate = new Date(CONFIG.endDate + 'T00:00:00');
+  /* _plannedEndDate extends by total pause nights so pause-shifted days don't falsely show "Over Schedule" */
+  var _totalPauseNights = _schPauses.reduce(function(sum, pd) {
+    return sum + Math.max(0, Math.round((new Date(pd.endDate+'T00:00:00') - new Date(pd.startDate+'T00:00:00')) / 86400000));
+  }, 0);
+  var _plannedEndDate = new Date(new Date(CONFIG.endDate + 'T00:00:00').getTime() + _totalPauseNights * 86400000);
   var _overflowDayCount = 0;
 
   for (var i = 0; i < TRIP_DAYS.length; i++) {
@@ -11573,6 +11583,8 @@ function openPlaceInfo(type, stopId, idx) {
     planBtn.style.display = 'inline-block';
     planBtn.textContent = isPlan(stopId, type, idx) ? '\u2705 Planned' : '+ Plan';
   }
+  // Hide Hotels button for place/restaurant/activity views
+  var hotBP = document.getElementById('aim-hotels-btn'); if (hotBP) { hotBP.style.display = 'none'; hotBP.onclick = null; }
 
   // Address from item data
   var addrEl  = document.getElementById('aim-address-link');
@@ -11821,6 +11833,13 @@ function openAreaInfo(phase, stopId) {
   var rr = document.getElementById('aim-rating-row'); if (rr) rr.style.display = 'none';
   var resR = document.getElementById('aim-reservation-row'); if (resR) resR.style.display = 'none';
   var wxR = document.getElementById('aim-weather-row'); if (wxR) wxR.style.display = 'none'; // hidden by default; openMapStopInfo re-shows
+  // Show Hotels button for area info views
+  var hotB = document.getElementById('aim-hotels-btn');
+  if (hotB) {
+    hotB.style.display = 'inline-flex';
+    hotB.style.alignItems = 'center';
+    (function(_ph, _sid) { hotB.onclick = function() { openHotelsModal(_ph, _sid); }; }(phase, stopId));
+  }
   _aimResetPhotoStrip();
   modal.classList.remove('hidden');
   document.body.style.overflow = 'hidden';
@@ -11942,6 +11961,7 @@ function openCampInfo(dayNum) {
   var rr = document.getElementById('aim-rating-row'); if (rr) rr.style.display = 'none';
   var resR = document.getElementById('aim-reservation-row'); if (resR) resR.style.display = 'none';
   var wxR3 = document.getElementById('aim-weather-row'); if (wxR3) wxR3.style.display = 'none';
+  var hotB2 = document.getElementById('aim-hotels-btn'); if (hotB2) { hotB2.style.display = 'none'; hotB2.onclick = null; }
   _aimResetPhotoStrip();
   document.getElementById('ai-info-modal').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
