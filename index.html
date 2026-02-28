@@ -5049,7 +5049,7 @@ function buildMapMarkers(mapObj) {
     const stopDesc = (stop.description || stop.desc || '');
     const popup = `
       <div style="min-width:230px;max-width:290px;font-family:-apple-system,sans-serif;">
-        <div style="font-weight:800;font-size:.98rem;margin-bottom:2px;">${stopEmoji} ${stop.name}${stop.state ? ', ' + stop.state : ''}</div>
+        <div style="font-weight:800;font-size:.98rem;margin-bottom:2px;display:flex;align-items:center;gap:6px;"><span style="display:inline-flex;align-items:center;justify-content:center;background:#E8813A;color:#fff;border-radius:50%;width:22px;height:22px;font-size:.7rem;font-weight:900;flex-shrink:0;">${_stopNum}</span> ${stop.name}${stop.state ? ', ' + stop.state : ''}</div>
         <div style="font-size:.76rem;color:#888;margin-bottom:9px;">${firstDay ? formatDate(firstDay.date) : ''} &nbsp;·&nbsp; ${nights} night${nights!==1?'s':''}</div>
         ${weatherRow}
         ${stopDesc ? `<div style="font-size:.79rem;color:#444;line-height:1.5;margin-bottom:8px;">${stopDesc.substring(0, 110)}${stopDesc.length > 110 ? '…' : ''}</div>` : ''}
@@ -5073,16 +5073,19 @@ function _clearAndRebuildMapMarkers(mapObj) {
 }
 
 function initMainMap() {
-  /* Force a real pixel height on the map container — Leaflet needs this or renders blank */
+  /* Force a real pixel height on the map container — Leaflet needs this or renders blank.
+     We calculate from the tab panel height minus the map header row, rather than measuring
+     the wrap (which may not have layout yet when first opened). */
   var _mc = document.getElementById('map-container');
   if (_mc) {
-    var _wrap = _mc.closest('.map-nav-wrap') || _mc.parentElement;
-    var _wh = (_wrap && _wrap.offsetHeight > 10) ? _wrap.offsetHeight : 0;
-    if (_wh < 10) {
-      /* fallback: calc from viewport minus header/nav */
-      _wh = window.innerHeight - 200;
-    }
+    var _tabPanel = document.getElementById('tab-map');
+    var _tabH = _tabPanel ? _tabPanel.offsetHeight : 0;
+    /* Subtract the header row (~60px) and gaps/padding (~32px) */
+    var _wh = _tabH > 100 ? _tabH - 92 : (window.innerHeight - 230);
     _mc.style.height = _wh + 'px';
+    /* Also sync the wrap height so CSS doesn't override */
+    var _wrap = _mc.closest('.map-nav-wrap');
+    if (_wrap) _wrap.style.height = _wh + 'px';
   }
   if (mainMap) {
     mainMap.invalidateSize();
