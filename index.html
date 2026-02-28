@@ -2055,6 +2055,7 @@
   .nav-stop-item:hover { background:var(--blue-l); border-color:rgba(44,95,138,.25); }
   .nav-stop-item.nav-drag-over { border-color:var(--orange) !important; background:var(--orange-l) !important; box-shadow:0 0 0 2px rgba(232,129,58,.18); }
   .nav-stop-item.nav-dragging { opacity:.4; }
+  #map-nav-resizer:hover { background:var(--border) !important; }
   @media (max-width:480px) {
     .map-nav-wrap { flex-direction:column !important; }
     #map-stop-nav { width:100% !important; max-height:110px; border-right:none; border-bottom:1px solid var(--border); }
@@ -2396,6 +2397,8 @@
             </div>
             <div id="map-nav-list"></div>
           </div>
+          <!-- Resize handle -->
+          <div id="map-nav-resizer" style="width:5px;flex-shrink:0;cursor:col-resize;background:transparent;transition:background .15s;z-index:1;" onmousedown="_navResizeStart(event)" title="Drag to resize"></div>
           <!-- Leaflet map -->
           <div id="map-container" style="flex:1;min-height:0;"></div>
         </div>
@@ -4884,6 +4887,30 @@ function _mapAddStopConfirm() {
   var afterIdx = afterEl ? parseInt(afterEl.value) : -1;
   var nights = nightsEl ? Math.max(1, parseInt(nightsEl.value) || 2) : 2;
 
+  /* If opened via button (sentinel coords), geocode the typed name first */
+  var _isSentinel = (_mapAddStopLatLng.lat === 39 && _mapAddStopLatLng.lng === -98);
+  if (_isSentinel) {
+    var _addBtn = document.querySelector('#map-add-stop-modal button[onclick="_mapAddStopConfirm()"]');
+    if (_addBtn) { _addBtn.disabled = true; _addBtn.textContent = '🔍 Looking up…'; }
+    fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(name) + '&limit=1&countrycodes=us', {
+      headers: { 'Accept-Language': 'en' }
+    }).then(function(r) { return r.json(); }).then(function(results) {
+      if (results && results[0]) {
+        _mapAddStopLatLng = { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) };
+      }
+      if (_addBtn) { _addBtn.disabled = false; _addBtn.innerHTML = '✅ Add to Trip'; }
+      _mapAddStopSave(name, afterIdx, nights);
+    }).catch(function() {
+      _mapAddStopLatLng = { lat: 37, lng: -98 }; /* fallback: use approx US center */
+      if (_addBtn) { _addBtn.disabled = false; _addBtn.innerHTML = '✅ Add to Trip'; }
+      _mapAddStopSave(name, afterIdx, nights);
+    });
+    return;
+  }
+  _mapAddStopSave(name, afterIdx, nights);
+}
+
+function _mapAddStopSave(name, afterIdx, nights) {
   /* Build ordered stop ID list (same as renderStopNavigator) */
   var _removedIds = appState.removedStops || {};
   var _homeStop = (typeof _tripHomeStop === 'function') ? _tripHomeStop() : null;
@@ -4966,6 +4993,53 @@ function _mapAddStopConfirm() {
   renderSchedule();
   if (mainMap) _clearAndRebuildMapMarkers(mainMap);
   showToast('📍 ' + name + ' added to your trip!', 2500);
+}
+/* ── SIDEBAR RESIZE ──────────────────────────────────────────────── */
+var _navResizing = false, _navResizeStartX = 0, _navResizeStartW = 0;
+function _navResizeStart(e) {
+  var nav = document.getElementById('map-stop-nav');
+  if (!nav) return;
+  _navResizing = true;
+  _navResizeStartX = e.clientX;
+  _navResizeStartW = nav.offsetWidth;
+  var resizer = document.getElementById('map-nav-resizer');
+  if (resizer) resizer.style.background = 'var(--orange)';
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  document.addEventListener('mousemove', _navResizeMove);
+  document.addEventListener('mouseup', _navResizeEnd);
+  e.preventDefault();
+}
+function _navResizeMove(e) {
+  if (!_navResizing) return;
+  var nav = document.getElementById('map-stop-nav');
+  if (!nav) return;
+  var newW = Math.max(140, Math.min(420, _navResizeStartW + (e.clientX - _navResizeStartX)));
+  nav.style.width = newW + 'px';
+}
+function _navResizeEnd() {
+  _navResizing = false;
+  var resizer = document.getElementById('map-nav-resizer');
+  if (resizer) resizer.style.background = 'transparent';
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  document.removeEventListener('mousemove', _navResizeMove);
+  document.removeEventListener('mouseup', _navResizeEnd);
+  /* Persist width */
+  var nav = document.getElementById('map-stop-nav');
+  if (nav) { try { localStorage.setItem('navSidebarW', nav.offsetWidth); } catch(e){} }
+  /* Tell Leaflet the map container changed size */
+  if (mainMap) setTimeout(function(){ mainMap.invalidateSize(); }, 50);
+}
+/* Restore persisted width on map open */
+function _navRestoreWidth() {
+  try {
+    var w = parseInt(localStorage.getItem('navSidebarW'));
+    if (w >= 140 && w <= 420) {
+      var nav = document.getElementById('map-stop-nav');
+      if (nav) nav.style.width = w + 'px';
+    }
+  } catch(e) {}
 }
 /* ─────────────────────────────────────────────────────────────────── */
 
@@ -5295,6 +5369,7 @@ function initMainMap() {
     _mapAddStopOpen(e.latlng);
   });
   renderStopNavigator();
+  _navRestoreWidth();
 }
 
 /* Called from initApp() after trip data changes — redraws map markers without re-creating the map */
