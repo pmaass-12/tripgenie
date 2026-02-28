@@ -9412,7 +9412,8 @@ function renderDayTimeBlocks(d, stop) {
 
     /* Post-arrival dinner — based on check-in time, not physical arrival */
     if (_checkInH < 18 && dRest) {
-      var dSub2  = ovSub('dinner', (dRest.item.type || '') + (dRest.item.price ? ' \u00b7 ' + dRest.item.price : '') + (dRest.item.hours ? ' \u00b7 ' + dRest.item.hours : ''));
+      var _dinLoc = stop ? (stop.name + (stop.state ? ', ' + stop.state : '')) : '';
+      var dSub2  = ovSub('dinner', (dRest.item.type || '') + (dRest.item.price ? ' \u00b7 ' + dRest.item.price : '') + (dRest.item.hours ? ' \u00b7 ' + dRest.item.hours : '') + (_dinLoc ? ' \u00b7 ' + _dinLoc : ''));
       var dSkip2 = (stop && rests.length > 2) ? 'skipMeal(' + d.day + ',\'dinner\')' : '';
       var _dinH  = Math.max(_checkInH + 1.5, 17.5);
       _items.push({ key:'dinner', html: tbbRow(ovTime('dinner', _fmtHour(_dinH)),'&#127869;',
@@ -9464,18 +9465,35 @@ function renderDayTimeBlocks(d, stop) {
       null,false,'openCampInfo('+d.day+')','','sleep') });
   }
 
-  /* Apply custom order if set — applies to both explore days and drive days */
+  /* Apply custom order if set */
   if (_orderKeys && _orderKeys.length) {
-    var _ordered = [];
-    _orderKeys.forEach(function(k) {
-      var found = _items.filter(function(it) { return it.key === k; })[0];
-      if (found) _ordered.push(found);
-    });
-    /* append any items not in saved order (e.g. newly added) */
-    _items.forEach(function(it) {
-      if (!_ordered.some(function(o) { return o.key === it.key; })) _ordered.push(it);
-    });
-    _items = _ordered;
+    if (d.driveDay) {
+      /* Drive days: drive/drive2/sleep are structural anchors — never move them.
+         Only reorder the movable slots (breakfast, lunch, act0, act1, dinner)
+         among themselves, keeping them in the same positions relative to anchors. */
+      var _ANCHORS = { drive:true, drive2:true, sleep:true };
+      var _movable = _items.filter(function(it) { return !_ANCHORS[it.key]; });
+      _movable.sort(function(a, b) {
+        var ai = _orderKeys.indexOf(a.key), bi = _orderKeys.indexOf(b.key);
+        if (ai === -1) ai = 9999; if (bi === -1) bi = 9999;
+        return ai - bi;
+      });
+      var _mIdx = 0;
+      _items = _items.map(function(it) {
+        return _ANCHORS[it.key] ? it : (_movable[_mIdx++] || it);
+      });
+    } else {
+      /* Explore days: full reorder by saved key order */
+      var _ordered = [];
+      _orderKeys.forEach(function(k) {
+        var found = _items.filter(function(it) { return it.key === k; })[0];
+        if (found) _ordered.push(found);
+      });
+      _items.forEach(function(it) {
+        if (!_ordered.some(function(o) { return o.key === it.key; })) _ordered.push(it);
+      });
+      _items = _ordered;
+    }
   }
 
   /* Render with drive-time separators between non-drive editable items */
