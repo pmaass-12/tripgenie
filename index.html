@@ -2049,7 +2049,7 @@
 
   /* ── Map stop navigator: always side-by-side (row) layout ───────── */
   .map-nav-wrap { display:flex; flex-direction:row; flex:1; min-height:0; gap:0; border-radius:var(--radius); overflow:hidden; border:1px solid var(--border); box-shadow:var(--shadow); }
-  #map-stop-nav { width:220px; flex-shrink:0; background:var(--card); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+  #map-stop-nav { width:260px; flex-shrink:0; background:var(--card); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
   #map-nav-list { overflow-y:auto; flex:1; padding:6px; display:flex; flex-direction:column; gap:3px; }
   .nav-stop-item { display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:8px; background:var(--bg); border:1.5px solid transparent; cursor:grab; user-select:none; -webkit-user-select:none; transition:background .12s, border-color .12s, box-shadow .12s; }
   .nav-stop-item:hover { background:var(--blue-l); border-color:rgba(44,95,138,.25); }
@@ -4967,6 +4967,7 @@ function _mapAddStopSave(name, afterIdx, nights) {
       stopId: newId,
       phase: stopName,
       name: stopName,
+      title: 'Explore ' + stopName,
       sleep: stopName + (stopState ? ', ' + stopState : ''),
       sleepType: 'campground',
       items: []
@@ -5086,6 +5087,18 @@ function renderStopNavigator() {
   _orderedIds.forEach(function(stopId, idx) {
     var stop    = getStop(stopId);
     var nights  = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; }).length;
+    var stopDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
+    var firstDate = stopDays.length ? stopDays[0].date : '';
+    var lastDate = stopDays.length ? stopDays[stopDays.length-1].date : '';
+    var dateRange = '';
+    if (firstDate && lastDate) {
+      var _fmt = function(ds) {
+        var p = ds.split('-'); if (p.length < 3) return ds;
+        var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        return months[parseInt(p[1])-1] + ' ' + parseInt(p[2]);
+      };
+      dateRange = _fmt(firstDate) + (firstDate !== lastDate ? ' – ' + _fmt(lastDate) : '');
+    }
     var stayMeta = (typeof _getStayMeta === 'function') ? _getStayMeta(stopId) : { icon:'🏕️' };
     var name    = stop ? (stop.name || stop.phase || ('Stop ' + (idx+1))) : ('Stop ' + (idx+1));
     var state   = stop && stop.state ? ', ' + stop.state : '';
@@ -5102,7 +5115,7 @@ function renderStopNavigator() {
       + '<div style="width:24px;height:24px;background:var(--orange);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:900;flex-shrink:0;">' + num + '</div>'
       + '<div style="flex:1;min-width:0;font-size:.8rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);">' + name + state + '</div>'
       + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;color:var(--text-3);font-size:.72rem;white-space:nowrap;">'
-      + nights + 'n'
+      + (dateRange || (nights + 'n'))
       + '<button onclick="event.stopPropagation();_navDeleteStop(' + stopId + ',\'' + name.replace(/'/g,"\\'") + '\')" title="Remove stop" draggable="false" style="background:none;border:none;cursor:pointer;padding:2px 3px;color:var(--text-3);font-size:.75rem;line-height:1;border-radius:4px;display:flex;align-items:center;" onmouseenter="this.style.color=\'#e53e3e\'" onmouseleave="this.style.color=\'var(--text-3)\'"><i class="fa-solid fa-xmark"></i></button>'
       + '<i class="fa-solid fa-grip-vertical" style="font-size:.72rem;cursor:grab;"></i>'
       + '</div>'
@@ -5687,7 +5700,7 @@ function _cycleToStayType(stopId, targetType) {
 function addPhaseDay(stopId) {
   if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
   appState.phaseExtraDays[stopId] = (appState.phaseExtraDays[stopId] || 0) + 1;
-  saveState(appState); renderSchedule();
+  saveState(appState); renderSchedule(); renderStopNavigator();
   showToast('Extra day added!', 1600);
 }
 function removePhaseDay(stopId) {
@@ -5697,7 +5710,7 @@ function removePhaseDay(stopId) {
   var cur = appState.phaseExtraDays[stopId] || 0;
   if (cur <= minAllowed) { showToast('Need at least 1 day at each stop!', 1800); return; }
   appState.phaseExtraDays[stopId] = cur - 1;
-  saveState(appState); renderSchedule();
+  saveState(appState); renderSchedule(); renderStopNavigator();
   var newVal = appState.phaseExtraDays[stopId];
   showToast(newVal < 0 ? 'Day hidden from schedule' : 'Extra day removed', 1600);
 }
@@ -5946,7 +5959,7 @@ function renderSchedule() {
     html += '<div style="padding:10px 14px;cursor:pointer;" onclick="openDayDetail(' + d.day + ')" title="View day schedule">';
     html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">';
     if (stop) html += '<span style="font-size:.95rem">' + stop.emoji + '</span>';
-    html += '<span style="font-weight:700;font-size:1rem;color:var(--text);line-height:1.3;">' + (d.driveDay ? _getDriveDayTitle(d) : d.title) + '</span>';
+    html += '<span style="font-weight:700;font-size:1rem;color:var(--text);line-height:1.3;">' + (d.driveDay ? _getDriveDayTitle(d) : (d.title || d.name || 'Explore ' + (d.phase || 'day'))) + '</span>';
     if (isToday) html += '<span style="background:var(--orange);color:#fff;font-size:.68rem;font-weight:800;padding:2px 8px;border-radius:100px;text-transform:uppercase;">Today</span>';
     if (_isOverflow) html += '<span style="background:#c62828;color:#fff;font-size:.65rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;">🔺 Over Schedule</span>';
     html += '</div>';
@@ -12950,6 +12963,9 @@ function renderTripSettings() {
   }
   html += '</div>';
 
+  // Cleanup button
+  html += '<button onclick="tripCleanup()" style="width:100%;background:var(--card);color:var(--text-2);border:1.5px solid var(--border);border-radius:var(--radius-s);padding:10px;font-size:.88rem;font-weight:700;cursor:pointer;font-family:var(--font);margin-bottom:8px;display:flex;align-items:center;justify-content:center;gap:6px;"><i class="fa-solid fa-wrench"></i> Fix / Cleanup Trip Data</button>';
+
   // Save button
   html += '<button onclick="saveTripSettings()" style="width:100%;background:var(--orange);color:#fff;border:none;border-radius:var(--radius-s);padding:13px;font-size:.95rem;font-weight:800;cursor:pointer;font-family:var(--font);">&#10003; Save Trip Settings</button>';
 
@@ -16666,6 +16682,32 @@ function _getOverstayedStops(maxDays) {
   return Object.keys(counts)
     .filter(function(id) { return counts[id] > maxDays; })
     .map(function(id) { return names[id] + ' (' + counts[id] + ' days)'; });
+}
+
+function tripCleanup() {
+  var fixed = 0;
+  TRIP_DAYS.forEach(function(d) {
+    if (!d.title) {
+      d.title = d.driveDay
+        ? ('Drive to ' + (d.sleep || 'next stop'))
+        : ('Explore ' + (d.name || d.phase || 'day'));
+      fixed++;
+    }
+    if (!d.name && d.phase) { d.name = d.phase; fixed++; }
+  });
+  /* Re-date from CONFIG.startDate */
+  var _startMs = new Date(CONFIG.startDate + 'T12:00:00').getTime();
+  TRIP_DAYS.forEach(function(d, i) {
+    d.day = i + 1;
+    var dt = new Date(_startMs + i * 86400000);
+    d.date = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
+  });
+  appState.customTripData = { stops: TRIP_STOPS.slice(), days: TRIP_DAYS.slice() };
+  saveState(appState);
+  renderSchedule();
+  renderStopNavigator();
+  if (window.mainMap) setTimeout(function(){ _clearAndRebuildMapMarkers(window.mainMap); }, 200);
+  showToast('🔧 Trip cleaned up' + (fixed ? ' — fixed ' + fixed + ' day' + (fixed !== 1 ? 's' : '') : ' — all good!'), 2500);
 }
 
 function _enforceMaxDays() {
