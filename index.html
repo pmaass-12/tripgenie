@@ -2567,6 +2567,7 @@
       <div style="font-size:.72rem;opacity:.8;">Your AI road-trip assistant — ask anything!</div>
     </div>
     <button id="tg-voice-toggle" onclick="_tgToggleVoiceMode()" title="Toggle voice readback mode" style="background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:6px 12px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);">🔇 Voice</button>
+    <button onclick="clearTripGenieHistory()" title="Clear conversation memory" style="background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.25);color:rgba(255,255,255,.8);border-radius:100px;padding:6px 10px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);">🗑️</button>
     <button onclick="closeTripGenie()" style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:100px;padding:6px 14px;font-size:.85rem;font-weight:800;cursor:pointer;font-family:var(--font);">&#215; Close</button>
   </div>
 
@@ -15760,10 +15761,11 @@ function revealMadLib() {
 /* ── GAMES TAB end ──────────────────────────────────────────────── */
 
 /* ── TRIPGENIE AI ASSISTANT ─────────────────────────────────────── */
-var _tgHistory    = [];   // { role:'user'|'genie', text, imgBase64? }
+var _tgHistory    = [];   // { role:'user'|'genie', text (plain), html (rendered) }
 var _tgPhotoB64   = null; // base64 of attached photo (no data: prefix)
 var _tgPhotoMime  = 'image/jpeg';
 var _tgBusy       = false;
+var _TG_MAX_SAVED = 60;   // max messages to keep in persistent memory
 
 /* ── TRIPGENIE VOICE MODE ────────────────────────────────────────
    Uses Web Speech API for input (SpeechRecognition) and output
@@ -15889,14 +15891,52 @@ function openTripGenie(prefill) {
   var drawer = document.getElementById('tg-drawer');
   drawer.classList.add('open');
   document.body.style.overflow = 'hidden';
-  if (_tgHistory.length === 0) _tgRenderWelcome();
+  /* Restore persisted history on first open this session */
+  if (_tgHistory.length === 0) {
+    var _saved = appState && appState.tgHistory;
+    if (_saved && _saved.length > 0) {
+      /* Re-render saved messages into the DOM */
+      _tgHistory = _saved.slice();
+      var _hist = document.getElementById('tg-history');
+      if (_hist) {
+        _hist.innerHTML = '';
+        _tgHistory.forEach(function(msg) {
+          var div = document.createElement('div');
+          div.className = msg.role === 'user' ? 'tg-bubble-user' : 'tg-bubble-genie';
+          div.innerHTML = msg.html || _tgFormatResponse(msg.text);
+          _hist.appendChild(div);
+        });
+        /* Memory restored notice */
+        var _noticeDiv = document.createElement('div');
+        _noticeDiv.style.cssText = 'text-align:center;font-size:.72rem;color:var(--text-3);padding:8px 16px;';
+        _noticeDiv.textContent = '💬 ' + _tgHistory.length + ' messages restored from memory';
+        _hist.insertBefore(_noticeDiv, _hist.firstChild);
+        _hist.scrollTop = _hist.scrollHeight;
+      }
+      document.getElementById('tg-suggestions').style.display = 'none';
+    } else {
+      _tgRenderWelcome();
+    }
+  }
   setTimeout(function() {
     var inp = document.getElementById('tg-input');
     if (inp) {
       if (prefill) inp.value = prefill;
       inp.focus();
     }
+    var h = document.getElementById('tg-history');
+    if (h) h.scrollTop = h.scrollHeight;
   }, 350);
+}
+
+function clearTripGenieHistory() {
+  _tgHistory = [];
+  if (appState) { appState.tgHistory = []; saveState(appState); }
+  var hist = document.getElementById('tg-history');
+  if (hist) hist.innerHTML = '';
+  document.getElementById('tg-suggestions').style.display = '';
+  _tgRenderWelcome();
+  showToast('💬 TripGenie memory cleared', 1800);
 }
 
 function closeTripGenie() {
@@ -15920,7 +15960,7 @@ function _tgRenderWelcome() {
   );
 }
 
-function _tgAppendBubble(role, html) {
+function _tgAppendBubble(role, html, plainText) {
   var hist = document.getElementById('tg-history');
   if (!hist) return;
   var div = document.createElement('div');
@@ -15928,6 +15968,13 @@ function _tgAppendBubble(role, html) {
   div.innerHTML = html;
   hist.appendChild(div);
   hist.scrollTop = hist.scrollHeight;
+  /* Track in history array for persistence (skip thinking indicators) */
+  if (plainText !== undefined && role !== 'thinking') {
+    _tgHistory.push({ role: role, text: plainText, html: html });
+    /* Trim to max and persist */
+    if (_tgHistory.length > _TG_MAX_SAVED) _tgHistory = _tgHistory.slice(-_TG_MAX_SAVED);
+    if (appState) { appState.tgHistory = _tgHistory.slice(); saveState(appState); }
+  }
 }
 
 function _tgFormatResponse(text) {
@@ -15991,7 +16038,7 @@ function askTripGenie() {
     userHtml += '<img class="tg-photo-prev" src="data:' + _tgPhotoMime + ';base64,' + _tgPhotoB64 + '" alt="Photo" />';
   }
   userHtml += (text ? _tgFormatResponse(text) : '<em>📷 Photo attached</em>');
-  _tgAppendBubble('user', userHtml);
+  _tgAppendBubble('user', userHtml, text || '(photo)');
 
   /* Snapshot photo before clearing */
   var photoB64  = _tgPhotoB64;
@@ -16035,13 +16082,23 @@ function askTripGenie() {
     + 'Keep responses concise but thorough. Use bullet points for steps.'
     + _getPersonalizationContext();
 
-  var parts = [{ text: context + '\n\nUser question: ' + (text || '(See attached photo — describe what you see and provide helpful context for an RV family trip)') }];
-  if (photoB64) {
-    parts.push({ inline_data: { mime_type: photoMime, data: photoB64 } });
-  }
+  /* Build multi-turn conversation contents for Gemini — include last 6 turns of history */
+  var _tgContents = [{ role: 'user', parts: [{ text: context }] }, { role: 'model', parts: [{ text: 'Understood! I\'m TripGenie, ready to help the Maass family with their RV adventure. Ask me anything!' }] }];
+  /* Append recent conversation turns (last 6 pairs = 12 messages) for memory context */
+  var _histForApi = _tgHistory.slice(-12);
+  _histForApi.forEach(function(msg) {
+    /* Skip entries without plain text (thinking indicators, etc.) */
+    if (!msg.text || msg.text === '(photo)') return;
+    _tgContents.push({ role: msg.role === 'user' ? 'user' : 'model', parts: [{ text: msg.text }] });
+  });
+  /* Add current user message (with photo if any) */
+  var curParts = [];
+  if (photoB64) curParts.push({ inline_data: { mime_type: photoMime, data: photoB64 } });
+  curParts.push({ text: text || 'Describe what you see in this photo and provide helpful context for an RV family trip.' });
+  _tgContents.push({ role: 'user', parts: curParts });
 
   var body = JSON.stringify({
-    contents: [{ parts: parts }],
+    contents: _tgContents,
     generationConfig: { maxOutputTokens: 600, temperature: 0.75 }
   });
 
@@ -16057,7 +16114,7 @@ function askTripGenie() {
     var _tgRawText = (data.candidates && data.candidates[0] && data.candidates[0].content
               && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
               && data.candidates[0].content.parts[0].text) || 'Sorry, I couldn\'t get a response. Try again!';
-    _tgAppendBubble('genie', _tgFormatResponse(_tgRawText));
+    _tgAppendBubble('genie', _tgFormatResponse(_tgRawText), _tgRawText);
     _tgSpeak(_tgRawText);
     _tgBusy = false;
   })
