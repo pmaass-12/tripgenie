@@ -126,9 +126,19 @@ tripgenie/
 
 ---
 
+- Session 10 (2026-02-28):
+  - **Mobile phase header redesign**: Restructured `phaseHeaderHtml` into 2-row mobile-first layout. Row 1: ↑/↓ + large city name + accommodation badge + weather pill + music button. Row 2: action strip (Area Info, − Days +, Remove). Much more readable on small screens. Snapshot regenerated.
+  - **Accommodation type system**: `_STAY_TYPES` array (campground 🏕️, hotel 🏨, cabin 🌲, vacation rental 🏠). Stored in `appState.stayType[stopId]`. `_cycleStayType(stopId)` cycles on tap, shows toast, re-renders. Badge visible in phase header row 1. `_getStayContext(stopId)` generates AI prompt string for future injection.
+  - **TripGenie quick-access on day detail modal**: 4 quick-prompt buttons in DDM header (Why go here? / Things to do / Best eats / Pro tips). `openTripGenieAboutStop(question)` pre-fills with stop name + question. `window._ddmCurrentStop` set in `openDayDetail`.
+  - **Drive mode large Ask Genie button**: Full-width gradient button (purple→blue, ~64px tall) replacing compact genie bar. Large ✨ icon + text + mic icon. Calls `openTripGenie()` directly.
+  - **Voice-to-voice chat**: Web Speech API integration. 🎤 mic button in TripGenie input row — tap to start, tap again or wait for auto-send. 🔇/🔊 Voice toggle in TG header enables TTS readback of Genie responses. `_tgStartVoice()`, `_tgSetMicState()`, `_tgSpeak()`, `_tgToggleVoiceMode()`. Prefers natural voices (Samantha/Karen/Ava). Works on iOS Safari and Chrome/Android.
+
+---
+
 ## Suggested Next Steps
-- Push to GitHub (git push) when network is available — commits pending from sessions 8-9
+- Push to GitHub (git push) when network is available — commits pending from sessions 8-10
 - User needs to create Mapbox public token at mapbox.com (no secret scopes), then enter it in Trip Settings → RV Profile & Map Routing
-- Implement Gallery/Journal photo unification (user requested: upload to gallery, all photos available in journal entry)
+- Inject `_getStayContext(stopId)` into campground and area-info AI prompts (already written, just needs wiring)
 - Inject `getRestaurantPrefContext()` into campground + area info AI prompts alongside `getDietContext()`
+- Gallery/Journal photo unification (all photos in one pool, accessible from either tab)
 - Consider adding "Nashville" and "Fredericksburg" as proper TRIP_STOPS entries (currently inferred from TRIP_DAYS but no markers on map)

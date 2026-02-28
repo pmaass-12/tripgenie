@@ -2488,6 +2488,7 @@
       <div style="font-weight:900;font-size:1.05rem;letter-spacing:-.01em;">TripGenie</div>
       <div style="font-size:.72rem;opacity:.8;">Your AI road-trip assistant — ask anything!</div>
     </div>
+    <button id="tg-voice-toggle" onclick="_tgToggleVoiceMode()" title="Toggle voice readback mode" style="background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:6px 12px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);">🔇 Voice</button>
     <button onclick="closeTripGenie()" style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:100px;padding:6px 14px;font-size:.85rem;font-weight:800;cursor:pointer;font-family:var(--font);">&#215; Close</button>
   </div>
 
@@ -2522,6 +2523,7 @@
         oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
       <input type="file" id="tg-file-input" accept="image/*" style="display:none" onchange="handleTripGeniePhoto(event)" />
       <button class="tg-icon-btn" id="tg-photo-btn" onclick="document.getElementById('tg-file-input').click()" title="Attach a photo">📷</button>
+      <button class="tg-icon-btn" id="tg-mic-btn" onclick="_tgStartVoice()" title="Voice input — tap to speak">🎤</button>
       <button class="tg-icon-btn" id="tg-send-btn" onclick="askTripGenie()" title="Send">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
@@ -2584,6 +2586,13 @@
         <button onclick="closeDayDetail()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.4rem;line-height:1;width:34px;height:34px;border-radius:50%;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;flex-shrink:0;">&#215;</button>
       </div>
       <div style="font-size:.68rem;opacity:.7;margin-top:8px;font-weight:600;letter-spacing:.02em;">Hold a row to edit &nbsp;·&nbsp; Drag ⠿ to reorder &nbsp;·&nbsp; <span onclick="resetDaySchedule()" style="cursor:pointer;text-decoration:underline;opacity:1;color:rgba(255,255,255,.9);">↺ Reset order</span></div>
+      <!-- Ask TripGenie quick-access -->
+      <div id="ddm-tg-row" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.2);">
+        <button onclick="openTripGenieAboutStop('Why do people visit here? What makes it special?')" style="background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 11px;font-size:.73rem;font-weight:700;cursor:pointer;font-family:var(--font);">✨ Why go here?</button>
+        <button onclick="openTripGenieAboutStop('What are the best things to do here, especially for families with kids?')" style="background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 11px;font-size:.73rem;font-weight:700;cursor:pointer;font-family:var(--font);">🎯 Things to do</button>
+        <button onclick="openTripGenieAboutStop('What are the best local restaurants or food spots here?')" style="background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 11px;font-size:.73rem;font-weight:700;cursor:pointer;font-family:var(--font);">🍽️ Best eats</button>
+        <button onclick="openTripGenieAboutStop('What should we know before arriving here? Any tips or heads-up?')" style="background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 11px;font-size:.73rem;font-weight:700;cursor:pointer;font-family:var(--font);">💡 Pro tips</button>
+      </div>
       <div style="display:flex;gap:8px;margin-top:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,.2);flex-wrap:wrap;align-items:center;">
         <button id="ddm-arrive-btn"
           onclick="recordArrival()"
@@ -5027,27 +5036,77 @@ function phaseHeaderHtml(phase, firstDay) {
   var _arrowOn  = 'background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:50%;width:26px;height:26px;font-size:.68rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s,border-color .15s;';
   var _arrowOff = 'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.2);border-radius:50%;width:26px;height:26px;font-size:.68rem;cursor:default;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;';
 
-  return '<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--blue);color:#fff;border-radius:var(--radius-s);margin:20px 0 8px;flex-wrap:wrap;">'
-    + '<div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;">'
+  return '<div style="background:var(--blue);color:#fff;border-radius:var(--radius-s);margin:20px 0 8px;overflow:hidden;">'
+    /* ── Row 1: location info ── */
+    + '<div style="display:flex;align-items:center;gap:10px;padding:11px 14px;">'
+    + '<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">'
     + '<button onclick="event.stopPropagation();movePhase(' + firstDay.stopId + ',\'' + _safePhase + '\',\'up\')" style="' + (_phIsFirst ? _arrowOff : _arrowOn) + '" ' + (_phIsFirst ? 'disabled' : '') + ' title="Move stop earlier"><i class="fa-solid fa-chevron-up"></i></button>'
     + '<button onclick="event.stopPropagation();movePhase(' + firstDay.stopId + ',\'' + _safePhase + '\',\'down\')" style="' + (_phIsLast ? _arrowOff : _arrowOn) + '" ' + (_phIsLast ? 'disabled' : '') + ' title="Move stop later"><i class="fa-solid fa-chevron-down"></i></button>'
     + '</div>'
     + '<div style="flex:1;min-width:0;">'
-    + '<div style="font-weight:800;font-size:.97rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _displayPhase + '</div>'
-    + '<div style="font-size:.76rem;opacity:.8;">' + totalNights + ' night' + (totalNights !== 1 ? 's' : '') + (extras > 0 ? ' (+' + extras + ' added)' : '') + '</div>'
+    + '<div style="font-weight:900;font-size:1.05rem;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _displayPhase + '</div>'
+    + '<div style="font-size:.74rem;opacity:.85;margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+    + '<span>' + totalNights + ' night' + (totalNights !== 1 ? 's' : '') + (extras > 0 ? ' (+' + extras + ')' : '') + '</span>'
+    + (firstDay.springBreak ? '<span style="background:rgba(255,255,255,.25);border-radius:20px;padding:1px 8px;font-size:.7rem;font-weight:700;">&#127775; Spring Break</span>' : '')
+    + '<button onclick="event.stopPropagation();_cycleStayType(' + firstDay.stopId + ')" title="Tap to change accommodation type" style="background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:20px;padding:2px 8px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;">'
+    + _getStayMeta(firstDay.stopId).icon + ' ' + _getStayMeta(firstDay.stopId).label
+    + '</button>'
     + '</div>'
-    + (firstDay.springBreak ? '<span style="background:rgba(255,255,255,.2);border-radius:20px;padding:3px 10px;font-size:.73rem;font-weight:700;flex-shrink:0;">&#127775; Spring Break</span>' : '')
+    + '</div>'
+    + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0;">'
     + _wxHtml
-    + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">'
+    + '<button onclick="event.stopPropagation();_openMusicForStop(' + firstDay.stopId + ')" title="Local Music" style="background:#1DB954;border:none;color:#fff;border-radius:50%;width:30px;height:30px;font-size:.85rem;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;padding:0;">&#127926;</button>'
+    + '</div>'
+    + '</div>'
+    /* ── Row 2: action strip ── */
+    + '<div style="display:flex;align-items:center;gap:6px;padding:7px 14px;border-top:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.12);flex-wrap:wrap;">'
+    + '<button onclick="event.stopPropagation();openAreaInfo(\'' + _safePhase + '\',' + firstDay.stopId + ')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:6px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">&#128269; Area Info</button>'
+    + '<div style="flex:1;"></div>'
+    + '<div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">'
     + '<button onclick="event.stopPropagation();removePhaseDay(' + firstDay.stopId + ')" style="' + btnStyle + '" title="Remove a day">&#8722;</button>'
     + '<span style="font-size:.68rem;font-weight:800;opacity:.85;letter-spacing:.02em;white-space:nowrap;">Days</span>'
     + '<button onclick="event.stopPropagation();addPhaseDay(' + firstDay.stopId + ')" style="' + btnStyle + '" title="Add a day">&#43;</button>'
     + '</div>'
-    + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + _safePhase + '\')" style="background:rgba(220,80,60,.35);border:1px solid rgba(255,100,80,.5);color:#fff;border-radius:100px;padding:5px 10px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Remove this stop from trip">🗑️ Remove</button>'
-    + '<button onclick="event.stopPropagation();openAreaInfo(\'' + _safePhase + '\',' + firstDay.stopId + ')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 10px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">&#128269; Area Info</button>'
-    + '<button onclick="event.stopPropagation();_openMusicForStop(' + firstDay.stopId + ')" title="Local Music" style="background:#1DB954;border:2px solid rgba(255,255,255,.5);color:#fff;border-radius:50%;width:32px;height:32px;font-size:.9rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1;padding:0;">&#127926;</button>'
+    + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + _safePhase + '\')" style="background:rgba(220,80,60,.35);border:1px solid rgba(255,100,80,.5);color:#fff;border-radius:100px;padding:6px 10px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Remove this stop from trip">&#128465;&#65039; Remove</button>'
+    + '</div>'
     + '</div>';
 }
+
+/* ── ACCOMMODATION TYPE SYSTEM ──────────────────────────────────
+   Tracks whether each stop uses campground, hotel, cabin, or vacation rental.
+   Stored in appState.stayType[stopId]. Default = 'campground'.
+   ──────────────────────────────────────────────────────────────── */
+var _STAY_TYPES = [
+  { v:'campground', icon:'🏕️',  label:'Campground'      },
+  { v:'hotel',      icon:'🏨',  label:'Hotel/Motel'     },
+  { v:'cabin',      icon:'🌲',  label:'Cabin'           },
+  { v:'airbnb',     icon:'🏠',  label:'Vacation Rental' }
+];
+function _getStayType(stopId) {
+  return (appState.stayType && appState.stayType[stopId]) || 'campground';
+}
+function _getStayMeta(stopId) {
+  var t = _getStayType(stopId);
+  return _STAY_TYPES.find(function(s){ return s.v === t; }) || _STAY_TYPES[0];
+}
+function _cycleStayType(stopId) {
+  var cur = _getStayType(stopId);
+  var idx = _STAY_TYPES.findIndex(function(s){ return s.v === cur; });
+  var next = _STAY_TYPES[(idx + 1) % _STAY_TYPES.length];
+  if (!appState.stayType) appState.stayType = {};
+  appState.stayType[stopId] = next.v;
+  saveState(appState);
+  showToast(next.icon + ' Switched to ' + next.label + ' for this stop', 2000);
+  renderSchedule();
+}
+function _getStayContext(stopId) {
+  var meta = _getStayMeta(stopId);
+  if (meta.v === 'campground') return 'camping at an RV park or campground (check hookup availability, dump stations, laundry)';
+  if (meta.v === 'hotel') return 'staying at a hotel or motel (check RV parking availability, walking distance to amenities)';
+  if (meta.v === 'cabin') return 'staying at a cabin or glamping site (check for RV parking or alternative transport)';
+  return 'staying at a vacation rental (check driveway access for RV, parking alternatives)';
+}
+
 function addPhaseDay(stopId) {
   if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
   appState.phaseExtraDays[stopId] = (appState.phaseExtraDays[stopId] || 0) + 1;
@@ -9574,6 +9633,7 @@ function openDayDetail(dayNum) {
   if (!d) return;
   var stop = getStop(d.stopId);
   _ddmDayNum = dayNum;
+  window._ddmCurrentStop = stop;
   document.getElementById('ddm-phase').textContent = d.phase || '';
   document.getElementById('ddm-title').textContent = d.driveDay ? _getDriveDayTitle(d) : d.title;
   var metaParts = [];
@@ -9609,6 +9669,14 @@ function closeDayDetail() {
     }
   }
   document.body.style.overflow = '';
+}
+
+function openTripGenieAboutStop(question) {
+  var stop = window._ddmCurrentStop;
+  var stopName = stop ? (stop.name + (stop.state ? ', ' + stop.state : '')) : '';
+  var prefill = stopName ? stopName + ': ' + question : question;
+  closeDayDetail();
+  openTripGenie(prefill);
 }
 
 /* ── Time formatting helpers ───────────────────────────────────── */
@@ -14686,6 +14754,126 @@ var _tgPhotoB64   = null; // base64 of attached photo (no data: prefix)
 var _tgPhotoMime  = 'image/jpeg';
 var _tgBusy       = false;
 
+/* ── TRIPGENIE VOICE MODE ────────────────────────────────────────
+   Uses Web Speech API for input (SpeechRecognition) and output
+   (SpeechSynthesis). Works on iOS Safari, Chrome Android.
+   ──────────────────────────────────────────────────────────────── */
+var _tgVoiceMode    = false;   /* whether to read responses aloud */
+var _tgRecognition  = null;    /* active SpeechRecognition instance */
+var _tgSpeaking     = false;   /* guard for SpeechSynthesis */
+
+function _tgToggleVoiceMode() {
+  _tgVoiceMode = !_tgVoiceMode;
+  var btn = document.getElementById('tg-voice-toggle');
+  if (btn) {
+    btn.innerHTML    = _tgVoiceMode ? '🔊 Voice' : '🔇 Voice';
+    btn.style.background = _tgVoiceMode ? 'rgba(255,255,255,.35)' : 'rgba(255,255,255,.15)';
+    btn.style.borderColor = _tgVoiceMode ? 'rgba(255,255,255,.7)' : 'rgba(255,255,255,.3)';
+  }
+  if (_tgVoiceMode) {
+    /* Pre-load voices on first toggle */
+    if (window.speechSynthesis) window.speechSynthesis.getVoices();
+    showToast('🔊 Voice mode ON — Genie will read responses aloud', 2500);
+  } else {
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    showToast('🔇 Voice mode off', 1800);
+  }
+}
+
+function _tgStartVoice() {
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast('Voice input not supported on this browser.\nTry Chrome or Safari.', 3000); return; }
+
+  /* If already recognising, stop it */
+  if (_tgRecognition) {
+    try { _tgRecognition.stop(); } catch(e) {}
+    _tgRecognition = null;
+    _tgSetMicState(false);
+    return;
+  }
+
+  _tgSetMicState(true);
+  _tgRecognition = new SR();
+  _tgRecognition.continuous  = false;
+  _tgRecognition.interimResults = false;
+  _tgRecognition.lang        = 'en-US';
+
+  _tgRecognition.onresult = function(e) {
+    var transcript = e.results[0][0].transcript;
+    var inp = document.getElementById('tg-input');
+    if (inp) {
+      inp.value = transcript;
+      inp.style.height = 'auto';
+      inp.style.height = Math.min(inp.scrollHeight, 120) + 'px';
+    }
+    _tgRecognition = null;
+    _tgSetMicState(false);
+    /* Auto-send after brief delay so user can see what was heard */
+    setTimeout(function() { askTripGenie(); }, 400);
+  };
+
+  _tgRecognition.onerror = function(e) {
+    _tgRecognition = null;
+    _tgSetMicState(false);
+    var msg = e.error === 'not-allowed' ? 'Microphone access denied — check browser settings' : 'Voice input error — tap mic and try again';
+    showToast('🎤 ' + msg, 3000);
+  };
+
+  _tgRecognition.onend = function() {
+    if (_tgRecognition) { _tgRecognition = null; }
+    _tgSetMicState(false);
+  };
+
+  _tgRecognition.start();
+}
+
+function _tgSetMicState(listening) {
+  var btn = document.getElementById('tg-mic-btn');
+  if (!btn) return;
+  if (listening) {
+    btn.innerHTML = '🔴';
+    btn.style.background = 'rgba(231,76,60,.35)';
+    btn.style.borderColor = '#e74c3c';
+    btn.title = 'Listening… tap to cancel';
+  } else {
+    btn.innerHTML = '🎤';
+    btn.style.background = '';
+    btn.style.borderColor = '';
+    btn.title = 'Voice input — tap to speak';
+  }
+}
+
+function _tgSpeak(text) {
+  if (!_tgVoiceMode || !window.speechSynthesis) return;
+  /* Strip HTML tags and markdown */
+  var clean = text
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/[•*_#]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!clean) return;
+  window.speechSynthesis.cancel();
+  var utt = new SpeechSynthesisUtterance(clean);
+  utt.lang  = 'en-US';
+  utt.rate  = 0.92;
+  utt.pitch = 1.05;
+  /* Prefer a natural voice */
+  function _speak() {
+    var voices = window.speechSynthesis.getVoices();
+    var pref = voices.find(function(v) { return /Samantha|Karen|Siri|Ava/i.test(v.name); })
+            || voices.find(function(v) { return v.lang === 'en-US' && v.localService; })
+            || voices[0];
+    if (pref) utt.voice = pref;
+    window.speechSynthesis.speak(utt);
+  }
+  /* Voices may not be loaded yet on first use */
+  if (window.speechSynthesis.getVoices().length) {
+    _speak();
+  } else {
+    window.speechSynthesis.onvoiceschanged = function() { _speak(); };
+  }
+}
+
 function openTripGenie(prefill) {
   var drawer = document.getElementById('tg-drawer');
   drawer.classList.add('open');
@@ -14855,10 +15043,11 @@ function askTripGenie() {
   .then(function(data) {
     var thinking = document.getElementById(thinkId);
     if (thinking) thinking.parentElement.remove();
-    var raw = (data.candidates && data.candidates[0] && data.candidates[0].content
+    var _tgRawText = (data.candidates && data.candidates[0] && data.candidates[0].content
               && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
               && data.candidates[0].content.parts[0].text) || 'Sorry, I couldn\'t get a response. Try again!';
-    _tgAppendBubble('genie', _tgFormatResponse(raw));
+    _tgAppendBubble('genie', _tgFormatResponse(_tgRawText));
+    _tgSpeak(_tgRawText);
     _tgBusy = false;
   })
   .catch(function() {
@@ -17932,11 +18121,14 @@ function _smRenderToday() {
     + '</div>';
 
   /* Genie bar */
-  var genieHtml = '<div class="genie-bar" onclick="showGenieDemoToast()">'
-    + '<div class="genie-icon">✨</div>'
-    + '<div class="genie-text"><div class="t1">Ask TripGenie anything</div>'
-    + '<div class="t2">"What should the kids do today at ' + (stop.name || 'this stop') + '?"</div></div>'
-    + '<i class="fa-solid fa-chevron-right" style="color:rgba(255,255,255,.5);margin-left:auto;"></i></div>';
+  var genieHtml = '<button onclick="openTripGenie()" style="display:flex;align-items:center;justify-content:center;gap:12px;width:100%;background:linear-gradient(135deg,#7B2FBE,#4A90D9);color:#fff;border:none;border-radius:16px;padding:18px 20px;font-family:var(--font);cursor:pointer;box-shadow:0 4px 18px rgba(123,47,190,.35);margin-bottom:16px;">'
+    + '<span style="font-size:2rem;line-height:1;">✨</span>'
+    + '<div style="text-align:left;">'
+    + '<div style="font-size:1.05rem;font-weight:900;letter-spacing:-.01em;">Ask TripGenie</div>'
+    + '<div style="font-size:.8rem;opacity:.85;margin-top:2px;">"What should we do today at ' + (stop.name || 'this stop') + '?"</div>'
+    + '</div>'
+    + '<i class="fa-solid fa-microphone" style="font-size:1.2rem;margin-left:auto;opacity:.75;"></i>'
+    + '</button>';
 
   /* Quick actions */
   var qaHtml = '<h2 class="section-head">Quick actions</h2>'
