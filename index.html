@@ -2327,9 +2327,11 @@
       <div style="display:flex;gap:8px;margin-bottom:20px;padding-top:4px;">
         <button id="plan-seg-schedule" onclick="_mainSeg('schedule')" style="flex:1;padding:9px 16px;border:1.5px solid var(--orange);border-radius:50px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-calendar-days"></i> Schedule</button>
         <button id="plan-seg-stops" onclick="_mainSeg('stops')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-map-pin"></i> Day Planner</button>
+        <button id="plan-seg-stats" onclick="_mainSeg('stats')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-star"></i> Trip Stats</button>
       </div>
       <div id="schedule-content" style="display:block"></div>
       <div id="stops-content" style="display:none"></div>
+      <div id="stats-content" style="display:none"></div>
     </div>
 
     <!-- SCHOOL TAB -->
@@ -6726,21 +6728,157 @@ function _openMediaLightbox(src, type, caption) {
 }
 
 /* ── SWITCH TAB HELPER ────────────────────────────────────────────────────── */
+function renderTripStats() {
+  var el = document.getElementById('stats-content');
+  if (!el) return;
+  var removedIds = appState.removedStops || {};
+  var activeStops = TRIP_STOPS.filter(function(s) { return s.id !== 15 && !removedIds[s.id]; });
+
+  // ── Category buckets ────────────────────────────────────────────
+  var cats = [
+    { key:'parks',      label:'National Parks & NPS Sites',  emoji:'🏔️', items:[] },
+    { key:'hikes',      label:'Hikes & Trails',              emoji:'🥾', items:[] },
+    { key:'scenic',     label:'Scenic Drives & Viewpoints',  emoji:'🌄', items:[] },
+    { key:'water',      label:'Water Activities',            emoji:'💧', items:[] },
+    { key:'caves',      label:'Caves & Caverns',             emoji:'🦇', items:[] },
+    { key:'museums',    label:'Museums & Memorials',         emoji:'🏛️', items:[] },
+    { key:'wildlife',   label:'Wildlife & Nature',           emoji:'🦌', items:[] },
+    { key:'attractions',label:'Attractions & Theme Parks',   emoji:'🎢', items:[] },
+    { key:'towns',      label:'Towns & City Stops',          emoji:'🏙️', items:[] },
+    { key:'outdoor',    label:'Outdoor Activities',          emoji:'🌲', items:[] },
+  ];
+  var catMap = {};
+  cats.forEach(function(c) { catMap[c.key] = c; });
+
+  function _classify(act, stopName) {
+    var n = (act.name || '').toLowerCase();
+    var w = (act.website || '').toLowerCase();
+    var entry = { name: act.name, stop: stopName };
+    if (w.includes('nps.gov') || n.includes('national park') || n.includes('national monument') || n.includes('national memorial') || n.includes('national river') || n.includes('national seashore')) {
+      catMap.parks.items.push(entry);
+    } else if (n.includes('museum') || n.includes('memorial') || n.includes('historic') || n.includes('history')) {
+      catMap.museums.items.push(entry);
+    } else if (n.includes('cave') || n.includes('cavern') || n.includes('caverns')) {
+      catMap.caves.items.push(entry);
+    } else if (n.includes('pool') || n.includes('swimming') || n.includes('swim') || n.includes('river float') || n.includes('canoe') || n.includes('kayak') || n.includes('waterfall') || n.includes('falls') || n.includes('water slide') || n.includes('aquarium') || n.includes('springs')) {
+      catMap.water.items.push(entry);
+    } else if (n.includes('wildlife') || n.includes('zoo') || n.includes('bat') || n.includes('elk') || n.includes('deer') || n.includes('bison') || n.includes('bird') || act.type === 'wildlife') {
+      catMap.wildlife.items.push(entry);
+    } else if (act.type === 'hike' || n.includes('trail') || n.includes('hike') || n.includes('summit') || n.includes('loop')) {
+      catMap.hikes.items.push(entry);
+    } else if (act.type === 'scenic' || n.includes('drive') || n.includes('byway') || n.includes('overlook') || n.includes('viewpoint') || n.includes('overlooks') || n.includes('point') || n.includes('rim') || n.includes('scenic')) {
+      catMap.scenic.items.push(entry);
+    } else if (act.type === 'town' || n.includes('downtown') || n.includes('main street') || n.includes('strip') || n.includes('market') || n.includes('town') || n.includes('village')) {
+      catMap.towns.items.push(entry);
+    } else if (act.type === 'attraction' || n.includes('dollywood') || n.includes('imax') || n.includes('film') || n.includes('park') || n.includes('theme') || n.includes('ripley')) {
+      catMap.attractions.items.push(entry);
+    } else {
+      catMap.outdoor.items.push(entry);
+    }
+  }
+
+  activeStops.forEach(function(stop) {
+    (stop.activities || []).forEach(function(act) { _classify(act, stop.name + (stop.state ? ', ' + stop.state : '')); });
+  });
+
+  // States & destinations
+  var stateSet = {}, destList = [];
+  activeStops.forEach(function(s) {
+    if (s.state) stateSet[s.state] = true;
+    destList.push(s.name + (s.state ? ', ' + s.state : ''));
+  });
+  var states = Object.keys(stateSet).sort();
+
+  // Trip-wide totals
+  var totalMiles = 0, totalDriveHours = 0, driveDays = 0, exploreDays = 0;
+  var removedStopIds = appState.removedStops || {};
+  TRIP_DAYS.forEach(function(d) {
+    if (removedStopIds[d.stopId]) return;
+    totalMiles += d.miles || 0;
+    totalDriveHours += d.driveHours || 0;
+    if (d.driveDay) driveDays++; else exploreDays++;
+  });
+
+  // ── Build HTML ──────────────────────────────────────────────────
+  var activeCats = cats.filter(function(c) { return c.items.length > 0; });
+  var totalActivities = activeCats.reduce(function(sum, c) { return sum + c.items.length; }, 0);
+
+  var html = '';
+
+  // Top stat chips
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;">';
+  var chips = [
+    { n: activeStops.length,  label: 'Destinations',  emoji: '📍' },
+    { n: states.length,       label: 'States',         emoji: '🗺️' },
+    { n: totalActivities,     label: 'Planned Activities', emoji: '⭐' },
+    { n: Math.round(totalMiles).toLocaleString() + ' mi', label: 'Total Miles', emoji: '🛣️', raw: true },
+    { n: driveDays,           label: 'Drive Days',     emoji: '🚗' },
+    { n: exploreDays,         label: 'Explore Days',   emoji: '🏕️' },
+  ];
+  chips.forEach(function(c) {
+    html += '<div style="background:var(--blue);color:#fff;border-radius:12px;padding:10px 16px;display:flex;flex-direction:column;align-items:center;min-width:80px;flex:1;">'
+      + '<div style="font-size:1.3rem;margin-bottom:2px;">' + c.emoji + '</div>'
+      + '<div style="font-size:1.1rem;font-weight:900;line-height:1.2;">' + c.n + '</div>'
+      + '<div style="font-size:.65rem;opacity:.85;text-align:center;white-space:nowrap;">' + c.label + '</div>'
+      + '</div>';
+  });
+  html += '</div>';
+
+  // States bar
+  html += '<div style="background:var(--green-l);border:1px solid #a8d5b8;border-radius:var(--radius-s);padding:12px 16px;margin-bottom:16px;">';
+  html += '<div style="font-weight:800;font-size:.82rem;color:var(--green);margin-bottom:8px;">🗺️ ' + states.length + ' States</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+  states.forEach(function(st) {
+    html += '<span style="background:#fff;border:1px solid #a8d5b8;border-radius:100px;padding:3px 10px;font-size:.78rem;font-weight:700;color:var(--green);">' + st + '</span>';
+  });
+  html += '</div></div>';
+
+  // Destinations list
+  html += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-s);padding:12px 16px;margin-bottom:16px;">';
+  html += '<div style="font-weight:800;font-size:.82rem;color:var(--text);margin-bottom:8px;">📍 ' + activeStops.length + ' Destinations</div>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;">';
+  destList.forEach(function(d) {
+    html += '<span style="background:var(--card);border:1px solid var(--border);border-radius:100px;padding:3px 10px;font-size:.78rem;font-weight:600;color:var(--text);">' + d + '</span>';
+  });
+  html += '</div></div>';
+
+  // Activity categories
+  activeCats.forEach(function(cat) {
+    html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius-s);padding:14px 16px;margin-bottom:12px;">';
+    html += '<div style="font-weight:800;font-size:.88rem;color:var(--text);margin-bottom:10px;">'
+      + cat.emoji + ' ' + cat.label
+      + ' <span style="font-size:.78rem;font-weight:400;color:var(--text-2);">(' + cat.items.length + ')</span></div>';
+    html += '<div style="display:flex;flex-direction:column;gap:6px;">';
+    cat.items.forEach(function(item) {
+      html += '<div style="display:flex;align-items:baseline;gap:8px;padding:6px 10px;background:var(--bg);border-radius:8px;">'
+        + '<span style="font-size:.82rem;font-weight:600;color:var(--text);flex:1;">' + item.name + '</span>'
+        + '<span style="font-size:.72rem;color:var(--text-3);white-space:nowrap;flex-shrink:0;">' + item.stop + '</span>'
+        + '</div>';
+    });
+    html += '</div></div>';
+  });
+
+  el.innerHTML = html;
+}
+
 function _mainSeg(which) {
   var schDiv = document.getElementById('schedule-content');
   var stpDiv = document.getElementById('stops-content');
+  var staDiv = document.getElementById('stats-content');
   var btnSch = document.getElementById('plan-seg-schedule');
   var btnStp = document.getElementById('plan-seg-stops');
+  var btnSta = document.getElementById('plan-seg-stats');
   if (!schDiv || !stpDiv) return;
+  var _on  = function(b) { if (b) { b.style.background='var(--orange)'; b.style.borderColor='var(--orange)'; b.style.color='#fff'; } };
+  var _off = function(b) { if (b) { b.style.background='var(--card)';   b.style.borderColor='var(--border)'; b.style.color='var(--text-2)'; } };
+  schDiv.style.display = 'none'; stpDiv.style.display = 'none'; if (staDiv) staDiv.style.display = 'none';
+  _off(btnSch); _off(btnStp); _off(btnSta);
   if (which === 'schedule') {
-    schDiv.style.display = 'block'; stpDiv.style.display = 'none';
-    if (btnSch) { btnSch.style.background='var(--orange)'; btnSch.style.borderColor='var(--orange)'; btnSch.style.color='#fff'; }
-    if (btnStp) { btnStp.style.background='var(--card)';   btnStp.style.borderColor='var(--border)'; btnStp.style.color='var(--text-2)'; }
-  } else {
-    schDiv.style.display = 'none'; stpDiv.style.display = 'block';
-    if (btnSch) { btnSch.style.background='var(--card)';   btnSch.style.borderColor='var(--border)'; btnSch.style.color='var(--text-2)'; }
-    if (btnStp) { btnStp.style.background='var(--orange)'; btnStp.style.borderColor='var(--orange)'; btnStp.style.color='#fff'; }
-    renderStops();
+    schDiv.style.display = 'block'; _on(btnSch);
+  } else if (which === 'stops') {
+    stpDiv.style.display = 'block'; _on(btnStp); renderStops();
+  } else if (which === 'stats') {
+    if (staDiv) { staDiv.style.display = 'block'; renderTripStats(); } _on(btnSta);
   }
 }
 
