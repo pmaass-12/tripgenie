@@ -2190,11 +2190,26 @@
       </div>
       <button onclick="openHelpSearch()" title="Search the app — ask anything" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:100px;padding:5px 11px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-magnifying-glass"></i> Help</button>
       <button id="dark-mode-btn" onclick="toggleDarkMode()" title="Toggle dark/light mode" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:1rem;cursor:pointer;line-height:1;display:flex;align-items:center;">🌙</button>
+      <button id="debug-console-btn" onclick="_dbgOpen()" title="Debug console" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:5px 9px;font-size:.8rem;cursor:pointer;line-height:1;display:flex;align-items:center;gap:4px;font-family:var(--font);font-weight:700;position:relative;">🐛<span id="debug-err-badge" style="display:none;position:absolute;top:-3px;right:-3px;background:#e53e3e;color:#fff;border-radius:50%;width:14px;height:14px;font-size:.6rem;font-weight:900;display:none;align-items:center;justify-content:center;line-height:1;"></span></button>
       <button class="logout-btn" id="logout-btn" title="Logout">
         <i class="fa-solid fa-right-from-bracket"></i>
       </button>
     </div>
   </header>
+
+  <!-- DEBUG CONSOLE OVERLAY -->
+  <div id="debug-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);backdrop-filter:blur(2px);" onclick="if(event.target===this)_dbgClose()">
+    <div style="position:absolute;top:60px;right:16px;width:min(700px,95vw);max-height:80vh;background:#1a1a2e;border-radius:14px;border:1px solid #444;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.6);">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #333;flex-shrink:0;">
+        <span style="font-family:monospace;font-size:.85rem;font-weight:700;color:#e2e8f0;">🐛 Debug Console</span>
+        <div style="display:flex;gap:8px;">
+          <button onclick="_dbgClear()" style="background:#2d3748;border:none;color:#a0aec0;border-radius:6px;padding:4px 10px;font-size:.75rem;cursor:pointer;font-family:monospace;">Clear</button>
+          <button onclick="_dbgClose()" style="background:#e53e3e;border:none;color:#fff;border-radius:6px;padding:4px 10px;font-size:.75rem;cursor:pointer;">✕</button>
+        </div>
+      </div>
+      <div id="debug-log" style="flex:1;overflow-y:auto;padding:10px;font-family:monospace;font-size:.75rem;line-height:1.6;color:#e2e8f0;"></div>
+    </div>
+  </div>
 
   <!-- HELP SEARCH OVERLAY -->
   <div id="help-search-overlay" onclick="closeHelpSearch()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:5500;align-items:flex-start;justify-content:center;padding:20px;padding-top:72px;overflow-y:auto;">
@@ -5058,6 +5073,17 @@ function _clearAndRebuildMapMarkers(mapObj) {
 }
 
 function initMainMap() {
+  /* Force a real pixel height on the map container — Leaflet needs this or renders blank */
+  var _mc = document.getElementById('map-container');
+  if (_mc) {
+    var _wrap = _mc.closest('.map-nav-wrap') || _mc.parentElement;
+    var _wh = (_wrap && _wrap.offsetHeight > 10) ? _wrap.offsetHeight : 0;
+    if (_wh < 10) {
+      /* fallback: calc from viewport minus header/nav */
+      _wh = window.innerHeight - 200;
+    }
+    _mc.style.height = _wh + 'px';
+  }
   if (mainMap) {
     mainMap.invalidateSize();
     /* Rebuild markers with current TRIP_STOPS (handles post-change refresh) */
@@ -5087,10 +5113,10 @@ function forceRefreshMap(btn) {
   renderStopNavigator();
   if (mainMap) { mainMap.remove(); mainMap = null; }
   var container = document.getElementById('map-container');
-  if (container) container.innerHTML = '';
+  if (container) { container.innerHTML = ''; container.style.height = ''; }
   setTimeout(function() {
     initMainMap();
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Refresh Map'; }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Refresh'; }
   }, 300);
 }
 
@@ -18131,6 +18157,70 @@ function _updateDarkBtn(isDark) {
   var btn = document.getElementById('dark-mode-btn');
   if (btn) btn.textContent = isDark ? '☀️' : '🌙';
 }
+
+/* ── IN-APP DEBUG CONSOLE ─────────────────────────────────────────── */
+(function() {
+  var _dbgEntries = [];
+  var _errCount = 0;
+  var _colors = { error:'#fc8181', warn:'#f6ad55', log:'#90cdf4', info:'#68d391' };
+  function _dbgPush(type, args) {
+    var ts = new Date().toTimeString().slice(0,8);
+    var msg;
+    try { msg = Array.from(args).map(function(a) {
+      if (a instanceof Error) return a.stack || a.message;
+      if (typeof a === 'object') try { return JSON.stringify(a, null, 2); } catch(e) { return String(a); }
+      return String(a);
+    }).join(' '); } catch(e) { msg = String(args); }
+    _dbgEntries.push({ type: type, ts: ts, msg: msg });
+    if (_dbgEntries.length > 300) _dbgEntries.shift();
+    if (type === 'error') {
+      _errCount++;
+      var badge = document.getElementById('debug-err-badge');
+      if (badge) { badge.style.display = 'flex'; badge.textContent = _errCount > 99 ? '99+' : _errCount; }
+      var btn = document.getElementById('debug-console-btn');
+      if (btn) btn.style.background = 'rgba(229,62,62,.5)';
+    }
+    var log = document.getElementById('debug-log');
+    if (log && document.getElementById('debug-overlay').style.display !== 'none') _dbgRender();
+  }
+  window._dbgRender = function() {
+    var log = document.getElementById('debug-log');
+    if (!log) return;
+    log.innerHTML = _dbgEntries.map(function(e) {
+      var col = _colors[e.type] || '#e2e8f0';
+      var prefix = e.type.toUpperCase().padEnd(5);
+      var escaped = e.msg.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return '<div style="border-bottom:1px solid #2d3748;padding:3px 0;color:' + col + '"><span style="color:#4a5568;">[' + e.ts + ']</span> <span style="color:' + col + ';font-weight:700;">' + prefix + '</span> ' + escaped + '</div>';
+    }).join('') || '<div style="color:#4a5568;padding:10px;">No log entries yet.</div>';
+    log.scrollTop = log.scrollHeight;
+  };
+  window._dbgOpen = function() {
+    document.getElementById('debug-overlay').style.display = 'block';
+    _dbgRender();
+  };
+  window._dbgClose = function() { document.getElementById('debug-overlay').style.display = 'none'; };
+  window._dbgClear = function() {
+    _dbgEntries = []; _errCount = 0;
+    var badge = document.getElementById('debug-err-badge');
+    if (badge) badge.style.display = 'none';
+    var btn = document.getElementById('debug-console-btn');
+    if (btn) btn.style.background = 'rgba(255,255,255,.15)';
+    _dbgRender();
+  };
+  /* Intercept console methods */
+  ['log','info','warn','error'].forEach(function(m) {
+    var orig = console[m].bind(console);
+    console[m] = function() { orig.apply(console, arguments); _dbgPush(m, arguments); };
+  });
+  /* Catch uncaught errors */
+  window.addEventListener('error', function(e) {
+    _dbgPush('error', [e.message + (e.filename ? ' @ ' + e.filename.split('/').pop() + ':' + e.lineno : '')]);
+  });
+  window.addEventListener('unhandledrejection', function(e) {
+    _dbgPush('error', ['Unhandled Promise rejection: ' + (e.reason && (e.reason.stack || e.reason.message || e.reason))]);
+  });
+})();
+/* ─────────────────────────────────────────────────────────────────── */
 
 function toggleDarkMode() {
   var isDark = document.body.classList.contains('dark-mode')
