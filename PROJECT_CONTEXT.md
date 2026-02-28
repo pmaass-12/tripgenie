@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-02-28 (Session 13)
+2026-02-28 (Session 14)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -115,6 +115,18 @@ tripgenie/
 
 ---
 
+- Session 14 (2026-02-28):
+  - **Print Trip Plan PDF feature**: Added `printTripPlan()` function (lines 5439–5654) that generates a beautifully formatted HTML document containing the complete itinerary with trip stats, stop details, drive days, stay days, and schedule. Opens in a new window and auto-calls `window.print()` for "Save as PDF" workflow. Includes:
+    - Trip header with dates and key stats (total days, stops, miles, drive days)
+    - Stop-by-stop sections with numbered badges, accommodation type, and date ranges
+    - Drive days with distance/duration metadata
+    - Stay days with day numbers, dates, and custom items from schedule
+    - Return home section with green accent
+    - Print-optimized CSS with page breaks and mobile/desktop styling
+    - Orange "Print PDF" button added to Map tab header (line 2385) next to Refresh button, using `--orange` and `--orange-l` design tokens
+  - **Template literal syntax fix**: Escaped `</script>` tag inside print function's template literal as `<\/script>` (line 5642) to prevent regex parsing issues in regression test suite
+  - **All 110 regression tests passing** — no snapshot regeneration needed
+
 ## Known Issues / In Progress
 - Multiple mockup versions exist — needs consolidation decision (which is canonical?)
 - `saveTripSettings()` re-dates TRIP_DAYS in memory only; custom trip (AI-built) trips have their own date logic via `customTripData` — date change behavior for custom trips not yet tested
@@ -160,8 +172,17 @@ tripgenie/
 
 ---
 
+---
+
+- Session 14 continued (2026-02-28):
+  - **Critical login bug fixed**: `printTripPlan` template literal contained unescaped `</script>` tag in HEAD commit — browser parsed it as closing the `<script>` block, killing all JS after that point (including login). Fixed by escaping as `<\/script>` inside the template string.
+  - **Login screen date pre-loading**: Added pre-login date updater in the page startup IIFE. Before the user logs in, reads `rv_app_state` from localStorage and updates the login screen's trip name, date range, and day count to reflect the user's saved custom trip data. Falls back gracefully to hardcoded defaults if nothing is saved. Keeps login screen accurate after the user customizes trip dates or adds/removes stops.
+
+---
+
 ## Suggested Next Steps
-- Push to GitHub (git push) when network is available — commits pending from sessions 8-13
+- **0-day waypoint stops**: User wants stops with 0 nights for driving waypoints (fuel, Walmart overnight, route planning) — not yet built
+- Push to GitHub (git push) when network is available — commits pending from sessions 8-14
 - User needs to create Mapbox public token at mapbox.com (no secret scopes), then enter it in Trip Settings → RV Profile & Map Routing
 - Consider adding "Nashville" and "Fredericksburg" as proper TRIP_STOPS entries (currently inferred from TRIP_DAYS but no markers on map)
 - Test voice chat on actual iPhone/iPad — may need microphone permission prompt handling

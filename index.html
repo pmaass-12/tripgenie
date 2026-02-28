@@ -3922,6 +3922,42 @@ function _initVersionCheck() {
 /* ── PAGE LOAD STARTUP ──────────────────────────────────────────── */
 (function() {
   _initVersionCheck();
+  // Pre-login: update login screen with saved trip dates from localStorage
+  // so the login page shows accurate trip info even before the user logs in
+  (function() {
+    try {
+      var raw = localStorage.getItem('rv_app_state');
+      if (!raw) return;
+      var saved = JSON.parse(raw);
+      var ct = saved && saved.customTripData;
+      var ts = saved && saved.tripSettings;
+      var nameEl  = document.getElementById('login-trip-title');
+      var subEl   = document.getElementById('login-trip-sub');
+      var datesEl = document.getElementById('login-trip-dates');
+      if (!datesEl) return;
+      function _ldf2(d) {
+        return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
+      }
+      var start, end, totalDays, name;
+      if (ct && ct.days && ct.days.length) {
+        start = ct.days[0].date;
+        end   = ct.days[ct.days.length - 1].date;
+        totalDays = ct.days.length;
+        name  = ct.tripName;
+      } else if (ts) {
+        start = ts.startDate; end = ts.endDate; totalDays = ts.totalDays; name = ts.tripName;
+      }
+      if (start && end) {
+        var year = start.slice(0, 4);
+        datesEl.textContent = _ldf2(start) + ' – ' + _ldf2(end) + ', ' + year;
+      }
+      if (totalDays && subEl) subEl.textContent = 'Your ' + totalDays + '-day cross-country road trip';
+      if (name && nameEl) {
+        var parts = name.split(' '), mid = Math.ceil(parts.length / 2);
+        nameEl.innerHTML = parts.length > 2 ? parts.slice(0, mid).join(' ') + '<br>' + parts.slice(mid).join(' ') : name;
+      }
+    } catch(e) {}
+  })();
   if (!_tryAutoLogin()) {
     // No saved session — show login screen as normal (it's already visible in HTML)
   }
@@ -5639,7 +5675,7 @@ function printTripPlan() {
 <script>
   // Auto-open print dialog after a short delay so fonts/layout settle
   setTimeout(function() { window.print(); }, 800);
-</script>
+<\/script>
 </body>
 </html>`;
 
