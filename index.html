@@ -12589,6 +12589,17 @@ function renderTripSettings() {
   html += '<div style="font-size:.75rem;color:var(--text-3);margin-top:4px;">Drive days that arrive later will show a warning.</div>';
   html += '</div>';
 
+  // Max Days Per Stop
+  var _tsMaxDays = (appState.tripSettings && appState.tripSettings.maxDaysPerStop) ? appState.tripSettings.maxDaysPerStop : 5;
+  html += '<div>';
+  html += '<label style="font-size:.72rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">📅 Max Days Per Stop</label>';
+  html += '<div style="display:flex;align-items:center;gap:10px;">';
+  html += '<input id="ts-max-days" type="number" min="1" max="30" value="' + _tsMaxDays + '" style="width:72px;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-s);font-size:1rem;background:var(--bg);color:var(--text);outline:none;" />';
+  html += '<span style="color:var(--text-muted);font-size:.9rem;">days maximum at any single stop</span>';
+  html += '</div>';
+  html += '<div style="font-size:.75rem;color:var(--text-3);margin-top:4px;">TripOptimizer will suggest trimming stops that exceed this limit.</div>';
+  html += '</div>';
+
   // Save button
   html += '<button onclick="saveTripSettings()" style="width:100%;background:var(--orange);color:#fff;border:none;border-radius:var(--radius-s);padding:13px;font-size:.95rem;font-weight:800;cursor:pointer;font-family:var(--font);">&#10003; Save Trip Settings</button>';
 
@@ -13825,7 +13836,8 @@ function saveTripSettings() {
   var _saveTimeFmt  = ((document.getElementById('ts-timefmt') || {}).value) || '12h';
   var _saveDepTime  = ((document.getElementById('ts-deptime') || {}).value) || '08:00';
   var _saveLateArr  = ((document.getElementById('ts-latearrival') || {}).value) || '20:00';
-  appState.tripSettings = { startDate: newStart, endDate: newEnd, tripName: newName, totalDays: newDays, rvAmps: _saveAmps, timeFormat: _saveTimeFmt, departureTime: _saveDepTime, latestArrival: _saveLateArr };
+  var _saveMaxDays  = Math.max(1, parseInt(((document.getElementById('ts-max-days') || {}).value) || '5') || 5);
+  appState.tripSettings = { startDate: newStart, endDate: newEnd, tripName: newName, totalDays: newDays, rvAmps: _saveAmps, timeFormat: _saveTimeFmt, departureTime: _saveDepTime, latestArrival: _saveLateArr, maxDaysPerStop: _saveMaxDays };
   saveState(appState);
 
   // Apply to live CONFIG so everything recalculates immediately
@@ -16291,6 +16303,21 @@ function _adjStartMic() {
   rec.start();
 }
 
+/* ── TRIP OPTIMIZER HELPERS ──────────────────────────────────────────── */
+function _getOverstayedStops(maxDays) {
+  var counts = {}, names = {};
+  var _removedIds = appState.removedStops || {};
+  TRIP_DAYS.forEach(function(d) {
+    if (!d.stopId || d.phase === 'drive' || d.sleepType === 'home') return;
+    if (_removedIds[d.stopId]) return;
+    counts[d.stopId] = (counts[d.stopId] || 0) + 1;
+    names[d.stopId] = d.name || d.stopId;
+  });
+  return Object.keys(counts)
+    .filter(function(id) { return counts[id] > maxDays; })
+    .map(function(id) { return names[id] + ' (' + counts[id] + ' days)'; });
+}
+
 /* ── TRIP OPTIMIZER ──────────────────────────────────────────────────
    Returns 3 named trade-off "packages" — each is a coordinated set of
    2-3 linked changes with a compelling before/after story.
@@ -16336,6 +16363,8 @@ function _runTripOptimizer() {
   var _issues = [];
   var _prevWasDrive = false;
   var _consecutiveDrives = 0;
+  var _maxDaysPerStop = (appState.tripSettings && appState.tripSettings.maxDaysPerStop) || 5;
+  var _overstayedStops = _getOverstayedStops(_maxDaysPerStop);
   TRIP_DAYS.forEach(function(d) {
     if (_removedIds[d.stopId]) return;
     if (d.driveDay) {
@@ -16353,6 +16382,8 @@ function _runTripOptimizer() {
     if (!s.protected && s.nights <= 1)
       _issues.push('Rushed 1-night stay at ' + s.name + ', ' + s.state + ' — barely worth the drive');
   });
+  if (_overstayedStops.length > 0)
+    _issues.push('Stops exceeding ' + _maxDaysPerStop + '-day limit: ' + _overstayedStops.join(', '));
   var _totalDays = TRIP_DAYS.filter(function(d){ return !_removedIds[d.stopId]; }).length;
   if (_totalDays > _plannedDays)
     _issues.push('Trip is ' + (_totalDays - _plannedDays) + ' days OVER the planned ' + _plannedDays + '-day budget');
@@ -16365,10 +16396,10 @@ function _runTripOptimizer() {
   var prompt =
     'You are an expert family RV trip optimizer. You think in TRADE-OFFS — you never just suggest adding; you swap, reroute, and reconfigure to make the trip better without busting the schedule.\n\n'
     + 'TRIP: ' + CONFIG.startDate + ' → ' + CONFIG.endDate + ' (' + _plannedDays + ' days planned, ' + _totalDays + ' days current)\n'
-    + 'Family: 2 adults + kids ages 9, 4, 2. Max comfortable drive per day: ' + _maxPref + ' hours.\n\n'
+    + 'Family: 2 adults + kids ages 9, 4, 2. Max comfortable drive per day: ' + _maxPref + ' hours. Max stay at any single stop: ' + _maxDaysPerStop + ' days.\n\n'
     + 'CURRENT ITINERARY:\n' + stopLines + '\n\n'
     + 'PRESSURE POINTS DETECTED:\n' + issueStr + '\n\n'
-    + 'Return EXACTLY 3 optimization packages as a JSON array. Each package is a COORDINATED set of 2-3 linked changes that work together — not individual suggestions. Think: "skip X, swap in Y instead, recover Z days".\n\n'
+    + 'Return EXACTLY 3 optimization packages as a JSON array. Each package is a COORDINATED set of 2-3 linked changes that work together — not individual suggestions. Think: "skip X, swap in Y instead, recover Z days". Prioritize packages that trim stops exceeding the ' + _maxDaysPerStop + '-day limit first.\n\n'
     + 'JSON FORMAT — return ONLY this array, no markdown:\n'
     + '[\n'
     + '  {\n'
@@ -16391,6 +16422,7 @@ function _runTripOptimizer() {
     + '• Each package is self-contained — all ops in it work together as a single coherent move\n'
     + '• Packages must be meaningfully different from each other — different stops, different trade-offs\n'
     + '• Do NOT add stops already in the itinerary as add_stop\n'
+    + '• When using set_nights, respect the ' + _maxDaysPerStop + '-day maximum — never set a stop to exceed this limit\n'
     + '• Output ONLY the raw JSON array. No text before or after.';
 
   var body = JSON.stringify({

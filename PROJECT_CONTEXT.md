@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-02-28 (Session 9)
+2026-02-28 (Session 13)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -152,8 +152,16 @@ tripgenie/
 
 ---
 
+- Session 13 (2026-02-28):
+  - **"Max Days Per Stop" setting added to Trip Settings**: New number input with min/max constraints (1–30 days, default 5). Stored in `appState.tripSettings.maxDaysPerStop`. Rendered in Trip Settings HTML after "Latest Campground Arrival" time setting. Saved via `saveTripSettings()` and persisted with `saveState(appState)`. Displays toast confirmation on save.
+  - **TripOptimizer awareness of max days constraint**: Added `_getOverstayedStops(maxDays)` helper function that scans TRIP_DAYS and identifies stops exceeding the configured max-days limit, returning array like `["Palm Springs, CA (8 days)", ...]`. Integrated into `_runTripOptimizer()` pressure points detection. When overstayed stops exist, they're added to the issues list: `"Stops exceeding 5-day limit: Palm Springs, CA (8 days), ..."`.
+  - **TripOptimizer prompt enriched**: Prompt now mentions max stay limit in family context line. Added guidance: "Prioritize packages that trim stops exceeding the X-day limit first." Added OP RULE: "When using set_nights, respect the X-day maximum — never set a stop to exceed this limit." AI now understands the constraint and targets stops that violate it in optimization packages.
+  - **Regression testing**: All 110 tests passing. No snapshot regeneration needed.
+
+---
+
 ## Suggested Next Steps
-- Push to GitHub (git push) when network is available — commits pending from sessions 8-12
+- Push to GitHub (git push) when network is available — commits pending from sessions 8-13
 - User needs to create Mapbox public token at mapbox.com (no secret scopes), then enter it in Trip Settings → RV Profile & Map Routing
 - Consider adding "Nashville" and "Fredericksburg" as proper TRIP_STOPS entries (currently inferred from TRIP_DAYS but no markers on map)
 - Test voice chat on actual iPhone/iPad — may need microphone permission prompt handling
