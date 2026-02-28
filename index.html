@@ -2118,30 +2118,39 @@
     </div>
 
     <div class="login-form" id="login-form">
-      <!-- Auth mode toggle (Sign In / Sign Up) -->
-      <div id="login-mode-tabs" style="display:flex;gap:0;background:rgba(255,255,255,.12);border-radius:10px;padding:3px;margin-bottom:16px;">
-        <button id="login-tab-in"  onclick="_setLoginMode('signin')"  style="flex:1;background:rgba(255,255,255,.9);color:#2C5F8A;border:none;border-radius:7px;padding:7px 0;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);transition:all .2s;">Sign In</button>
-        <button id="login-tab-up"  onclick="_setLoginMode('signup')"  style="flex:1;background:none;color:rgba(255,255,255,.75);border:none;border-radius:7px;padding:7px 0;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);transition:all .2s;">Create Account</button>
-      </div>
-      <!-- Email field (shown for Supabase auth; hidden for legacy password mode) -->
-      <div id="login-email-wrap" style="margin-bottom:10px;">
-        <input type="email" id="email-input" placeholder="Email address" autocomplete="email"
-          style="width:100%;box-sizing:border-box;padding:12px 16px;border:2px solid rgba(255,255,255,.25);border-radius:12px;background:rgba(255,255,255,.15);color:#fff;font-size:.95rem;font-family:var(--font);outline:none;"
-          onkeydown="if(event.key==='Enter')doLogin()" />
-      </div>
+      <!-- Family password (default flow — no email needed) -->
       <div style="margin-bottom:16px;">
-        <input type="password" id="password-input" placeholder="Password" autocomplete="current-password"
+        <input type="password" id="password-input" placeholder="Family password" autocomplete="current-password"
           style="width:100%;box-sizing:border-box;padding:12px 16px;border:2px solid rgba(255,255,255,.25);border-radius:12px;background:rgba(255,255,255,.15);color:#fff;font-size:.95rem;font-family:var(--font);outline:none;"
           onkeydown="if(event.key==='Enter')doLogin()" />
-      </div>
-      <!-- Forgot password link -->
-      <div id="login-forgot-wrap" style="text-align:right;margin-top:-8px;margin-bottom:12px;display:none;">
-        <a href="#" onclick="event.preventDefault();_doForgotPassword()" style="color:rgba(255,255,255,.65);font-size:.77rem;text-decoration:underline;">Forgot password?</a>
       </div>
       <div class="login-error" id="login-error"></div>
       <button id="login-submit-btn" class="login-btn" type="button" onclick="doLogin()">
         <i class="fa-solid fa-unlock-keyhole"></i> Let's Go!
       </button>
+
+      <!-- New user / external account toggle -->
+      <div style="text-align:center;margin-top:14px;">
+        <a href="#" id="login-ext-toggle" onclick="event.preventDefault();_toggleEmailLogin()" style="color:rgba(255,255,255,.55);font-size:.75rem;text-decoration:none;border-bottom:1px solid rgba(255,255,255,.25);">New user? Sign in with email →</a>
+      </div>
+
+      <!-- Email auth section (hidden by default) -->
+      <div id="login-email-section" style="display:none;margin-top:16px;border-top:1px solid rgba(255,255,255,.2);padding-top:16px;">
+        <!-- Auth mode toggle -->
+        <div id="login-mode-tabs" style="display:flex;gap:0;background:rgba(255,255,255,.12);border-radius:10px;padding:3px;margin-bottom:12px;">
+          <button id="login-tab-in"  onclick="_setLoginMode('signin')"  style="flex:1;background:rgba(255,255,255,.9);color:#2C5F8A;border:none;border-radius:7px;padding:7px 0;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);transition:all .2s;">Sign In</button>
+          <button id="login-tab-up"  onclick="_setLoginMode('signup')"  style="flex:1;background:none;color:rgba(255,255,255,.75);border:none;border-radius:7px;padding:7px 0;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);transition:all .2s;">Create Account</button>
+        </div>
+        <div style="margin-bottom:10px;">
+          <input type="email" id="email-input" placeholder="Email address" autocomplete="email"
+            style="width:100%;box-sizing:border-box;padding:12px 16px;border:2px solid rgba(255,255,255,.25);border-radius:12px;background:rgba(255,255,255,.15);color:#fff;font-size:.95rem;font-family:var(--font);outline:none;"
+            onkeydown="if(event.key==='Enter')doLogin()" />
+        </div>
+        <!-- Forgot password link -->
+        <div id="login-forgot-wrap" style="text-align:right;margin-bottom:4px;display:none;">
+          <a href="#" onclick="event.preventDefault();_doForgotPassword()" style="color:rgba(255,255,255,.65);font-size:.77rem;text-decoration:underline;">Forgot password?</a>
+        </div>
+      </div>
     </div>
 
     <!-- Test Mode trigger — flask icon, top-right of card -->
@@ -3778,6 +3787,16 @@ function _updateHeaderProfile() {
 }
 
 var _loginMode = 'signin'; // 'signin' | 'signup'
+
+function _toggleEmailLogin() {
+  var sec = document.getElementById('login-email-section');
+  var lnk = document.getElementById('login-ext-toggle');
+  if (!sec) return;
+  var showing = sec.style.display !== 'none';
+  sec.style.display = showing ? 'none' : 'block';
+  if (lnk) lnk.textContent = showing ? 'New user? Sign in with email →' : '← Back to family login';
+  if (!showing) { var e = document.getElementById('email-input'); if (e) e.focus(); }
+}
 
 function _setLoginMode(mode) {
   _loginMode = mode;
