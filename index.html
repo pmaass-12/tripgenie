@@ -3930,6 +3930,15 @@ function _showLoginError(msg) {
   }
 }
 
+function _setLoginLoading(on) {
+  var btn = document.getElementById('login-submit-btn');
+  if (!btn) return;
+  btn.disabled = on;
+  btn.innerHTML = on
+    ? '<i class="fa-solid fa-circle-notch fa-spin"></i> ' + (_loginMode === 'signup' ? 'Creating account…' : 'Signing in…')
+    : '<i class="fa-solid fa-arrow-right"></i> Continue';
+}
+
 async function doLogin() {
   var client = _initSbClient();
   var passVal  = (document.getElementById('password-input') || {}).value || '';
@@ -3937,15 +3946,18 @@ async function doLogin() {
 
   // ── Supabase auth path ───────────────────────────────────────────
   if (client && emailVal) {
+    _setLoginLoading(true);
     var sbResult;
     try {
       sbResult = _loginMode === 'signup'
         ? await client.auth.signUp({ email: emailVal, password: passVal })
         : await client.auth.signInWithPassword({ email: emailVal, password: passVal });
     } catch(e) {
+      _setLoginLoading(false);
       _showLoginError('Connection error: ' + (e.message || 'Unknown'));
       return;
     }
+    _setLoginLoading(false);
     if (sbResult.error) {
       _showLoginError(sbResult.error.message || 'Authentication failed');
       return;
@@ -4534,7 +4546,11 @@ function _initVersionCheck() {
     } catch(e) {}
   })();
   if (!_tryAutoLogin()) {
-    // No saved session — show login screen as normal (it's already visible in HTML)
+    // No saved session — focus email field so user can start typing immediately
+    setTimeout(function() {
+      var e = document.getElementById('email-input');
+      if (e) e.focus();
+    }, 120);
   }
 })();
 
