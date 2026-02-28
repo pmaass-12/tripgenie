@@ -5218,7 +5218,10 @@ function renderSchedule() {
     if (d.driveDay && d.miles > 0) {
       var _maxDriveH = (appState.drivingPrefs && appState.drivingPrefs.maxHours) || 4;
       var _splitResolved = appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].splitResolved;
-      var _splitHours = _splitResolved && appState.dayOverrides[d.day].splitHours;
+      // Use stored splitHours, but fall back to driveHours/2 if it was saved as 0 (matches day-detail logic)
+      var _splitHours = _splitResolved
+        ? (appState.dayOverrides[d.day].splitHours || Math.round(d.driveHours / 2 * 10) / 10)
+        : 0;
       var _isLongDrive = !_splitResolved && d.driveHours > _maxDriveH;
       /* Stop-break padding */
       var _sbEvery = (appState.drivingPrefs && appState.drivingPrefs.stopBreakEvery) || 0;
@@ -12865,6 +12868,11 @@ function acceptLongDrive(dayNum) {
   if (!appState.dayOverrides) appState.dayOverrides = {};
   if (!appState.dayOverrides[dayNum]) appState.dayOverrides[dayNum] = {};
   appState.dayOverrides[dayNum].splitResolved = true;
+  // Store the split hours so the schedule card can display them (don't leave as 0)
+  var _ad = getDay(dayNum);
+  if (_ad && _ad.driveHours > 0 && !appState.dayOverrides[dayNum].splitHours) {
+    appState.dayOverrides[dayNum].splitHours = Math.round(_ad.driveHours / 2 * 10) / 10;
+  }
   if (appState.decisions) {
     var existing = appState.decisions.find(function(s) { return s.isSplitDrive && s.driveDay === dayNum; });
     if (existing) existing.status = 'dismissed';
