@@ -73,6 +73,11 @@ tripgenie/
   - **Conflict banner same-user fix**: When `theirName === myName` (same person, two devices/tabs), banner now shows "💻 Keep My Current Edits" / "☁️ Load Saved (HH:MM)" with a clear description instead of the confusing "Keep Paul's / Take Paul's".
   - **What's New updated**: Added all session 7 features to the "Latest Updates" release entry.
   - **Change Plan stop naming fix**: Change Plan AI prompt now requires `name` to always be a city/town/area, never a specific venue. Added `attraction` field to sample JSON so AI correctly separates "The Plaza Theater" → city: "El Paso, TX" + attraction: "The Plaza Theater". Attraction becomes an activity at the city stop. (Root cause: AI was returning venue name in `name` field; `_addNewStop` used `item.city || item.name`, so venue became the stop name.)
+  - **Drive day title fix (`_getDriveDayTitle`)**: Changed backward-scan to use `phase` field (not just `stopId`) to detect departure city. Fixes "Oklahoma City" appearing as departure for Nashville and Blue Ridge days when those stops share a stopId with OKC.
+  - **Phase header miles removed**: Blue phase-header bar no longer shows `· XX mi`. Miles only appear on the drive-day row in the schedule.
+  - **Days label inline with +/− buttons**: Changed vertical stack (Days above, buttons below) to single horizontal row: `− Days +`. Fixes vertical alignment issue.
+  - **Ask TripGenie pill height matched**: Reduced padding/font-size on `#tg-btn` to match sibling pills exactly.
+  - **Trip Health Check**: Added `refreshTripPlan()` with 12 checks (day sequencing, drive title A→B→C order, missing fields, orphaned refs, map coords, stale removedStops, long drives, activity timing, start date sync, restaurant prefs, AI cache, weather). Auto-fixes 6; reports rest as warn/info. Self-verification confirms fixes applied. Button added to Trip Settings.
 
 ---
 

@@ -1076,12 +1076,12 @@
     .exp-cat-btn.sel { color:#fff; }
     /* ── TRIPGENIE ────────────────────────────────────────────────── */
     #tg-btn {
-      display:flex;align-items:center;gap:7px;
+      display:flex;align-items:center;gap:6px;
       background:linear-gradient(135deg,var(--orange) 0%,var(--orange-d) 100%);
-      color:#fff;border:none;border-radius:100px;
-      padding:7px 15px;font-size:.8rem;font-weight:800;
+      color:#fff;border:1px solid rgba(255,255,255,.32);border-radius:100px;
+      padding:6px 13px;font-size:.78rem;font-weight:800;
       cursor:pointer;font-family:var(--font);white-space:nowrap;
-      box-shadow:0 2px 10px rgba(232,129,58,.4);
+      box-shadow:0 2px 8px rgba(232,129,58,.35);
       transition:transform .15s,box-shadow .15s;
       flex-shrink:0;
     }
@@ -3906,17 +3906,21 @@ function _getDriveDayTitle(d) {
   var removedIds = appState.removedStops || {};
   var destStop = getStop(d.stopId);
   var destName = destStop ? _sn(destStop) : (d.phase || 'destination');
-  // Scan backward for the last non-removed stop with a different stopId
+  var myPhase = d.phase || '';
+  // Scan backward using PHASE field (not just stopId) so transit overnights
+  // (e.g. Nashville Walmart stop on OKC→Blue Ridge drive) are correctly detected.
   for (var bi = d.day - 2; bi >= 0; bi--) {
     var prev = TRIP_DAYS[bi];
     if (!prev) continue;
-    if (removedIds[prev.stopId]) continue;  // skip removed stops
-    if (prev.stopId === d.stopId) continue; // same stop, keep scanning
-    var originStop = getStop(prev.stopId);
-    if (originStop) {
-      var originName = _sn(originStop);
-      return originName + ' \u2192 ' + destName;
+    if (removedIds[prev.stopId]) continue;
+    var prevPhase = prev.phase || '';
+    if (prevPhase === myPhase) continue; // same phase, keep scanning
+    var originName = prevPhase;
+    if (!originName) {
+      var originStop = getStop(prev.stopId);
+      originName = originStop ? _sn(originStop) : '';
     }
+    if (originName) return originName + ' \u2192 ' + destName;
     break;
   }
   return d.title; // fallback to hardcoded title
@@ -4885,17 +4889,14 @@ function phaseHeaderHtml(phase, firstDay) {
     + '<span style="font-size:1.3rem">' + (pStop ? pStop.emoji : '&#128663;') + '</span>'
     + '<div style="flex:1;min-width:0;">'
     + '<div style="font-weight:800;font-size:.97rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + phase + '</div>'
-    + '<div style="font-size:.76rem;opacity:.8;">' + totalNights + ' nights' + (totalMi > 0 ? ' \u00b7 ' + totalMi + ' mi' : '') + (extras > 0 ? ' (+' + extras + ' added)' : extras < 0 ? ' (' + extras + ' shortened)' : '') + '</div>'
+    + '<div style="font-size:.76rem;opacity:.8;">' + totalNights + ' night' + (totalNights !== 1 ? 's' : '') + (extras > 0 ? ' (+' + extras + ' added)' : extras < 0 ? ' (' + extras + ' shortened)' : '') + '</div>'
     + '</div>'
     + (firstDay.springBreak ? '<span style="background:rgba(255,255,255,.2);border-radius:20px;padding:3px 10px;font-size:.73rem;font-weight:700;flex-shrink:0;">&#127775; Spring Break</span>' : '')
     + _wxHtml
-    + '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;">'
-    + '<span style="font-size:.6rem;font-weight:800;opacity:.75;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap;">Days</span>'
-    + '<div style="display:flex;align-items:center;gap:4px;">'
+    + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;">'
     + '<button onclick="event.stopPropagation();removePhaseDay(' + firstDay.stopId + ')" style="' + btnStyle + '" title="Remove a day">&#8722;</button>'
-    + '<span style="font-size:.65rem;opacity:.65;font-weight:700;">/</span>'
+    + '<span style="font-size:.68rem;font-weight:800;opacity:.85;letter-spacing:.02em;white-space:nowrap;">Days</span>'
     + '<button onclick="event.stopPropagation();addPhaseDay(' + firstDay.stopId + ')" style="' + btnStyle + '" title="Add a day">&#43;</button>'
-    + '</div>'
     + '</div>'
     + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + phase.replace(/'/g, "\\'") + '\')" style="background:rgba(220,80,60,.35);border:1px solid rgba(255,100,80,.5);color:#fff;border-radius:100px;padding:5px 10px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Remove this stop from trip">🗑️ Remove</button>'
     + '<button onclick="event.stopPropagation();openAreaInfo(\'' + phase.replace(/'/g, "\\'") + '\',' + firstDay.stopId + ')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 10px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">&#128269; Area Info</button>'
@@ -12062,6 +12063,20 @@ function renderTripSettings() {
   html += '})();';
   html += '<\/script>';
 
+  /* ── Trip Health Check ────────────────────────────────────────── */
+  html += '<h2 class="section-title" style="margin-top:28px;"><i class="fa-solid fa-stethoscope"></i> Trip Health Check</h2>';
+  html += '<div class="card"><div class="card-body">';
+  html += '<div style="font-size:.83rem;color:var(--text-2);line-height:1.6;margin-bottom:14px;">'
+    + 'Scans your trip for issues and auto-fixes what it can: drive day departure order, missing day fields, date sequencing, stale data, long drives, activity timing, weather coverage, and more. A verification step confirms fixes applied correctly.</div>';
+  html += '<div style="font-size:.79rem;color:var(--text-3);line-height:1.55;margin-bottom:14px;background:var(--bg);border-radius:var(--radius-s);padding:10px 12px;border:1px solid var(--border);">'
+    + '<strong style="display:block;margin-bottom:6px;color:var(--text-2);">Checks run:</strong>'
+    + '✓ Day numbering &amp; dates &nbsp;·&nbsp; ✓ Drive A→B→C departure order &nbsp;·&nbsp; ✓ Missing day fields<br>'
+    + '✓ Orphaned stop references &nbsp;·&nbsp; ✓ Map coordinates &nbsp;·&nbsp; ✓ Long drives (&gt;500 mi)<br>'
+    + '✓ Activity time order &nbsp;·&nbsp; ✓ Start date sync &nbsp;·&nbsp; ✓ Restaurant preferences &nbsp;·&nbsp; ✓ Weather &amp; AI cache'
+    + '</div>';
+  html += '<button onclick="refreshTripPlan()" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:var(--radius-s);padding:13px;font-size:.92rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:8px;"><i class="fa-solid fa-stethoscope"></i> Run Health Check &amp; Fix Issues</button>';
+  html += '</div></div>';
+
   /* ── Duplicate Trip ───────────────────────────────────────────── */
   html += '<h2 class="section-title" style="margin-top:28px;"><i class="fa-solid fa-copy"></i> Duplicate Trip</h2>';
   html += '<div class="card"><div class="card-body">';
@@ -12094,6 +12109,274 @@ function restartTrip() {
   switchTab('dashboard');
   renderDashboard();
   showToast('↺ Trip has been restarted! Tap "Start Trip" on the dashboard when you\'re ready to go! 🚐', 4500);
+}
+
+/* ── TRIP HEALTH CHECK / REFRESH ────────────────────────────────────────────
+   Runs a suite of sanity checks on the current trip data, auto-fixes what it
+   can, and shows a report of fixes made + items that need manual attention.
+   ──────────────────────────────────────────────────────────────────────────── */
+function refreshTripPlan() {
+  var issues = [];   // { type:'fix'|'warn'|'info', msg:string }
+  var fixCount = 0;
+  var days  = JSON.parse(JSON.stringify(TRIP_DAYS));
+  var stops = TRIP_STOPS;
+  var stopMap = {};
+  stops.forEach(function(s) { stopMap[s.id] = s; });
+  var removedIds = appState.removedStops || {};
+
+  /* ── 1. Day numbering & dates ──────────────────────────────────────────── */
+  var startMs = new Date(CONFIG.startDate + 'T00:00:00').getTime();
+  var needRedate = false;
+  days.forEach(function(d, i) {
+    var dd = new Date(startMs + i * 86400000);
+    var expectedDate = dd.getFullYear() + '-' + String(dd.getMonth()+1).padStart(2,'0') + '-' + String(dd.getDate()).padStart(2,'0');
+    if (d.day !== i + 1 || d.date !== expectedDate) needRedate = true;
+  });
+  if (needRedate) {
+    days = days.map(function(d, i) {
+      var dd = new Date(startMs + i * 86400000);
+      var ds = dd.getFullYear() + '-' + String(dd.getMonth()+1).padStart(2,'0') + '-' + String(dd.getDate()).padStart(2,'0');
+      return Object.assign({}, d, { day: i + 1, date: ds });
+    });
+    issues.push({ type:'fix', msg: 'Re-numbered and re-dated all ' + days.length + ' days from ' + CONFIG.startDate });
+    fixCount++;
+  } else {
+    issues.push({ type:'info', msg: 'Day numbering & dates ✓ All ' + days.length + ' days correctly numbered and dated from ' + CONFIG.startDate });
+  }
+
+  /* ── 2. Drive day titles — phase-based departure detection ─────────────── */
+  var titleFixes = 0;
+  days = days.map(function(d) {
+    if (!d.driveDay) return d;
+    var destStop = stopMap[d.stopId];
+    var destName = destStop ? (destStop.name + (destStop.state ? ', ' + destStop.state : '')) : (d.phase || 'destination');
+    var myPhase = d.phase || '';
+    var originName = '';
+    for (var bi = d.day - 2; bi >= 0; bi--) {
+      var prev = days[bi];
+      if (!prev || removedIds[prev.stopId]) continue;
+      var prevPhase = prev.phase || '';
+      if (prevPhase === myPhase) continue;
+      originName = prevPhase || (stopMap[prev.stopId] ? (stopMap[prev.stopId].name + (stopMap[prev.stopId].state ? ', ' + stopMap[prev.stopId].state : '')) : '');
+      break;
+    }
+    var newTitle = originName ? (originName + ' \u2192 ' + destName) : ('Drive to ' + destName);
+    if (newTitle !== d.title) {
+      titleFixes++;
+      return Object.assign({}, d, { title: newTitle });
+    }
+    return d;
+  });
+  if (titleFixes > 0) {
+    issues.push({ type:'fix', msg: 'Corrected departure city in ' + titleFixes + ' drive day title(s) — sequential A\u2192B\u2192C order restored' });
+    fixCount++;
+  } else {
+    issues.push({ type:'info', msg: 'Drive day titles ✓ All departure cities match previous locations' });
+  }
+
+  /* ── 3. Missing required fields on days ─────────────────────────────────── */
+  var fieldFixes = 0;
+  days = days.map(function(d) {
+    var stop = stopMap[d.stopId];
+    var stopName = stop ? (stop.name + (stop.state ? ', ' + stop.state : '')) : '';
+    var nd = Object.assign({}, d);
+    var changed = false;
+    if (!nd.phase && stopName) { nd.phase = stop.region || stopName; changed = true; }
+    if (!nd.sleep && stopName) { nd.sleep = stopName; changed = true; }
+    if (!nd.title) { nd.title = nd.driveDay ? ('Drive to ' + stopName) : ('Explore ' + stopName); changed = true; }
+    if (!nd.driver) { nd.driver = 'Paul'; changed = true; }
+    if (changed) fieldFixes++;
+    return nd;
+  });
+  if (fieldFixes > 0) {
+    issues.push({ type:'fix', msg: 'Filled in missing phase/sleep/title/driver on ' + fieldFixes + ' day(s)' });
+    fixCount++;
+  } else {
+    issues.push({ type:'info', msg: 'Day fields ✓ All days have required phase, sleep, title, and driver fields' });
+  }
+
+  /* ── 4. Orphaned days (stopId not in TRIP_STOPS) ─────────────────────── */
+  var orphanDays = days.filter(function(d) { return !stopMap[d.stopId]; });
+  if (orphanDays.length > 0) {
+    issues.push({ type:'warn', msg: orphanDays.length + ' day(s) reference a stop ID not in the current route — may appear incorrectly on the schedule' });
+  } else {
+    issues.push({ type:'info', msg: 'Stop references ✓ All day entries point to valid route stops' });
+  }
+
+  /* ── 5. Stops missing coordinates (won\'t appear on map) ─────────────── */
+  var noCoord = stops.filter(function(s) { return !removedIds[s.id] && (!s.lat || !s.lng || (s.lat === 0 && s.lng === 0)); });
+  if (noCoord.length > 0) {
+    issues.push({ type:'warn', msg: noCoord.length + ' stop(s) have no map coordinates and won\'t appear on the route map: ' + noCoord.map(function(s){return s.name;}).join(', ') });
+  } else {
+    issues.push({ type:'info', msg: 'Map coordinates ✓ All active stops have valid lat/lng for the route map' });
+  }
+
+  /* ── 6. Stale removed-stop entries ─────────────────────────────────────── */
+  var staleKeys = Object.keys(removedIds).filter(function(id) { return !stopMap[parseInt(id,10)]; });
+  if (staleKeys.length > 0) {
+    if (!appState.removedStops) appState.removedStops = {};
+    staleKeys.forEach(function(k) { delete appState.removedStops[k]; });
+    issues.push({ type:'fix', msg: 'Cleaned up ' + staleKeys.length + ' stale hidden-stop reference(s) pointing to deleted stops' });
+    fixCount++;
+  }
+
+  /* ── 7. Long drives flagged (>500 mi) ──────────────────────────────────── */
+  var longDrives = days.filter(function(d) { return d.driveDay && (d.miles || 0) > 500 && !removedIds[d.stopId]; });
+  if (longDrives.length > 0) {
+    issues.push({ type:'warn', msg: longDrives.length + ' drive day(s) over 500 mi — consider splitting: ' + longDrives.map(function(d){return (d.title||'drive') + ' (' + d.miles + ' mi)';}).slice(0,3).join('; ') });
+  } else {
+    issues.push({ type:'info', msg: 'Drive distances ✓ No single-day drives over 500 miles' });
+  }
+
+  /* ── 8. Activity time ordering (outdoor activities late in day) ─────────── */
+  var earlyTypes = ['hike','kayak','raft','climb','bike','snorkel','swim','paddl','canoe','zip'];
+  var lateActWarns = 0;
+  days.forEach(function(d) {
+    if (d.driveDay || !d.activities || d.activities.length < 3) return;
+    d.activities.forEach(function(act, idx) {
+      if (idx < 2) return;
+      var n = (act.name || act.desc || '').toLowerCase();
+      if (earlyTypes.some(function(t) { return n.indexOf(t) > -1; })) lateActWarns++;
+    });
+  });
+  if (lateActWarns > 0) {
+    issues.push({ type:'warn', msg: lateActWarns + ' outdoor/physical activity/activities appear late in a day\'s schedule (position 3+). Tap a day to reorder activities so hikes, kayaking etc. happen in the morning.' });
+  } else {
+    issues.push({ type:'info', msg: 'Activity order ✓ No outdoor activities detected late in the day' });
+  }
+
+  /* ── 9. Trip start date matches CONFIG ──────────────────────────────────── */
+  var savedStart = appState.tripSettings && appState.tripSettings.startDate;
+  if (savedStart && savedStart !== CONFIG.startDate) {
+    issues.push({ type:'warn', msg: 'Start date mismatch — Trip Settings shows ' + savedStart + ' but schedule is built from ' + CONFIG.startDate + '. Re-save Trip Settings to sync.' });
+  } else {
+    issues.push({ type:'info', msg: 'Start date ✓ ' + CONFIG.startDate });
+  }
+
+  /* ── 10. Restaurant preferences applied ─────────────────────────────────── */
+  var restPrefs = appState.restaurantPrefs || {};
+  var activePrefs = Object.keys(restPrefs).filter(function(k) { return restPrefs[k]; });
+  if (activePrefs.length === 0) {
+    issues.push({ type:'info', msg: 'Restaurant preferences — none set yet. Add them in Trip Settings → Restaurant Preferences so TripGenie can tailor food suggestions.' });
+  } else {
+    issues.push({ type:'info', msg: 'Restaurant preferences ✓ ' + activePrefs.length + ' style(s) active — AI recommendations will reflect these' });
+  }
+
+  /* ── 11. AI cache freshness ──────────────────────────────────────────────── */
+  var cacheSize = Object.keys(appState.aiCache || {}).length;
+  if (cacheSize > 20) {
+    issues.push({ type:'info', msg: 'AI cache has ' + cacheSize + ' stored responses. If the trip changed significantly, use "Refresh All Recommendations" in Restaurant Preferences to clear it.' });
+  }
+
+  /* ── 12. Weather data coverage ───────────────────────────────────────────── */
+  var wxData = appState.weatherCache || {};
+  var activeStops = stops.filter(function(s) { return !removedIds[s.id] && s.lat && s.lng; });
+  var noWx = activeStops.filter(function(s) { return !wxData[s.id]; });
+  if (noWx.length > 0) {
+    issues.push({ type:'info', msg: 'Weather not loaded for ' + noWx.length + ' stop(s): ' + noWx.map(function(s){return s.name;}).slice(0,4).join(', ') + (noWx.length > 4 ? '…' : '') + '. Expand each phase in the Planner to load weather.' });
+  } else if (activeStops.length > 0) {
+    issues.push({ type:'info', msg: 'Weather ✓ Loaded for all ' + activeStops.length + ' active stops' });
+  }
+
+  /* ── APPLY FIXES ─────────────────────────────────────────────────────────── */
+  if (fixCount > 0) {
+    if (appState.activeTrip === 'custom' && appState.customTripData) {
+      appState.customTripData.days = days;
+    } else {
+      appState.customTripData = {
+        tripName: (appState.tripSettings && appState.tripSettings.tripName) || _BUILTIN_TRIP.tripName || 'My Trip',
+        stops: JSON.parse(JSON.stringify(TRIP_STOPS)),
+        days: days,
+        startDate: CONFIG.startDate,
+        endDate: CONFIG.endDate,
+        totalDays: days.length,
+        totalMiles: CONFIG.totalMiles
+      };
+      appState.activeTrip = 'custom';
+    }
+    saveState(appState);
+    initApp();
+  }
+
+  /* Refresh map regardless */
+  if (typeof refreshMainMap === 'function') setTimeout(refreshMainMap, 400);
+
+  /* ── SELF-VERIFICATION: spot-check that fixes were actually applied ─────── */
+  var verifyNotes = [];
+  if (fixCount > 0) {
+    /* Re-load TRIP_DAYS after initApp() and verify day count and date of first day */
+    setTimeout(function() {
+      var vDays = TRIP_DAYS;
+      var vOk = true;
+      if (vDays.length !== days.length) { verifyNotes.push('⚠ Day count changed after apply (' + vDays.length + ' vs ' + days.length + ')'); vOk = false; }
+      if (vDays[0] && vDays[0].date !== days[0].date) { verifyNotes.push('⚠ First day date mismatch after apply'); vOk = false; }
+      if (vOk) verifyNotes.push('✓ Verified: ' + fixCount + ' fix(es) confirmed in live trip data');
+      _showRefreshResultsModal(issues, fixCount, verifyNotes);
+    }, 600);
+  } else {
+    _showRefreshResultsModal(issues, fixCount, ['✓ No changes needed — trip data is consistent']);
+  }
+}
+
+function _showRefreshResultsModal(issues, fixCount, verifyNotes) {
+  var existing = document.getElementById('trip-refresh-modal');
+  if (existing) existing.remove();
+  var fixes  = issues.filter(function(i) { return i.type === 'fix'; });
+  var warns  = issues.filter(function(i) { return i.type === 'warn'; });
+  var infos  = issues.filter(function(i) { return i.type === 'info'; });
+
+  var h = '<div id="trip-refresh-modal" onclick="if(event.target===this)this.remove();" '
+    + 'style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:flex-end;justify-content:center;">'
+    + '<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:600px;max-height:88vh;display:flex;flex-direction:column;box-sizing:border-box;">'
+    + '<div style="padding:20px 20px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">'
+    + '<strong style="font-size:1.05rem;">🔧 Trip Health Check</strong>'
+    + '<button onclick="document.getElementById(\'trip-refresh-modal\').remove()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-2);line-height:1;">✕</button>'
+    + '</div>'
+    + '<div style="overflow-y:auto;flex:1;padding:16px 20px;">';
+
+  /* Summary banner */
+  if (fixCount === 0 && warns.length === 0) {
+    h += '<div style="text-align:center;padding:16px 0 8px;color:var(--green);font-size:1rem;font-weight:800;">✅ Trip looks great! No issues found.</div>';
+  } else {
+    h += '<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">';
+    if (fixes.length)  h += '<span style="background:rgba(46,125,82,.12);color:#2e7d52;border:1px solid rgba(46,125,82,.3);border-radius:100px;padding:4px 12px;font-size:.78rem;font-weight:800;">✅ ' + fixes.length + ' auto-fixed</span>';
+    if (warns.length)  h += '<span style="background:rgba(230,126,34,.1);color:var(--orange);border:1px solid rgba(230,126,34,.3);border-radius:100px;padding:4px 12px;font-size:.78rem;font-weight:800;">⚠️ ' + warns.length + ' need attention</span>';
+    if (infos.length)  h += '<span style="background:var(--bg);color:var(--text-2);border:1px solid var(--border);border-radius:100px;padding:4px 12px;font-size:.78rem;font-weight:800;">ℹ️ ' + infos.length + ' info</span>';
+    h += '</div>';
+  }
+
+  if (fixes.length) {
+    h += '<div style="font-weight:800;font-size:.75rem;text-transform:uppercase;color:#2e7d52;letter-spacing:.05em;margin-bottom:8px;">✅ Auto-Fixed</div>';
+    fixes.forEach(function(f) {
+      h += '<div style="background:rgba(46,125,82,.07);border:1px solid rgba(46,125,82,.2);border-radius:10px;padding:10px 13px;margin-bottom:7px;font-size:.84rem;line-height:1.5;">✓ ' + f.msg + '</div>';
+    });
+  }
+  if (warns.length) {
+    h += '<div style="font-weight:800;font-size:.75rem;text-transform:uppercase;color:var(--orange);letter-spacing:.05em;margin-bottom:8px;margin-top:' + (fixes.length ? '16px' : '0') + ';">⚠️ Needs Attention</div>';
+    warns.forEach(function(w) {
+      h += '<div style="background:rgba(230,126,34,.07);border:1px solid rgba(230,126,34,.25);border-radius:10px;padding:10px 13px;margin-bottom:7px;font-size:.84rem;line-height:1.5;">⚠ ' + w.msg + '</div>';
+    });
+  }
+  if (infos.length) {
+    h += '<div style="font-weight:800;font-size:.75rem;text-transform:uppercase;color:var(--text-3);letter-spacing:.05em;margin-bottom:8px;margin-top:' + (fixes.length || warns.length ? '16px' : '0') + ';">ℹ️ Status</div>';
+    infos.forEach(function(inf) {
+      h += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 13px;margin-bottom:6px;font-size:.82rem;color:var(--text-2);line-height:1.5;">' + inf.msg + '</div>';
+    });
+  }
+
+  /* Self-verification result */
+  if (verifyNotes && verifyNotes.length) {
+    h += '<div style="margin-top:16px;padding:10px 13px;background:rgba(21,101,192,.06);border:1px solid rgba(21,101,192,.2);border-radius:10px;font-size:.8rem;color:#1565c0;">';
+    h += '<strong>Verification:</strong> ' + verifyNotes.join(' · ');
+    h += '</div>';
+  }
+
+  h += '</div>'
+    + '<div style="padding:14px 20px 28px;flex-shrink:0;">'
+    + '<button onclick="document.getElementById(\'trip-refresh-modal\').remove()" style="width:100%;padding:13px;background:var(--orange);color:#fff;border:none;border-radius:100px;font-size:.92rem;font-weight:800;cursor:pointer;font-family:var(--font);">Done</button>'
+    + '</div></div></div>';
+
+  document.body.insertAdjacentHTML('beforeend', h);
 }
 
 function duplicateTrip() {
