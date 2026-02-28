@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-02-28 (Session 8)
+2026-02-28 (Session 9)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -104,6 +104,17 @@ tripgenie/
 
 ---
 
+- Session 9 (2026-02-28):
+  - **Trip Stats tab**: Added third segment "Trip Stats" to Planner segmented control. `renderTripStats()` renders stat chips (total days/nights/drive days/stops), states bar, destinations list, and activity categories (10-category classifier).
+  - **Schedule display fixes**: Fixed Trip Pause date overlap (day badges now use `_effectiveDate`). Removed "(-X shortened)" text from phase headers. Split multi-stop phase headers — when multiple stops share a phase (e.g. "Southwest"), each stop now gets its own blue header bar using the actual city name. Replaced ▲▼ with FA chevron-up/down icons in day ordering. TripGenie context now includes full itinerary and answers about ANY location asked about.
+  - **Recommendations overlap fix**: Added `_suggAlreadyInTrip(s)` to auto-dismiss pending suggestions already in itinerary. Updated `geminiAdjustSchedule` prompt to include full planned stop list with "do NOT suggest these again" instruction.
+  - **TripOptimizer rewrite**: Completely rewrote as 3 trade-off packages (not individual ops). Each package has `title`, `hook` (trade-off pitch like "Although Palm Springs is nice…"), `tradeoff`, `saves`, and `ops[]`. Premium green UI cards with single "Apply This Package" button triggering `_applyOptimizerPackage → _applyGenieChangeWithAI`.
+  - **Real road routing on main map**: Added `_routeCache = {}` and `_mapBuildGen = 0` module-level vars. `_fetchRoadRoute(waypoints, gen, callback)` fetches real driving geometry: Tier 1 = OSRM (free, no key), Tier 2 = Mapbox (when `appState.mapboxToken` set, with RV avoidances). `buildMapMarkers` draws thin dashed placeholders immediately, then replaces with real road polylines asynchronously. `forceRefreshMap` clears `_routeCache`.
+  - **RV Profile & Map Routing in Trip Settings**: Added new section to `renderTripSettings()` with vehicle type button-group, height (ft/in), routing checkboxes (avoid parkways, avoid tolls), and Mapbox token password input. `saveRVProfile()` updated to save vehicle type, height, routing prefs, and Mapbox token to `appState`. Added `_rvSelectType()`, `_showMapboxToken()` helpers. Status badge shows "✅ Mapbox token saved" vs "⬡ No token — using OSRM free routing".
+  - **Mapbox token**: Standard public token only — no secret scopes needed. Stored client-side in `appState.mapboxToken` (localStorage). Not a Netlify env var (no build step, no server).
+
+---
+
 ## Known Issues / In Progress
 - Multiple mockup versions exist — needs consolidation decision (which is canonical?)
 - `saveTripSettings()` re-dates TRIP_DAYS in memory only; custom trip (AI-built) trips have their own date logic via `customTripData` — date change behavior for custom trips not yet tested
@@ -116,9 +127,8 @@ tripgenie/
 ---
 
 ## Suggested Next Steps
-- Push to GitHub (git push) when network is available — several commits pending
-- Regenerate regression_test.js snapshots with `node regression_test.js`
+- Push to GitHub (git push) when network is available — commits pending from sessions 8-9
+- User needs to create Mapbox public token at mapbox.com (no secret scopes), then enter it in Trip Settings → RV Profile & Map Routing
 - Implement Gallery/Journal photo unification (user requested: upload to gallery, all photos available in journal entry)
 - Inject `getRestaurantPrefContext()` into campground + area info AI prompts alongside `getDietContext()`
 - Consider adding "Nashville" and "Fredericksburg" as proper TRIP_STOPS entries (currently inferred from TRIP_DAYS but no markers on map)
-- User's existing "Plaza Theater" stop in the trip was added incorrectly (venue name as stop name). User should use 🗑️ Remove on that phase, then use Change Plan again — new prompt will correctly create an "El Paso, TX" stop with the theater as an activity

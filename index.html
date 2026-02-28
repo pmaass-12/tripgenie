@@ -4643,46 +4643,110 @@ function renderDashboard() {
 }
 
 /* ── MAP INIT ─────────────────────────────────────────────────────── */
-var mainMap = null;
-var miniMap = null;
+var mainMap      = null;
+var miniMap      = null;
+var _routeCache  = {};  // geometry cache keyed by waypoint string; cleared on forceRefreshMap
+var _mapBuildGen = 0;   // stale OSRM/Mapbox callbacks self-discard when gen doesn't match
+
+/* ── ROAD ROUTING ─────────────────────────────────────────────────────
+   Two-tier routing for the main map:
+   • Tier 1 (always): OSRM public API — free, no key, real roads
+   • Tier 2 (upgrade): Mapbox Directions — when appState.mapboxToken is set,
+     adds RV-specific exclusions (ferries, avoid motorway for low-bridge routes)
+
+   waypoints: array of [lat, lng] pairs in Leaflet convention
+   gen:       the _mapBuildGen snapshot at call time — callback no-ops if stale
+   callback:  fn(latLngCoords | null) — null triggers straight-line fallback     */
+function _fetchRoadRoute(waypoints, gen, callback) {
+  if (waypoints.length < 2) { callback(null); return; }
+
+  /* Waypoint string is the cache key */
+  var cacheKey = waypoints.map(function(ll){ return ll[0].toFixed(4)+','+ll[1].toFixed(4); }).join('|');
+  if (_routeCache[cacheKey]) { callback(_routeCache[cacheKey]); return; }
+
+  var rp         = (appState.tripSettings && appState.tripSettings.rvProfile) || {};
+  var mbToken    = (appState.mapboxToken || '').trim();
+  var useMapbox  = !!mbToken;
+
+  function _handleGeoJSON(coordinates) {
+    /* GeoJSON is [lng, lat]; convert to Leaflet [lat, lng] */
+    var latlngs = coordinates.map(function(c){ return [c[1], c[0]]; });
+    _routeCache[cacheKey] = latlngs;
+    callback(latlngs);
+  }
+
+  if (useMapbox) {
+    /* ── Mapbox Directions API ───────────────────────────────────────── */
+    /* Mapbox expects lng,lat (opposite of Leaflet) */
+    var mbCoords = waypoints.map(function(ll){ return ll[1]+','+ll[0]; }).join(';');
+    var excludes = ['ferry'];
+    /* If RV is tall / driver wants to avoid low bridges, exclude motorways.
+       Note: this is a heuristic — true bridge-height data requires a paid
+       specialised API (Trimble, HERE Truck). Motorway exclusion avoids many
+       but not all restricted roads. */
+    if (rp.avoidParkways) excludes.push('motorway');
+    if (rp.avoidTolls)    excludes.push('toll');
+    var mbUrl = 'https://api.mapbox.com/directions/v5/mapbox/driving/'
+      + mbCoords
+      + '?access_token=' + mbToken
+      + '&geometries=geojson&overview=full'
+      + '&exclude=' + excludes.join(',');
+    fetch(mbUrl)
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if (gen !== _mapBuildGen) return;
+        if (data.routes && data.routes[0] && data.routes[0].geometry)
+          _handleGeoJSON(data.routes[0].geometry.coordinates);
+        else callback(null);
+      })
+      .catch(function(){ if (gen === _mapBuildGen) callback(null); });
+  } else {
+    /* ── OSRM public API (free, no key) ─────────────────────────────── */
+    /* OSRM expects lng,lat */
+    var osrmCoords = waypoints.map(function(ll){ return ll[1]+','+ll[0]; }).join(';');
+    var osrmUrl = 'https://router.project-osrm.org/route/v1/driving/'
+      + osrmCoords
+      + '?overview=full&geometries=geojson&annotations=false';
+    fetch(osrmUrl)
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if (gen !== _mapBuildGen) return;
+        if (data.routes && data.routes[0] && data.routes[0].geometry)
+          _handleGeoJSON(data.routes[0].geometry.coordinates);
+        else callback(null);
+      })
+      .catch(function(){ if (gen === _mapBuildGen) callback(null); });
+  }
+}
 
 // ROUTE_OUT and ROUTE_RETURN removed — route is now built dynamically from
 // TRIP_DAYS + TRIP_STOPS in buildMapMarkers() so any changes to the plan
 // are always reflected without hardcoded coordinates.
 
 function buildMapMarkers(mapObj) {
-  // Draw route dynamically from TRIP_STOPS so any added/removed stops are always reflected
+  // Capture build generation so in-flight route fetches from a previous render self-discard
+  var _myGen = ++_mapBuildGen;
+
   var _roundTrip  = _tripIsRoundTrip();
-  // Find the actual home/start stop via _tripHomeStop() (looks for sleepType='home' in TRIP_DAYS)
   var _homeStop   = (typeof _tripHomeStop === 'function') ? _tripHomeStop() : null;
   var _homeCoords = (_homeStop && _homeStop.lat && _homeStop.lng)
     ? [_homeStop.lat, _homeStop.lng]
-    : [41.2559, -74.3593]; // fallback: Warwick, NY
-  // Exclude the home stop from the destination markers (it gets its own home icon below)
+    : [41.2559, -74.3593];
   var _homeStopId = _homeStop ? _homeStop.id : 15;
-  // Exclude removed stops from both the polyline and the markers
   var _removedIds = (appState && appState.removedStops) ? appState.removedStops : {};
   var _validStops = TRIP_STOPS.filter(function(s) { return s.lat && s.lng && s.id !== _homeStopId && !_removedIds[s.id]; });
 
   if (_validStops.length) {
-    // Build the ordered stop sequence from TRIP_DAYS (never hardcoded IDs).
-    // Walk TRIP_DAYS in order; collect unique stopIds in the order they first appear,
-    // skipping removed stops and the home stop.
-    var _seenIds = {};
-    var _orderedIds = [];
+    var _seenIds = {}, _orderedIds = [];
     TRIP_DAYS.forEach(function(d) {
       if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeStopId) return;
       if (!_seenIds[d.stopId]) { _seenIds[d.stopId] = true; _orderedIds.push(d.stopId); }
     });
-
-    // Split into outbound / return at the furthest-west stop (the turnaround).
-    // "Furthest west" = the stop with the minimum (most negative) longitude.
     var _validMap = {};
     _validStops.forEach(function(s) { _validMap[s.id] = s; });
     var _orderedStops = _orderedIds.map(function(id) { return _validMap[id]; }).filter(Boolean);
 
-    var _turnIdx = 0;
-    var _minLng = Infinity;
+    var _turnIdx = 0, _minLng = Infinity;
     _orderedStops.forEach(function(s, i) {
       if (s.lng < _minLng) { _minLng = s.lng; _turnIdx = i; }
     });
@@ -4690,14 +4754,33 @@ function buildMapMarkers(mapObj) {
     var _outboundStops = _orderedStops.slice(0, _turnIdx + 1);
     var _returnStops   = _orderedStops.slice(_turnIdx);
 
-    if (_outboundStops.length > 0) {
-      var _outLine = [_homeCoords].concat(_outboundStops.map(function(s) { return [s.lat, s.lng]; }));
-      L.polyline(_outLine, { color: '#2C5F8A', weight: 3, opacity: .8 }).addTo(mapObj);
-    }
-    if (_returnStops.length > 0) {
-      var _retLine = _returnStops.map(function(s) { return [s.lat, s.lng]; }).concat([_homeCoords]);
-      L.polyline(_retLine, { color: '#7B5EA7', weight: 3, opacity: .8, dashArray: '8 4' }).addTo(mapObj);
-    }
+    /* Waypoint arrays in Leaflet [lat,lng] convention */
+    var _outWaypts = [_homeCoords].concat(_outboundStops.map(function(s){ return [s.lat, s.lng]; }));
+    var _retWaypts = _returnStops.map(function(s){ return [s.lat, s.lng]; }).concat([_homeCoords]);
+
+    /* Draw thin dashed placeholder lines immediately so map isn't blank while routing loads */
+    var _outFallback = L.polyline(_outWaypts, { color:'#2C5F8A', weight:1.5, opacity:.3, dashArray:'5 6' }).addTo(mapObj);
+    var _retFallback = L.polyline(_retWaypts, { color:'#7B5EA7', weight:1.5, opacity:.3, dashArray:'5 6' }).addTo(mapObj);
+
+    /* Outbound: solid blue real-road route */
+    _fetchRoadRoute(_outWaypts, _myGen, function(coords) {
+      try { mapObj.removeLayer(_outFallback); } catch(e) {}
+      if (_myGen !== _mapBuildGen) return;
+      L.polyline(
+        coords || _outWaypts,
+        { color:'#2C5F8A', weight: coords ? 3.5 : 2.5, opacity: coords ? .85 : .65 }
+      ).addTo(mapObj);
+    });
+
+    /* Return: dashed purple real-road route */
+    _fetchRoadRoute(_retWaypts, _myGen, function(coords) {
+      try { mapObj.removeLayer(_retFallback); } catch(e) {}
+      if (_myGen !== _mapBuildGen) return;
+      L.polyline(
+        coords || _retWaypts,
+        { color:'#7B5EA7', weight: coords ? 3.5 : 2.5, opacity: coords ? .85 : .6, dashArray:'10 5' }
+      ).addTo(mapObj);
+    });
   }
 
   // Add home marker at correct start/end location
@@ -4791,18 +4874,13 @@ function refreshMainMap() {
 /* Called by the Refresh Map button — destroys and re-creates the map from scratch */
 function forceRefreshMap(btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> Refreshing…'; }
-  if (mainMap) {
-    mainMap.remove();
-    mainMap = null;
-  }
+  _routeCache = {};  // flush cached geometry so fresh routes are fetched after a plan change
+  if (mainMap) { mainMap.remove(); mainMap = null; }
   var container = document.getElementById('map-container');
   if (container) container.innerHTML = '';
   setTimeout(function() {
     initMainMap();
-    if (btn) {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Refresh Map';
-    }
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fa-solid fa-rotate"></i> Refresh Map'; }
   }, 300);
 }
 
@@ -12237,6 +12315,88 @@ function renderTripSettings() {
 
   html += '</div></div>'; /* end driving prefs card */
 
+  /* ── RV Profile & Map Routing ─────────────────────────────────── */
+  var _rvp = (appState.tripSettings && appState.tripSettings.rvProfile) || {};
+  var _mbTok = (appState.mapboxToken || '').trim();
+  var _rvTypeOpts = [
+    { v:'motorhome_a', l:'Class A Motorhome',          i:'🚌' },
+    { v:'motorhome_c', l:'Class C Motorhome',          i:'🚐' },
+    { v:'fifthwheel',  l:'5th Wheel / Travel Trailer', i:'🚛' },
+    { v:'van',         l:'Class B / Sprinter Van',     i:'🚐' },
+    { v:'tent',        l:'Tent / No RV',               i:'⛺' }
+  ];
+  html += '<h2 class="section-title" style="margin-top:28px;"><i class="fa-solid fa-caravan"></i> RV Profile &amp; Map Routing</h2>';
+  html += '<div style="background:#e8f0fe;border:1px solid #a8c0f0;border-radius:var(--radius-s);padding:12px 15px;margin-bottom:16px;font-size:.82rem;color:var(--text);line-height:1.55;">'
+    + '🗺️ Your RV specs help TripGenie check campground hookups and route around height/weight restrictions. '
+    + 'Add a Mapbox token to upgrade the trip map from straight lines to <strong>real road routing</strong>.'
+    + '</div>';
+  html += '<div class="card"><div class="card-body" style="display:flex;flex-direction:column;gap:18px;">';
+
+  /* — Vehicle type — */
+  html += '<div>';
+  html += '<label style="font-size:.72rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:8px;text-transform:uppercase;letter-spacing:.04em;">🚐 Vehicle Type</label>';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:6px;" id="rv-type-btns">';
+  _rvTypeOpts.forEach(function(opt) {
+    var active = _rvp.vehicleType === opt.v;
+    html += '<button onclick="_rvSelectType(\'' + opt.v + '\')" id="rvt-' + opt.v + '" '
+      + 'style="display:flex;align-items:center;gap:5px;padding:7px 13px;background:' + (active ? 'var(--blue)' : 'var(--bg)') + ';color:' + (active ? '#fff' : 'var(--text-2)') + ';border:1.5px solid ' + (active ? 'var(--blue)' : 'var(--border)') + ';border-radius:20px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:all .15s;">'
+      + '<span>' + opt.i + '</span><span>' + opt.l + '</span>'
+      + (active ? '<span style="font-size:.6rem;margin-left:2px;">✓</span>' : '')
+      + '</button>';
+  });
+  html += '</div></div>';
+
+  /* — Height — */
+  html += '<div style="display:flex;gap:10px;align-items:flex-end;">';
+  html += '<div style="flex:1;">';
+  html += '<label style="font-size:.72rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">📏 RV Height (ft)</label>';
+  html += '<input id="rv-height-ft" type="number" min="0" max="20" value="' + (_rvp.heightFt || '') + '" placeholder="e.g. 13" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-s);font-size:.95rem;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;" />';
+  html += '</div>';
+  html += '<div style="flex:1;">';
+  html += '<label style="font-size:.72rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">+ Inches</label>';
+  html += '<input id="rv-height-in" type="number" min="0" max="11" value="' + (_rvp.heightIn || '') + '" placeholder="0–11" style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-s);font-size:.95rem;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;" />';
+  html += '</div>';
+  html += '</div>';
+
+  /* — Routing checkboxes — */
+  html += '<div style="background:var(--bg-2,#f7f9fb);border:1.5px solid var(--border);border-radius:var(--radius-s);padding:12px 14px;display:flex;flex-direction:column;gap:10px;">';
+  html += '<div style="font-size:.72rem;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.04em;margin-bottom:2px;">🛣️ Routing Preferences</div>';
+  html += '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.88rem;font-weight:600;color:var(--text);">';
+  html += '<input type="checkbox" id="rv-avoid-parkways" ' + (_rvp.avoidParkways ? 'checked' : '') + ' style="width:17px;height:17px;accent-color:var(--blue);cursor:pointer;" />';
+  html += '<span>Avoid parkways &amp; restricted roads <span style="font-size:.75rem;color:var(--text-3);font-weight:400;">(height/weight limits, no-RV signs)</span></span>';
+  html += '</label>';
+  html += '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:.88rem;font-weight:600;color:var(--text);">';
+  html += '<input type="checkbox" id="rv-avoid-tolls" ' + (_rvp.avoidTolls ? 'checked' : '') + ' style="width:17px;height:17px;accent-color:var(--blue);cursor:pointer;" />';
+  html += '<span>Prefer toll-free routes</span>';
+  html += '</label>';
+  html += '</div>';
+
+  /* — Mapbox token — */
+  html += '<div>';
+  html += '<label style="font-size:.72rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">🗺️ Mapbox Token <span style="font-size:.68rem;font-weight:500;color:var(--text-3);text-transform:none;letter-spacing:0;">(optional — enables real-road routing on the trip map)</span></label>';
+  html += '<div style="display:flex;gap:8px;">';
+  html += '<input id="mapbox-token-input" type="password" placeholder="pk.eyJ1IjoiYWR…" value="' + _mbTok.replace(/"/g,'&quot;') + '" style="flex:1;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-s);font-size:.88rem;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;font-family:monospace;" />';
+  html += '<button onclick="_showMapboxToken()" title="Show/hide token" style="padding:10px 13px;border:1.5px solid var(--border);border-radius:var(--radius-s);background:var(--bg);color:var(--text-2);cursor:pointer;font-size:.9rem;">👁</button>';
+  html += '</div>';
+  html += '<div style="font-size:.74rem;color:var(--text-3);margin-top:5px;line-height:1.55;">'
+    + 'Standard <strong>public</strong> token from <a href="https://account.mapbox.com/access-tokens/" target="_blank" rel="noopener" style="color:var(--blue);">mapbox.com</a> — no secret scopes needed. '
+    + 'Without a token, the map uses straight lines between stops. '
+    + 'Without Mapbox, routing still follows real roads via OSRM (free, no key).'
+    + '</div>';
+
+  /* — Live status badge — */
+  if (_mbTok) {
+    html += '<div style="display:inline-flex;align-items:center;gap:6px;background:#e8f5ee;border:1px solid var(--green);border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:var(--green);">✅ Mapbox token saved — RV routing active</div>';
+  } else {
+    html += '<div style="display:inline-flex;align-items:center;gap:6px;background:var(--bg-2,#f7f9fb);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:600;color:var(--text-3);">⬡ No token — using OSRM free routing</div>';
+  }
+  html += '</div>';
+
+  /* — Save button — */
+  html += '<button onclick="saveRVProfile()" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:var(--radius-s);padding:13px;font-size:.95rem;font-weight:800;cursor:pointer;font-family:var(--font);">✓ Save RV Profile &amp; Routing</button>';
+
+  html += '</div></div>'; /* end rv card */
+
   /* ── AI Skip Preferences ──────────────────────────────────────── */
   var skipPrefs = appState.skipPrefs || {};
   var skipList  = skipPrefs.items || [];
@@ -12423,21 +12583,58 @@ function getRVContext() {
   return 'RV specs: ' + parts.join(', ') + '. Factor these into campground hookup, route, and activity suggestions. ';
 }
 function saveRVProfile() {
-  var typeEl = document.querySelector('input[name="rv-type"]:checked');
+  /* Vehicle type — now a button group, value stored in window._rvSelectedType */
+  var vehicleType = window._rvSelectedType
+    || (appState.tripSettings && appState.tripSettings.rvProfile && appState.tripSettings.rvProfile.vehicleType)
+    || '';
   var ftEl   = document.getElementById('rv-height-ft');
   var inEl   = document.getElementById('rv-height-in');
   var pkEl   = document.getElementById('rv-avoid-parkways');
   var tlEl   = document.getElementById('rv-avoid-tolls');
+  var mbEl   = document.getElementById('mapbox-token-input');
   if (!appState.tripSettings) appState.tripSettings = {};
   appState.tripSettings.rvProfile = {
-    vehicleType:     typeEl ? typeEl.value : '',
-    heightFt:        ftEl   ? parseInt(ftEl.value,10)  || 0 : 0,
-    heightIn:        inEl   ? parseInt(inEl.value,10)  || 0 : 0,
-    avoidParkways:   pkEl   ? pkEl.checked : false,
-    avoidTolls:      tlEl   ? tlEl.checked : false
+    vehicleType:   vehicleType,
+    heightFt:      ftEl ? parseInt(ftEl.value,10)  || 0 : 0,
+    heightIn:      inEl ? parseInt(inEl.value,10)  || 0 : 0,
+    avoidParkways: pkEl ? pkEl.checked : false,
+    avoidTolls:    tlEl ? tlEl.checked : false
   };
+  /* Save Mapbox token separately at appState root (not inside tripSettings) */
+  if (mbEl) {
+    var tok = mbEl.value.trim();
+    if (tok) {
+      appState.mapboxToken = tok;
+    } else {
+      delete appState.mapboxToken;
+    }
+  }
   saveState(appState);
+  _routeCache = {};          /* flush cached geometry so new token takes effect */
   showToast('🚐 RV profile saved!', 2000);
+  renderTripSettings();      /* re-render to update status badge */
+}
+
+/* Toggle show/hide for the Mapbox token field */
+function _showMapboxToken() {
+  var el = document.getElementById('mapbox-token-input');
+  if (!el) return;
+  el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+/* Button-group selection for RV vehicle type */
+function _rvSelectType(val) {
+  window._rvSelectedType = val;
+  var opts = ['motorhome_a','motorhome_c','fifthwheel','van','tent'];
+  opts.forEach(function(v) {
+    var btn = document.getElementById('rvt-' + v);
+    if (!btn) return;
+    var active = v === val;
+    btn.style.background = active ? 'var(--blue)' : 'var(--bg)';
+    btn.style.color = active ? '#fff' : 'var(--text-2)';
+    btn.style.borderColor = active ? 'var(--blue)' : 'var(--border)';
+    btn.innerHTML = (active ? '<span>✓</span>' : '') + btn.innerHTML.replace(/<span>✓<\/span>/g,'');
+  });
 }
 
 /* ── DRIVING DIRECTIONS ─────────────────────────────────────────────────────
