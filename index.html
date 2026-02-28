@@ -995,6 +995,22 @@
     .swipe-trash.visible { pointer-events:auto;opacity:1; }
     .swipe-content { display:block;position:relative;transition:transform .15s;will-change:transform; }
     .swipe-content.swiped { transform:translateX(-72px) !important; }
+    /* Sticky category headers in packing/todo lists */
+    .list-cat-hdr {
+      position:sticky;top:0;z-index:20;
+      background:var(--bg);
+      display:flex;align-items:center;justify-content:space-between;
+      padding:9px 2px 6px;
+      border-bottom:1.5px solid var(--border);
+      margin-bottom:7px;margin-top:14px;
+    }
+    .list-cat-hdr:first-child { margin-top:4px; }
+    .list-cat-hdr-label { font-size:.72rem;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em; }
+    .list-cat-hdr-add { background:var(--orange);color:#fff;border:none;border-radius:100px;padding:4px 11px;font-size:.75rem;font-weight:800;cursor:pointer;font-family:var(--font);line-height:1.5; }
+    .list-qa-row { padding:6px 0 10px;display:none; }
+    .list-qa-row.open { display:flex;gap:7px; }
+    .list-qa-input { flex:1;padding:8px 13px;border:1.5px solid var(--orange);border-radius:100px;font-size:.85rem;font-family:var(--font);outline:none;background:var(--card); }
+    .list-qa-submit { background:var(--orange);color:#fff;border:none;border-radius:100px;padding:8px 15px;font-size:.85rem;font-weight:800;cursor:pointer;font-family:var(--font); }
 
     /* ── FUN / TOOLS SUB-TABS ────────────────────────────────────── */
     .section-sub-bar {
@@ -6949,6 +6965,33 @@ function hideOrDeleteListItem(type, id) {
   saveState(appState); renderLists();
 }
 
+function toggleListQuickAdd(qaId) {
+  var el = document.getElementById(qaId);
+  if (!el) return;
+  var isOpen = el.classList.contains('open');
+  /* close any other open quick-add first */
+  document.querySelectorAll('.list-qa-row.open').forEach(function(r) { r.classList.remove('open'); });
+  if (!isOpen) {
+    el.classList.add('open');
+    var inp = document.getElementById(qaId + '-inp');
+    if (inp) { inp.value = ''; setTimeout(function() { inp.focus(); }, 60); }
+  }
+}
+function submitListQuickAdd(qaId) {
+  var el = document.getElementById(qaId);
+  if (!el) return;
+  var type = el.dataset.type;
+  var cat  = el.dataset.cat;
+  var inp  = document.getElementById(qaId + '-inp');
+  var text = inp ? inp.value.trim() : '';
+  if (!text) return;
+  if (!appState.customListItems) appState.customListItems = { todo:[], pack:[] };
+  if (!appState.customListItems[type]) appState.customListItems[type] = [];
+  appState.customListItems[type].push({ id: type + '_c_' + Date.now(), cat: cat, text: text });
+  saveState(appState);
+  renderLists();
+}
+
 function getListState() {
   if (!appState.listChecked) appState.listChecked = { todo:{}, pack:{} };
   if (!appState.listChecked.todo) appState.listChecked.todo = {};
@@ -7079,7 +7122,18 @@ function renderListSection(items, customItems, type, checkedMap) {
   for (var ci2 = 0; ci2 < cats.length; ci2++) {
     var cat = cats[ci2];
     var catItems = catMap[cat];
-    h += '<div style="font-size:.72rem;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.06em;margin:12px 0 6px;">' + cat + '</div>';
+    var qaId = 'lqa-' + type + '-' + ci2;
+    /* Sticky category header with inline + Add button */
+    h += '<div class="list-cat-hdr">';
+    h += '<span class="list-cat-hdr-label">' + cat + '</span>';
+    h += '<button class="list-cat-hdr-add" onclick="toggleListQuickAdd(\'' + qaId + '\')">+ Add</button>';
+    h += '</div>';
+    /* Quick-add input row (hidden until + tapped) */
+    h += '<div id="' + qaId + '" class="list-qa-row" data-type="' + type + '" data-cat="' + cat.replace(/"/g,'&quot;') + '">';
+    h += '<input id="' + qaId + '-inp" class="list-qa-input" type="text" placeholder="Add to ' + cat.replace(/[<>"']/g,'') + '\u2026" ';
+    h += 'onkeydown="if(event.key===\'Enter\')submitListQuickAdd(\'' + qaId + '\')" />';
+    h += '<button class="list-qa-submit" onclick="submitListQuickAdd(\'' + qaId + '\')">Add</button>';
+    h += '</div>';
     for (var ii = 0; ii < catItems.length; ii++) {
       var it = catItems[ii];
       var checked = !!checkedMap[it.id];
@@ -7090,30 +7144,11 @@ function renderListSection(items, customItems, type, checkedMap) {
       h += '<label class="swipe-content" ontouchstart="swipeStart(event,this)" ontouchmove="swipeMove(event,this)" ontouchend="swipeEnd(event,this)" style="display:flex;align-items:center;gap:10px;padding:10px 13px;background:' + itemBg + ';border:1px solid ' + itemBdr + ';border-radius:100px;cursor:pointer;touch-action:pan-y;" onclick="toggleListItem(\'' + type + '\',\'' + it.id + '\')">';
       h += '<span style="width:24px;height:24px;border-radius:50%;border:2px solid ' + (checked ? 'var(--green)' : 'var(--border)') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + (checked ? 'var(--green)' : '#fff') + ';color:#fff;font-size:.88rem;">' + (checked ? '&#10003;' : '') + '</span>';
       h += '<span style="font-size:.88rem;color:' + (checked ? 'var(--text-3)' : 'var(--text)') + ';' + (checked ? 'text-decoration:line-through;' : '') + 'line-height:1.4;flex:1;">' + it.text + '</span>';
-      // Drag handle
       h += '<span ontouchstart="listDragStart(event,\'' + type + '\',\'' + it.id + '\')" ontouchmove="listDragMove(event)" ontouchend="listDragEnd(event)" style="padding:4px 6px;color:var(--text-3);font-size:1rem;cursor:grab;touch-action:none;flex-shrink:0;"><i class="fa-solid fa-grip-lines"></i></span>';
       h += '</label>';
       h += '</div>';
     }
   }
-  // Section dropdown + add row
-  var todoCats = type === 'todo' ? ['Before We Leave','On The Road','Coming Home'] : (function() {
-    var shared = ['Documents','Tech & Power','RV Essentials','Kitchen','Health & Safety','Outdoor Gear'];
-    _getProfiles().filter(function(p) { return p.role === 'person'; }).forEach(function(p) {
-      shared.push(p.emoji + ' ' + p.name);
-    });
-    return shared;
-  }());
-  h += '<div style="margin-top:14px;display:flex;flex-direction:column;gap:7px;">';
-  h += '<select id="list-cat-' + type + '" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:100px;font-size:.85rem;font-family:var(--font);background:var(--bg);color:var(--text);">';
-  for (var tci = 0; tci < todoCats.length; tci++) {
-    h += '<option value="' + todoCats[tci] + '">' + todoCats[tci] + '</option>';
-  }
-  h += '</select>';
-  h += '<div style="display:flex;gap:8px;">';
-  h += '<input id="list-add-' + type + '" type="text" placeholder="Add your own item\u2026" style="flex:1;padding:9px 12px;border:1.5px solid var(--border);border-radius:100px;font-size:.88rem;font-family:var(--font);outline:none;background:var(--bg);" onkeydown="if(event.key===\'Enter\')addCustomListItem(\'' + type + '\')" />';
-  h += '<button onclick="addCustomListItem(\'' + type + '\')" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:9px 16px;font-size:.88rem;font-weight:800;cursor:pointer;font-family:var(--font);">+ Add</button>';
-  h += '</div></div>';
   return h;
 }
 function restoreHiddenItems(type) {
