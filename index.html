@@ -12837,30 +12837,104 @@ function addDriveSplitToAdjustments(dayNum) {
   showToast('🔺 Split plan added to Decisions!', 2400);
 }
 
-/* Apply the drive split immediately — splits hours and fixes schedule */
+/* Apply the drive split — STRUCTURALLY inserts a real transit overnight day
+   into TRIP_DAYS, halves the miles on both days, re-dates everything, and
+   persists as customTripData exactly like Change Plan edits do. */
 function applySplitDrive(dayNum) {
-  if (!appState.dayOverrides) appState.dayOverrides = {};
-  if (!appState.dayOverrides[dayNum]) appState.dayOverrides[dayNum] = {};
   var d = getDay(dayNum);
-  if (d) appState.dayOverrides[dayNum].splitHours = Math.round(d.driveHours / 2 * 10) / 10;
-  appState.dayOverrides[dayNum].splitResolved = true;
-  // Also add/resolve in decisions
+  if (!d || !d.driveDay || d.miles <= 0) { showToast('Cannot split this day.', 1800); return; }
+
+  var halfMiles = Math.round(d.miles / 2);
+  // Hours: prefer stored driveHours; fall back to miles / 55 mph estimate
+  var fullHours = d.driveHours > 0 ? d.driveHours : Math.round(d.miles / 55 * 10) / 10;
+  var halfHours = Math.round(fullHours / 2 * 10) / 10;
+
+  // Find the previous stop/phase to attach the transit night to
+  var removedIds = appState.removedStops || {};
+  var prevPhase = d.phase, prevStopId = d.stopId;
+  for (var bi = dayNum - 2; bi >= 0; bi--) {
+    var pd = TRIP_DAYS[bi];
+    if (!pd || removedIds[pd.stopId]) continue;
+    if (pd.phase !== d.phase) { prevPhase = pd.phase; prevStopId = pd.stopId; break; }
+  }
+
+  // Build the new transit overnight day (first half of the drive)
+  var fromLabel = prevPhase ? prevPhase.split(',')[0] : 'Previous Stop';
+  var toLabel   = d.phase   ? d.phase.split(',')[0]   : 'Destination';
+  var transitDay = {
+    stopId:      prevStopId,
+    driveDay:    true,
+    miles:       halfMiles,
+    driveHours:  halfHours,
+    driver:      d.driver || 'Paul',
+    sleep:       'Walmart / Truck Stop (overnight, midpoint)',
+    sleepType:   'walmart',
+    springBreak: d.springBreak || false,
+    phase:       prevPhase,
+    title:       fromLabel + ' \u2192 ' + toLabel + ' (Drive Day 1 of 2)'
+  };
+
+  // Clone TRIP_DAYS, halve the original drive day, insert transit day before it
+  var newDays = JSON.parse(JSON.stringify(TRIP_DAYS));
+  var dIdx = dayNum - 1; // convert 1-based dayNum to 0-based index
+  newDays[dIdx] = Object.assign({}, newDays[dIdx], {
+    miles: halfMiles, driveHours: halfHours,
+    title: fromLabel + ' \u2192 ' + toLabel + ' (Drive Day 2 of 2)'
+  });
+  newDays.splice(dIdx, 0, transitDay); // insert transit day before
+
+  // Re-date every day from CONFIG.startDate
+  var startMs = new Date(CONFIG.startDate + 'T00:00:00').getTime();
+  newDays = newDays.map(function(nd, i) {
+    var dd = new Date(startMs + i * 86400000);
+    var ds = dd.getFullYear() + '-' + String(dd.getMonth()+1).padStart(2,'0') + '-' + String(dd.getDate()).padStart(2,'0');
+    return Object.assign({}, nd, { day: i + 1, date: ds });
+  });
+
+  // Shift dayOverrides keys for days >= dayNum forward by 1 (a day was inserted)
+  if (appState.dayOverrides) {
+    var shiftedOverrides = {};
+    Object.keys(appState.dayOverrides).forEach(function(k) {
+      var n = parseInt(k, 10);
+      shiftedOverrides[n >= dayNum ? n + 1 : n] = appState.dayOverrides[k];
+    });
+    // Remove any old visual-only split flags on the new day number
+    delete shiftedOverrides[dayNum + 1];
+    appState.dayOverrides = shiftedOverrides;
+  }
+
+  // Shift decisions driveDay references the same way
+  if (appState.decisions) {
+    appState.decisions.forEach(function(dec) {
+      if (dec.driveDay && dec.driveDay >= dayNum) dec.driveDay += 1;
+    });
+  }
+
+  // Mark this decision as resolved
   if (!appState.decisions) appState.decisions = [];
   var existing = appState.decisions.find(function(s) { return s.isSplitDrive && s.driveDay === dayNum; });
-  if (!existing) {
+  if (existing) { existing.status = 'resolved'; }
+  else {
     var sugg = _buildDriveSplitSuggestion(dayNum);
     if (sugg) { sugg.status = 'resolved'; appState.decisions.unshift(sugg); }
-  } else { existing.status = 'resolved'; }
-  saveState(appState);
-  updateDecisionsBadge();
-  var warnEl = document.getElementById('drive-split-warn-' + dayNum);
-  if (warnEl) {
-    warnEl.style.transition = 'opacity .3s';
-    warnEl.style.opacity = '0';
-    setTimeout(function() { if (warnEl.parentNode) warnEl.remove(); }, 320);
   }
-  renderSchedule();
-  showToast('✂️ Drive split applied! Schedule updated.', 3000);
+
+  // Persist as customTripData so the structural change survives reloads
+  var tripName = (appState.activeTrip === 'custom' && appState.customTripData && appState.customTripData.tripName)
+    ? appState.customTripData.tripName
+    : (((appState.tripSettings && appState.tripSettings.tripName) || 'My Trip') + ' (Modified)');
+  appState.customTripData = {
+    tripName: tripName, stops: JSON.parse(JSON.stringify(TRIP_STOPS)), days: newDays,
+    startDate: CONFIG.startDate, endDate: CONFIG.endDate,
+    totalDays: newDays.length, totalMiles: CONFIG.totalMiles
+  };
+  appState.activeTrip = 'custom';
+  saveState(appState);
+
+  // Full re-init so the new customTripData is picked up everywhere
+  initApp();
+  updateDecisionsBadge();
+  showToast('\u2702\uFE0F Drive split! Transit night added (' + halfMiles + ' mi each leg). Trip is now ' + newDays.length + ' days.', 5000);
 }
 
 /* Accept the long drive — suppress warning, mark as decided */
