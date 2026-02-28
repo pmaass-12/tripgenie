@@ -142,8 +142,18 @@ tripgenie/
 
 ---
 
+- Session 12 (2026-02-28):
+  - **Map stop navigator sidebar**: Added `.map-nav-wrap` flex layout to the Map tab — `#map-stop-nav` (248px sidebar, collapses to horizontal strip on ≤700px) + `#map-container` (flex:1). `renderStopNavigator()` renders numbered draggable list of stops with orange circle badges, stop name, stay icon, nights count, and grip handle. Called on map tab open, `initMainMap()`, and `forceRefreshMap()`.
+  - **Numbered map pins**: `buildMapMarkers` now builds `_stopNumMap` (stopId → sequential number) before rendering. Markers replaced from emoji to orange `#E8813A` circle divIcons (32×32px) showing stop number in white bold text. Home stop excluded from numbering.
+  - **Drag-to-reorder from navigator**: HTML5 drag-and-drop handlers (`_navDragStart`, `_navDragOver`, `_navDragLeave`, `_navDrop`, `_navDragEnd`) on each nav item. Drop calls `_reorderStopsFromNav(fromIdx, toIdx)`.
+  - **`_reorderStopsFromNav(fromIdx, toIdx)`**: Batch arbitrary reorder — groups TRIP_DAYS by stopId, splices moved stop to target index, re-dates all days from CONFIG.startDate, renumbers day.day, sorts TRIP_STOPS to match new order. Home stop (sleepType:'home') always kept at end. Saves as customTripData, calls renderStopNavigator() + renderSchedule() + _clearAndRebuildMapMarkers().
+  - **Phase header redesign (desktop-first, Airbnb-inspired)**: After 2-row mobile layout looked poor on desktop, rewrote `phaseHeaderHtml` as single unified row on blue surface. Left: chevron reorder buttons (8px radius). Center: city name (900 weight) + subtitle (nights · stay badge · spring break). Right: weather pill | music icon | Area Info | −DAYS+ segmented pill | Remove icon. Clean, no dark sub-strip.
+  - **Max days per stop setting + TripOptimizer integration**: Added "Max Days Per Stop" number input to Trip Settings (default 5, stored as `appState.tripSettings.maxDaysPerStop`). TripOptimizer prompt now includes this constraint; suggests packages to trim stops exceeding the limit. `_applyOptimizerPackage` respects cap when reducing days.
+
+---
+
 ## Suggested Next Steps
-- Push to GitHub (git push) when network is available — commits pending from sessions 8-11
+- Push to GitHub (git push) when network is available — commits pending from sessions 8-12
 - User needs to create Mapbox public token at mapbox.com (no secret scopes), then enter it in Trip Settings → RV Profile & Map Routing
 - Consider adding "Nashville" and "Fredericksburg" as proper TRIP_STOPS entries (currently inferred from TRIP_DAYS but no markers on map)
 - Test voice chat on actual iPhone/iPad — may need microphone permission prompt handling

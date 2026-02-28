@@ -783,7 +783,20 @@
 
       /* ── Map: fill available height instead of hard-coded 100vh ── */
       #tab-map > div { height: 100% !important; min-height: 0 !important; }
-      #map-container { min-height: 260px !important; }
+      #map-container { min-height: 0 !important; }
+      .map-nav-wrap { display:flex; flex:1; min-height:0; gap:0; border-radius:var(--radius); overflow:hidden; border:1px solid var(--border); box-shadow:var(--shadow); }
+      #map-stop-nav { width:248px; flex-shrink:0; background:var(--card); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+      #map-nav-list { overflow-y:auto; flex:1; padding:6px; display:flex; flex-direction:column; gap:3px; }
+      .nav-stop-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; background:var(--bg); border:1.5px solid transparent; cursor:grab; user-select:none; -webkit-user-select:none; transition:background .12s, border-color .12s, box-shadow .12s; }
+      .nav-stop-item:hover { background:var(--blue-l); border-color:rgba(44,95,138,.25); }
+      .nav-stop-item.nav-drag-over { border-color:var(--orange) !important; background:var(--orange-l) !important; box-shadow:0 0 0 2px rgba(232,129,58,.18); }
+      .nav-stop-item.nav-dragging { opacity:.4; }
+      @media (max-width:700px) {
+        .map-nav-wrap { flex-direction:column; }
+        #map-stop-nav { width:100%; max-height:120px; border-right:none; border-bottom:1px solid var(--border); }
+        #map-nav-list { flex-direction:row; overflow-x:auto; overflow-y:hidden; padding:5px 6px; gap:5px; }
+        .nav-stop-item { flex-shrink:0; min-width:120px; }
+      }
 
       /* ── Journal: stack meta fields single-column ───────────────── */
       .journal-meta-grid {
@@ -2316,16 +2329,28 @@
     <!-- MAP TAB -->
     <div class="tab-panel" id="tab-map">
       <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);gap:12px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;flex-wrap:wrap;gap:8px;">
           <h2 class="section-title" style="margin:0"><i class="fa-solid fa-map"></i> Full Route Map</h2>
-          <div style="display:flex;gap:14px;font-size:.8rem;color:var(--text-2);align-items:center;">
-            <span style="display:flex;align-items:center;gap:5px;"><span style="width:12px;height:12px;background:var(--orange);border-radius:50%;display:inline-block;border:2px solid white;box-shadow:0 0 0 1px var(--orange)"></span> Stop</span>
+          <div style="display:flex;gap:10px;font-size:.78rem;color:var(--text-2);align-items:center;flex-wrap:wrap;">
+            <span style="display:flex;align-items:center;gap:5px;"><span style="width:22px;height:22px;background:var(--orange);border-radius:50%;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2);display:inline-flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:900;color:white;">1</span> Stops</span>
             <span style="display:flex;align-items:center;gap:5px;"><span style="width:20px;height:3px;background:var(--blue);display:inline-block;border-radius:2px"></span> Outbound</span>
-            <span style="display:flex;align-items:center;gap:5px;"><span style="width:20px;height:3px;background:#a855f7;display:inline-block;border-radius:2px;border-top:3px dashed #a855f7;height:0"></span> Return</span>
-            <button onclick="forceRefreshMap(this)" style="display:flex;align-items:center;gap:5px;background:var(--blue-l);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:var(--blue);cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-rotate"></i> Refresh Map</button>
+            <span style="display:flex;align-items:center;gap:5px;"><span style="width:20px;height:0;border-top:3px dashed #a855f7;display:inline-block;border-radius:2px"></span> Return</span>
+            <button onclick="forceRefreshMap(this)" style="display:flex;align-items:center;gap:5px;background:var(--blue-l);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:var(--blue);cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-rotate"></i> Refresh</button>
           </div>
         </div>
-        <div id="map-container" style="flex:1;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);box-shadow:var(--shadow);min-height:400px;"></div>
+        <!-- Nav + Map row -->
+        <div class="map-nav-wrap">
+          <!-- Stop navigator sidebar -->
+          <div id="map-stop-nav">
+            <div style="padding:9px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+              <span style="font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--text-2);">Stops</span>
+              <span style="font-size:.65rem;color:var(--text-3);display:flex;align-items:center;gap:3px;"><i class="fa-solid fa-grip-vertical" style="font-size:.6rem;"></i> drag to reorder</span>
+            </div>
+            <div id="map-nav-list"></div>
+          </div>
+          <!-- Leaflet map -->
+          <div id="map-container" style="flex:1;min-height:0;"></div>
+        </div>
       </div>
     </div>
 
@@ -4732,6 +4757,173 @@ function _fetchRoadRoute(waypoints, gen, callback) {
 // TRIP_DAYS + TRIP_STOPS in buildMapMarkers() so any changes to the plan
 // are always reflected without hardcoded coordinates.
 
+/* ── MAP STOP NAVIGATOR ──────────────────────────────────────────
+   Left-hand sidebar on the Map tab showing numbered stops in trip
+   order. Supports drag-to-reorder which resequences TRIP_DAYS and
+   updates the schedule + map automatically.
+   ──────────────────────────────────────────────────────────────── */
+
+var _navDragSrcIdx = null;
+
+function renderStopNavigator() {
+  var listEl = document.getElementById('map-nav-list');
+  if (!listEl) return;
+  var _removedIds = appState.removedStops || {};
+  var _homeStop   = (typeof _tripHomeStop === 'function') ? _tripHomeStop() : null;
+  var _homeId     = _homeStop ? _homeStop.id : 15;
+
+  /* Ordered unique non-home stop IDs in trip-day sequence */
+  var _seenIds = {}, _orderedIds = [];
+  TRIP_DAYS.forEach(function(d) {
+    if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeId) return;
+    if (!_seenIds[d.stopId]) { _seenIds[d.stopId] = true; _orderedIds.push(d.stopId); }
+  });
+
+  var html = '';
+  _orderedIds.forEach(function(stopId, idx) {
+    var stop    = getStop(stopId);
+    var nights  = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; }).length;
+    var stayMeta = (typeof _getStayMeta === 'function') ? _getStayMeta(stopId) : { icon:'🏕️' };
+    var name    = stop ? (stop.name || stop.phase || ('Stop ' + (idx+1))) : ('Stop ' + (idx+1));
+    var state   = stop && stop.state ? ', ' + stop.state : '';
+    var num     = idx + 1;
+    html += '<div class="nav-stop-item"'
+      + ' draggable="true"'
+      + ' data-nav-idx="' + idx + '"'
+      + ' data-nav-stopid="' + stopId + '"'
+      + ' ondragstart="_navDragStart(event)"'
+      + ' ondragover="_navDragOver(event)"'
+      + ' ondrop="_navDrop(event)"'
+      + ' ondragleave="_navDragLeave(event)"'
+      + ' ondragend="_navDragEnd(event)">'
+      + '<div style="width:26px;height:26px;background:var(--orange);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:900;flex-shrink:0;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.18);">' + num + '</div>'
+      + '<div style="flex:1;min-width:0;">'
+      + '<div style="font-size:.82rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);">' + name + state + '</div>'
+      + '<div style="font-size:.68rem;color:var(--text-3);margin-top:1px;">' + stayMeta.icon + ' ' + nights + ' night' + (nights !== 1 ? 's' : '') + '</div>'
+      + '</div>'
+      + '<i class="fa-solid fa-grip-vertical" style="color:var(--text-3);font-size:.75rem;flex-shrink:0;cursor:grab;"></i>'
+      + '</div>';
+  });
+
+  if (!html) html = '<div style="padding:16px;font-size:.8rem;color:var(--text-3);text-align:center;">No stops yet</div>';
+  listEl.innerHTML = html;
+}
+
+function _navDragStart(e) {
+  _navDragSrcIdx = parseInt(e.currentTarget.dataset.navIdx);
+  e.currentTarget.classList.add('nav-dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', _navDragSrcIdx);
+}
+
+function _navDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  var items = document.querySelectorAll('.nav-stop-item');
+  items.forEach(function(el) { el.classList.remove('nav-drag-over'); });
+  e.currentTarget.classList.add('nav-drag-over');
+}
+
+function _navDragLeave(e) {
+  e.currentTarget.classList.remove('nav-drag-over');
+}
+
+function _navDrop(e) {
+  e.preventDefault();
+  var targetIdx = parseInt(e.currentTarget.dataset.navIdx);
+  e.currentTarget.classList.remove('nav-drag-over');
+  if (_navDragSrcIdx === null || isNaN(targetIdx) || _navDragSrcIdx === targetIdx) return;
+  _reorderStopsFromNav(_navDragSrcIdx, targetIdx);
+  _navDragSrcIdx = null;
+}
+
+function _navDragEnd(e) {
+  var items = document.querySelectorAll('.nav-stop-item');
+  items.forEach(function(el) { el.classList.remove('nav-dragging', 'nav-drag-over'); });
+  _navDragSrcIdx = null;
+}
+
+/* Batch reorder: move the stop at fromIdx to toIdx in trip order.
+   Works like movePhase but handles arbitrary distances in one pass. */
+function _reorderStopsFromNav(fromIdx, toIdx) {
+  var _removedIds = appState.removedStops || {};
+  var _homeStop   = (typeof _tripHomeStop === 'function') ? _tripHomeStop() : null;
+  var _homeId     = _homeStop ? _homeStop.id : 15;
+
+  /* Build ordered non-home stopId list */
+  var _seenIds = {}, _orderedIds = [];
+  TRIP_DAYS.forEach(function(d) {
+    if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeId) return;
+    if (!_seenIds[d.stopId]) { _seenIds[d.stopId] = true; _orderedIds.push(d.stopId); }
+  });
+
+  if (fromIdx < 0 || fromIdx >= _orderedIds.length || toIdx < 0 || toIdx >= _orderedIds.length) return;
+
+  /* Move the stop in the ordered list */
+  var newOrder = _orderedIds.slice();
+  var movedId  = newOrder.splice(fromIdx, 1)[0];
+  newOrder.splice(toIdx, 0, movedId);
+
+  /* Group TRIP_DAYS by stopId */
+  var _groups = {};
+  newOrder.forEach(function(id) {
+    _groups[id] = TRIP_DAYS.filter(function(d) { return d.stopId === id; });
+  });
+
+  /* Home days stay at the end */
+  var _homeDays = TRIP_DAYS.filter(function(d) { return d.stopId === _homeId; });
+
+  /* Build new TRIP_DAYS sequence */
+  var newDays = [];
+  newOrder.forEach(function(id) {
+    (_groups[id] || []).forEach(function(d) { newDays.push(Object.assign({}, d)); });
+  });
+  _homeDays.forEach(function(d) { newDays.push(Object.assign({}, d)); });
+
+  /* Re-date from CONFIG.startDate and renumber */
+  var startMs = new Date(CONFIG.startDate + 'T00:00:00').getTime();
+  newDays = newDays.map(function(d, i) {
+    var dd = new Date(startMs + i * 86400000);
+    var ds = dd.getFullYear() + '-'
+      + String(dd.getMonth() + 1).padStart(2, '0') + '-'
+      + String(dd.getDate()).padStart(2, '0');
+    return Object.assign({}, d, { day: i + 1, date: ds });
+  });
+
+  /* Reorder TRIP_STOPS to match new stop sequence */
+  var _stopOrderMap = {};
+  newOrder.forEach(function(id, i) { _stopOrderMap[id] = i; });
+  var newStops = TRIP_STOPS.slice().sort(function(a, b) {
+    var ai = _stopOrderMap[a.id] !== undefined ? _stopOrderMap[a.id] : 9999;
+    var bi = _stopOrderMap[b.id] !== undefined ? _stopOrderMap[b.id] : 9999;
+    return ai - bi;
+  });
+
+  /* Persist as customTripData */
+  var tripName = (appState.activeTrip === 'custom' && appState.customTripData && appState.customTripData.tripName)
+    ? appState.customTripData.tripName
+    : (((appState.tripSettings && appState.tripSettings.tripName) || 'My Trip') + ' (Modified)');
+  appState.customTripData = {
+    tripName: tripName, stops: newStops, days: newDays,
+    startDate: CONFIG.startDate, endDate: CONFIG.endDate,
+    totalDays: newDays.length, totalMiles: CONFIG.totalMiles
+  };
+  appState.activeTrip = 'custom';
+
+  /* Apply to live globals */
+  TRIP_DAYS.splice(0, TRIP_DAYS.length);   newDays.forEach(function(d)  { TRIP_DAYS.push(d); });
+  TRIP_STOPS.splice(0, TRIP_STOPS.length); newStops.forEach(function(s) { TRIP_STOPS.push(s); });
+
+  saveState(appState);
+  renderStopNavigator();
+  renderSchedule();
+  if (window.mainMap) {
+    setTimeout(function() { _clearAndRebuildMapMarkers(window.mainMap); }, 120);
+  }
+  var movedStop = getStop(movedId);
+  showToast('📍 ' + (movedStop ? movedStop.name : 'Stop') + ' moved to #' + (toIdx + 1), 2000);
+}
+
 function buildMapMarkers(mapObj) {
   // Capture build generation so in-flight route fetches from a previous render self-discard
   var _myGen = ++_mapBuildGen;
@@ -4744,6 +4936,13 @@ function buildMapMarkers(mapObj) {
   var _homeStopId = _homeStop ? _homeStop.id : 15;
   var _removedIds = (appState && appState.removedStops) ? appState.removedStops : {};
   var _validStops = TRIP_STOPS.filter(function(s) { return s.lat && s.lng && s.id !== _homeStopId && !_removedIds[s.id]; });
+
+  /* Build stop number map (1-based, trip-day order, excluding home) */
+  var _stopNumMap = {}, _numSeenIds = {}, _numCtr = 1;
+  TRIP_DAYS.forEach(function(d) {
+    if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeStopId) return;
+    if (!_numSeenIds[d.stopId]) { _numSeenIds[d.stopId] = true; _stopNumMap[d.stopId] = _numCtr++; }
+  });
 
   if (_validStops.length) {
     var _seenIds = {}, _orderedIds = [];
@@ -4806,10 +5005,9 @@ function buildMapMarkers(mapObj) {
     if (!stop.lat || !stop.lng) return; // skip stops with no coordinates
     if (stop.id === _homeStopId) return;  // home already rendered above
     if (_removedIds[stop.id]) return;     // skip stops removed from the trip
-    const bgColor = '#E8813A';
-    const stopEmoji = stop.emoji || '📍';
+    var _stopNum = _stopNumMap[stop.id] || '·';
     const icon = L.divIcon({
-      html: `<div style="width:32px;height:32px;background:${bgColor};border-radius:50%;border:3px solid white;box-shadow:0 2px 8px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:15px;">${stopEmoji}</div>`,
+      html: '<div style="width:32px;height:32px;background:#E8813A;border-radius:50%;border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:' + (_stopNum > 9 ? '11' : '13') + 'px;font-weight:900;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' + _stopNum + '</div>',
       className: '', iconSize: [32, 32], iconAnchor: [16, 16]
     });
     const stopDays = TRIP_DAYS.filter(d => d.stopId === stop.id);
@@ -4864,6 +5062,7 @@ function initMainMap() {
     mainMap.invalidateSize();
     /* Rebuild markers with current TRIP_STOPS (handles post-change refresh) */
     _clearAndRebuildMapMarkers(mainMap);
+    renderStopNavigator();
     return;
   }
   mainMap = L.map('map-container', { zoomControl: true }).setView([37, -98], 4);
@@ -4871,6 +5070,7 @@ function initMainMap() {
     attribution: '© OpenStreetMap contributors', maxZoom: 18
   }).addTo(mainMap);
   buildMapMarkers(mainMap);
+  renderStopNavigator();
 }
 
 /* Called from initApp() after trip data changes — redraws map markers without re-creating the map */
@@ -4884,6 +5084,7 @@ function refreshMainMap() {
 function forceRefreshMap(btn) {
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-rotate fa-spin"></i> Refreshing…'; }
   _routeCache = {};  // flush cached geometry so fresh routes are fetched after a plan change
+  renderStopNavigator();
   if (mainMap) { mainMap.remove(); mainMap = null; }
   var container = document.getElementById('map-container');
   if (container) container.innerHTML = '';
@@ -9471,7 +9672,10 @@ function _initNavTooltips() {
 
 // Wire map tab to lazy-init the map on first open
 document.querySelector('[data-tab="map"]').addEventListener('click', function() {
-  setTimeout(initMainMap, 100);
+  setTimeout(function() {
+    initMainMap();
+    renderStopNavigator();
+  }, 100);
 });
 
 /* ── NOTE: localStorage is still used for trip edits (sleep/driver)  ── */
