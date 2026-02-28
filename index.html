@@ -6060,6 +6060,15 @@ function removePhaseDay(stopId) {
 
 /* ── RENDER PAUSE SCHEDULE BLOCK ─────────────────────────────────── */
 /* Remove an entire stop/phase from the trip (hides all days for that stop) */
+/* Called from the trash icon on individual white schedule rows.
+   Shows a confirm dialog then delegates to removeStopFromTrip. */
+function _removeStopFromRow(stopId, phaseName) {
+  var stop = getStop(stopId);
+  var displayName = stop ? (stop.name || phaseName) : phaseName;
+  if (!confirm('Remove "' + displayName + '" from your trip?\n\nYou can restore it later from the Audit Log tab.')) return;
+  removeStopFromTrip(stopId, phaseName);
+}
+
 function removeStopFromTrip(stopId, phaseName) {
   var phaseDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
   if (phaseDays.length === 0) { showToast('Stop not found', 1600); return; }
@@ -6342,6 +6351,9 @@ function renderSchedule() {
     html += '<div style="display:flex;gap:4px;">';
     if (stop && stop.id !== 15) {
       html += '<button onclick="showStopForecastModal(' + stop.id + ')" title="Forecast" style="background:var(--blue-l);border:1px solid var(--border);border-radius:100px;padding:4px 8px;font-size:.72rem;cursor:pointer;color:var(--blue);font-family:var(--font);">&#127780;&#65039;</button>';
+      /* Trash: remove this stop from trip (soft-delete; restorable from Audit Log) */
+      var _safeRowPhase = (d.phase || '').replace(/'/g, "\\'");
+      html += '<button onclick="event.stopPropagation();_removeStopFromRow(' + d.stopId + ',\'' + _safeRowPhase + '\')" title="Remove stop from trip" style="background:#fff0ef;border:1px solid #fca5a5;border-radius:100px;padding:4px 8px;font-size:.7rem;cursor:pointer;color:#dc2626;font-family:var(--font);display:flex;align-items:center;" onmouseenter="this.style.background=\'#fee2e2\'" onmouseleave="this.style.background=\'#fff0ef\'"><i class="fa-solid fa-trash-can"></i></button>';
     }
     html += '</div>';
     html += '<span id="wx-d-' + d.day + '" class="wx-chip wx-loading" style="text-align:right;">&#9729;&#65039;</span>';
@@ -17195,11 +17207,36 @@ function tripCleanup() {
     d.date = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
   });
   appState.customTripData = { stops: TRIP_STOPS.slice(), days: TRIP_DAYS.slice() };
+
+  /* Sync CONFIG dates/totalDays from TRIP_DAYS ground truth so header stats are accurate */
+  if (TRIP_DAYS.length > 0) {
+    CONFIG.startDate = TRIP_DAYS[0].date;
+    CONFIG.endDate   = TRIP_DAYS[TRIP_DAYS.length - 1].date;
+    CONFIG.totalDays = TRIP_DAYS.length;
+  }
+
   saveState(appState);
+
+  /* Re-render every visible area of the app that shows trip data */
   renderSchedule();
   renderStopNavigator();
+  if (typeof renderTripStats   === 'function') renderTripStats();
+  if (typeof renderAdjustments === 'function') renderAdjustments();
+  if (typeof renderTools       === 'function') renderTools();
+  if (typeof renderTripSettings === 'function') renderTripSettings();
+  if (typeof _updateLoginDisplay === 'function') _updateLoginDisplay();
+
+  /* Update header stats (day counter, progress bar) */
+  var _hdrDay = document.getElementById('hdr-day');
+  if (_hdrDay) _hdrDay.textContent = (typeof tripIsLive === 'function' && tripIsLive()) ? (typeof tripDay === 'function' ? tripDay() : '—') : '—';
+  var _p = typeof pct === 'function' ? pct() : 0;
+  var _pb = document.getElementById('hdr-progress-bar');
+  var _pp = document.getElementById('hdr-progress-pct');
+  if (_pb) _pb.style.width = _p + '%';
+  if (_pp) _pp.textContent = _p + '%';
+
   if (window.mainMap) setTimeout(function(){ _clearAndRebuildMapMarkers(window.mainMap); }, 200);
-  showToast('🔧 Trip cleaned up' + (fixed ? ' — fixed ' + fixed + ' day' + (fixed !== 1 ? 's' : '') : ' — all good!'), 2500);
+  showToast('🔧 Trip cleaned up' + (fixed ? ' — fixed ' + fixed + ' issue' + (fixed !== 1 ? 's' : '') : ' — all good!'), 2500);
 }
 
 function _enforceMaxDays() {
