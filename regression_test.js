@@ -692,7 +692,7 @@ test('[regression] BUG-4: drive day breakfast ignores customPlace override', () 
   assert(src.includes('customPlace') && src.includes('driveDay'),
     'drive day breakfast override handling removed');
   // Confirm the fix pattern exists in the renderDayTimeBlocks area
-  const driveDaySection = src.slice(src.indexOf('var nextNameD = stop ?'), src.indexOf('/* On-road lunch stop */') + 1);
+  const driveDaySection = src.slice(src.indexOf('var nextNameD = stop ?'), src.indexOf('On-road lunch stop') + 1);
   assert(driveDaySection.length > 0, 'drive day depart section should exist');
 });
 
