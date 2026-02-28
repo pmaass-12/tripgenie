@@ -810,8 +810,8 @@
         width: 100% !important;
         border-radius: 20px 20px 0 0 !important;
         max-height: 90dvh;
-        padding-bottom: env(safe-area-inset-bottom);
       }
+      #ddm-blocks { padding-bottom: env(safe-area-inset-bottom); }
       .ddm-header { border-radius: 20px 20px 0 0 !important; }
 
       /* ── AI info modal: slide-up sheet ─────────────────────────── */
@@ -823,8 +823,8 @@
         width: 100% !important;
         border-radius: 20px 20px 0 0 !important;
         max-height: 88dvh;
-        padding-bottom: env(safe-area-inset-bottom);
       }
+      .aim-scroll-body { padding-bottom: env(safe-area-inset-bottom); }
       .aim-header { border-radius: 20px 20px 0 0 !important; }
 
       /* ── TripGenie: safe area padding ─────────────────────────── */
@@ -846,14 +846,16 @@
     }
     .ddm-card {
       background:var(--card);border-radius:16px;width:min(98vw,490px);
-      max-height:calc(100vh - 32px);overflow-y:auto;
+      max-height:calc(100vh - 32px);overflow:hidden;
+      display:flex;flex-direction:column;
       box-shadow:0 8px 40px rgba(0,0,0,.28);
     }
     .ddm-header {
       background:linear-gradient(135deg,var(--orange),#b85a20);color:#fff;
       padding:16px 20px;border-radius:16px 16px 0 0;
-      position:sticky;top:0;z-index:10;
+      flex-shrink:0;
     }
+    #ddm-blocks { overflow-y:auto; flex:1; }
     /* ── LOCAL MUSIC PANEL ────────────────────────────────────────── */
     #music-modal {
       position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:2000;
@@ -863,13 +865,14 @@
     .music-card {
       background:var(--card);border-radius:20px 20px 0 0;
       width:100%;max-width:520px;max-height:88vh;
-      overflow-y:auto;
+      overflow:hidden;display:flex;flex-direction:column;
       box-shadow:0 -4px 40px rgba(0,0,0,.3);
     }
+    #music-body { overflow-y:auto; flex:1; }
     .music-header {
       background:linear-gradient(135deg,#1DB954,#158a3e);
       color:#fff;padding:16px 20px;border-radius:20px 20px 0 0;
-      position:sticky;top:0;z-index:10;
+      flex-shrink:0;
     }
     .music-artist-card {
       display:flex;align-items:center;gap:12px;padding:12px 16px;
@@ -925,17 +928,19 @@
       position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:1000;
       display:flex;align-items:center;justify-content:center;
       padding:16px;
-      /* NO overflow-y here — only .aim-card scrolls, keeps header sticky */
+      /* NO overflow-y here — only .aim-scroll-body scrolls, keeps header pinned at top */
     }
     .aim-card {
       background:var(--card);border-radius:16px;width:min(98vw,530px);
-      max-height:calc(100dvh - 32px);overflow-y:auto;
+      max-height:calc(100dvh - 32px);overflow:hidden;
+      display:flex;flex-direction:column;
       box-shadow:0 8px 40px rgba(0,0,0,.32);
     }
+    .aim-scroll-body { overflow-y:auto; flex:1; }
     .aim-header {
       background:linear-gradient(135deg,#7B5EA7,#5a3d8a);color:#fff;
       padding:16px 20px;border-radius:16px 16px 0 0;
-      position:sticky;top:0;z-index:10;
+      flex-shrink:0;
     }
     .aim-body { padding:16px 20px;font-size:.88rem;line-height:1.65;color:var(--text); }
     .aim-body p { margin:0 0 12px; }
@@ -2861,11 +2866,13 @@
         </div>
       </div>
     </div>
-    <!-- Photo carousel strip (populated by fetchAimPhotos) -->
-    <div id="aim-photo-strip" style="display:none;gap:6px;overflow-x:auto;padding:8px 14px 4px;scrollbar-width:none;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,.08);border-top:1px solid rgba(255,255,255,.12);"></div>
-    <div class="aim-body" id="aim-body"></div>
-    <!-- Fun Facts strip (appended after aim-body content by JS) -->
-    <div id="aim-facts-strip" style="display:none;padding:10px 14px 14px;"></div>
+    <div class="aim-scroll-body">
+      <!-- Photo carousel strip (populated by fetchAimPhotos) -->
+      <div id="aim-photo-strip" style="display:none;gap:6px;overflow-x:auto;padding:8px 14px 4px;scrollbar-width:none;-webkit-overflow-scrolling:touch;background:rgba(0,0,0,.08);border-top:1px solid rgba(255,255,255,.12);"></div>
+      <div class="aim-body" id="aim-body"></div>
+      <!-- Fun Facts strip (appended after aim-body content by JS) -->
+      <div id="aim-facts-strip" style="display:none;padding:10px 14px 14px;"></div>
+    </div>
   </div>
 </div>
 <!-- License Plate Gallery Modal -->
@@ -3418,10 +3425,18 @@ function _showConflictBanner(myState, theirState, theirName) {
     + 'box-shadow:0 2px 12px rgba(0,0,0,.3);';
   var myName = _userName || 'You';
   var theirTime = theirState && theirState._savedAt ? new Date(theirState._savedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+  var myTime = myState && myState._savedAt ? new Date(myState._savedAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+  // When the same person is on both sides (e.g. two tabs/devices), use device-neutral labels
+  var sameUser = (theirName === myName);
+  var msgText = sameUser
+    ? '⚠️ A newer save from another device was detected at ' + theirTime + '. Your current edits were made locally. Which version do you want?'
+    : theirName + ' saved changes at ' + theirTime + ' while ' + myName + ' was editing.';
+  var keepLabel = sameUser ? '💻 Keep My Current Edits' : 'Keep ' + myName + '\'s';
+  var takeLabel = sameUser ? '☁️ Load Saved (' + theirTime + ')' : 'Take ' + theirName + '\'s';
   banner.innerHTML = '<i class="fa-solid fa-triangle-exclamation" style="font-size:1.2rem;flex-shrink:0;"></i>'
-    + '<span style="flex:1;">' + theirName + ' saved changes at ' + theirTime + ' while ' + myName + ' was editing.</span>'
-    + '<button onclick="_resolveConflict(\'mine\')" style="background:#fff;color:#d32f2f;border:none;border-radius:100px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:.8rem;">Keep ' + myName + '\'s</button>'
-    + '<button onclick="_resolveConflict(\'theirs\')" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:100px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:.8rem;">Take ' + theirName + '\'s</button>';
+    + '<span style="flex:1;">' + msgText + '</span>'
+    + '<button onclick="_resolveConflict(\'mine\')" style="background:#fff;color:#d32f2f;border:none;border-radius:100px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:.8rem;">' + keepLabel + '</button>'
+    + '<button onclick="_resolveConflict(\'theirs\')" style="background:rgba(255,255,255,.2);color:#fff;border:1px solid rgba(255,255,255,.5);border-radius:100px;padding:7px 14px;font-weight:700;cursor:pointer;font-size:.8rem;">' + takeLabel + '</button>';
   document.body.appendChild(banner);
   // Store both states for resolution
   window._conflictMyState = myState;
@@ -4632,35 +4647,33 @@ const ROUTE_RETURN = [
 function buildMapMarkers(mapObj) {
   // Draw route dynamically from TRIP_STOPS so any added/removed stops are always reflected
   var _roundTrip  = _tripIsRoundTrip();
-  // Use the first stop's coords as the departure pin (falls back to Warwick, NY if no stops yet)
-  var _firstStop  = TRIP_STOPS.length ? TRIP_STOPS[0] : null;
-  var _homeCoords = (_firstStop && _firstStop.lat && _firstStop.lng)
-    ? [_firstStop.lat, _firstStop.lng]
-    : [41.2559, -74.3593];
-  var _validStops = TRIP_STOPS.filter(function(s) { return s.lat && s.lng; });
+  // Find the actual home/start stop via _tripHomeStop() (looks for sleepType='home' in TRIP_DAYS)
+  var _homeStop   = (typeof _tripHomeStop === 'function') ? _tripHomeStop() : null;
+  var _homeCoords = (_homeStop && _homeStop.lat && _homeStop.lng)
+    ? [_homeStop.lat, _homeStop.lng]
+    : [41.2559, -74.3593]; // fallback: Warwick, NY
+  // Exclude the home stop from the destination markers (it gets its own home icon below)
+  var _homeStopId = _homeStop ? _homeStop.id : 15;
+  var _validStops = TRIP_STOPS.filter(function(s) { return s.lat && s.lng && s.id !== _homeStopId; });
+
   if (_validStops.length) {
-    var _routeLine = _validStops.map(function(s) { return [s.lat, s.lng]; });
-    // For round trips close the loop back to the start
-    if (_roundTrip) {
-      var _lastPt = _routeLine[_routeLine.length - 1];
-      if (Math.abs(_lastPt[0] - _homeCoords[0]) > 0.05 || Math.abs(_lastPt[1] - _homeCoords[1]) > 0.05) {
-        _routeLine.push(_homeCoords);
-      }
-    }
-    // Draw outbound (blue) and return (purple) legs separately
+    // Draw outbound (blue) leg: home → destination stops through the turnaround (Durango, id≤11)
     var _outboundStops = _validStops.filter(function(s) { return s.id <= 11; });
+    // Draw return (purple, dashed) leg: turnaround → return stops → home
     var _returnStops   = _validStops.filter(function(s) { return s.id >= 11; });
-    if (_outboundStops.length > 1) {
-      var _outLine = _outboundStops.map(function(s) { return [s.lat, s.lng]; });
+    if (_outboundStops.length > 0) {
+      // Prepend home so the blue line starts from Warwick, NY
+      var _outLine = [_homeCoords].concat(_outboundStops.map(function(s) { return [s.lat, s.lng]; }));
       L.polyline(_outLine, { color: '#2C5F8A', weight: 3, opacity: .8 }).addTo(mapObj);
     }
-    if (_returnStops.length > 1) {
-      var _retLine = _returnStops.map(function(s) { return [s.lat, s.lng]; });
+    if (_returnStops.length > 0) {
+      // Append home so the purple dashed line ends at Warwick, NY
+      var _retLine = _returnStops.map(function(s) { return [s.lat, s.lng]; }).concat([_homeCoords]);
       L.polyline(_retLine, { color: '#7B5EA7', weight: 3, opacity: .8, dashArray: '8 4' }).addTo(mapObj);
     }
   }
 
-  // Add departure marker (using first stop's coords + canonical city name)
+  // Add home marker at correct start/end location
   const homeIcon = L.divIcon({
     html: `<div style="width:28px;height:28px;background:#3A8A5C;border-radius:50%;border:3px solid white;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:14px;">🏠</div>`,
     className: '', iconSize: [28, 28], iconAnchor: [14, 14]
@@ -4669,9 +4682,10 @@ function buildMapMarkers(mapObj) {
     .addTo(mapObj)
     .bindPopup('<strong>🏠 ' + _tripStartCity() + '</strong><br>' + (_roundTrip ? 'Start &amp; End' : 'Start'));
 
-  // Add all stops
+  // Add all destination stops (skip the home stop — it already has its own home marker above)
   TRIP_STOPS.forEach(stop => {
     if (!stop.lat || !stop.lng) return; // skip stops with no coordinates
+    if (stop.id === _homeStopId) return;  // home already rendered above
     const bgColor = '#E8813A';
     const stopEmoji = stop.emoji || '📍';
     const icon = L.divIcon({
@@ -7089,8 +7103,20 @@ function listDragEnd(evt) {
 
 function renderListSection(items, customItems, type, checkedMap) {
   var hidden = (appState.listHidden && appState.listHidden[type]) || {};
-  var allItems = items.concat(customItems || []).filter(function(i) { return !hidden[i.id]; });
+  var hideCompleted = !!(appState.listHideCompleted && appState.listHideCompleted[type]);
+
+  // Compute totals from full non-swipe-deleted set (before hide-completed filter)
+  var allNonHidden = items.concat(customItems || []).filter(function(i) { return !hidden[i.id]; });
   var hiddenCount = items.filter(function(i) { return hidden[i.id]; }).length;
+  var doneCount = 0;
+  for (var k in checkedMap) { if (checkedMap[k] && !hidden[k]) doneCount++; }
+  var totalCount = allNonHidden.length;
+  var pctDone = totalCount > 0 ? Math.round(doneCount / totalCount * 100) : 0;
+
+  // Apply hide-completed filter for display
+  var allItems = hideCompleted
+    ? allNonHidden.filter(function(i) { return !checkedMap[i.id]; })
+    : allNonHidden;
 
   // Apply sort order if user has reordered
   var order = appState.listSortOrder && appState.listSortOrder[type];
@@ -7109,19 +7135,22 @@ function renderListSection(items, customItems, type, checkedMap) {
     if (!catMap[itm.cat]) { catMap[itm.cat] = []; cats.push(itm.cat); }
     catMap[itm.cat].push(itm);
   }
-  var doneCount = 0;
-  for (var k in checkedMap) { if (checkedMap[k] && !hidden[k]) doneCount++; }
-  var totalCount = allItems.length;
-  var pctDone = totalCount > 0 ? Math.round(doneCount / totalCount * 100) : 0;
-  var h = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">';
-  h += '<div style="font-size:.77rem;color:var(--text-2);">' + doneCount + ' of ' + totalCount + ' done</div>';
-  h += '<div style="flex:1;margin:0 12px;background:var(--border);border-radius:4px;height:7px;overflow:hidden;">';
+
+  // Progress bar row + hide-completed toggle + new-section button
+  var h = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap;">';
+  h += '<div style="font-size:.77rem;color:var(--text-2);white-space:nowrap;">' + doneCount + ' of ' + totalCount + ' done</div>';
+  h += '<div style="flex:1;min-width:40px;background:var(--border);border-radius:4px;height:7px;overflow:hidden;">';
   h += '<div style="background:var(--green);height:100%;width:' + pctDone + '%;transition:width .4s;border-radius:4px;"></div></div>';
-  h += '<div style="font-size:.77rem;font-weight:800;color:var(--green);">' + pctDone + '%</div>';
+  h += '<div style="font-size:.77rem;font-weight:800;color:var(--green);white-space:nowrap;">' + pctDone + '%</div>';
+  h += '<button onclick="toggleListHideCompleted(\'' + type + '\')" title="' + (hideCompleted ? 'Show completed items' : 'Hide completed items') + '" style="background:none;border:1px solid var(--border);border-radius:100px;padding:3px 9px;font-size:.7rem;font-weight:700;color:var(--text-2);cursor:pointer;white-space:nowrap;font-family:var(--font);">'
+    + (hideCompleted ? '👁 Show done (' + doneCount + ')' : '🙈 Hide done') + '</button>';
+  h += '<button onclick="promptNewListSection(\'' + type + '\')" title="Add a new section" style="background:var(--blue);color:#fff;border:none;border-radius:100px;padding:3px 10px;font-size:.7rem;font-weight:800;cursor:pointer;white-space:nowrap;font-family:var(--font);">+ Section</button>';
   h += '</div>';
+
   if (hiddenCount > 0) {
     h += '<div style="font-size:.75rem;color:var(--text-3);margin-bottom:6px;cursor:pointer;text-decoration:underline;" onclick="restoreHiddenItems(\'' + type + '\')">' + hiddenCount + ' hidden item' + (hiddenCount > 1 ? 's' : '') + ' \u2014 tap to restore</div>';
   }
+
   for (var ci2 = 0; ci2 < cats.length; ci2++) {
     var cat = cats[ci2];
     var catItems = catMap[cat];
@@ -7142,11 +7171,14 @@ function renderListSection(items, customItems, type, checkedMap) {
       var checked = !!checkedMap[it.id];
       var itemBg  = checked ? 'var(--green-l)' : 'var(--card)';
       var itemBdr = checked ? '#a8d5b8' : 'var(--border)';
+      var dispText = _listItemDisplayText(it.id, it.text);
+      var escapedText = dispText.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
       h += '<div class="swipe-row" data-list-id="' + it.id + '">';
       h += '<div class="swipe-trash"><button onclick="swipeDeleteItem(\'' + type + '\',\'' + it.id + '\',this)" style="background:none;border:none;color:#fff;font-size:1.5rem;cursor:pointer;padding:0;line-height:1;">&#128465;</button></div>';
       h += '<label class="swipe-content" ontouchstart="swipeStart(event,this)" ontouchmove="swipeMove(event,this)" ontouchend="swipeEnd(event,this)" style="display:flex;align-items:center;gap:10px;padding:10px 13px;background:' + itemBg + ';border:1px solid ' + itemBdr + ';border-radius:100px;cursor:pointer;touch-action:pan-y;" onclick="toggleListItem(\'' + type + '\',\'' + it.id + '\')">';
       h += '<span style="width:24px;height:24px;border-radius:50%;border:2px solid ' + (checked ? 'var(--green)' : 'var(--border)') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + (checked ? 'var(--green)' : '#fff') + ';color:#fff;font-size:.88rem;">' + (checked ? '&#10003;' : '') + '</span>';
-      h += '<span style="font-size:.88rem;color:' + (checked ? 'var(--text-3)' : 'var(--text)') + ';' + (checked ? 'text-decoration:line-through;' : '') + 'line-height:1.4;flex:1;">' + it.text + '</span>';
+      h += '<span style="font-size:.88rem;color:' + (checked ? 'var(--text-3)' : 'var(--text)') + ';' + (checked ? 'text-decoration:line-through;' : '') + 'line-height:1.4;flex:1;">' + dispText + '</span>';
+      h += '<span onclick="editListItem(\'' + type + '\',\'' + it.id + '\',\'' + escapedText + '\');event.stopPropagation();" style="padding:5px 7px;color:var(--text-3);font-size:.8rem;cursor:pointer;flex-shrink:0;border-radius:50%;" title="Edit item"><i class="fa-solid fa-pencil"></i></span>';
       h += '<span ontouchstart="listDragStart(event,\'' + type + '\',\'' + it.id + '\')" ontouchmove="listDragMove(event)" ontouchend="listDragEnd(event)" style="padding:4px 6px;color:var(--text-3);font-size:1rem;cursor:grab;touch-action:none;flex-shrink:0;"><i class="fa-solid fa-grip-lines"></i></span>';
       h += '</label>';
       h += '</div>';
@@ -7159,6 +7191,114 @@ function restoreHiddenItems(type) {
   appState.listHidden[type] = {};
   saveState(appState); renderLists();
 }
+
+/* ── LIST ITEM TEXT HELPERS ─────────────────────────────────────── */
+function _listItemDisplayText(id, defaultText) {
+  return (appState.listItemText && appState.listItemText[id]) || defaultText;
+}
+
+/* ── TOGGLE HIDE COMPLETED ──────────────────────────────────────── */
+function toggleListHideCompleted(type) {
+  if (!appState.listHideCompleted) appState.listHideCompleted = {};
+  appState.listHideCompleted[type] = !appState.listHideCompleted[type];
+  saveState(appState);
+  renderLists();
+}
+
+/* ── EDIT LIST ITEM ─────────────────────────────────────────────── */
+var _listEdit = { type: null, id: null };
+
+function editListItem(type, id, curText) {
+  _listEdit = { type: type, id: id };
+  var overlay = document.getElementById('list-edit-overlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'list-edit-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:flex-end;';
+    overlay.innerHTML =
+      '<div onclick="event.stopPropagation()" style="background:var(--card);border-radius:16px 16px 0 0;padding:20px 18px 36px;width:100%;box-sizing:border-box;">'
+      + '<div style="font-weight:800;font-size:.97rem;margin-bottom:14px;color:var(--text);">✏️ Edit Item</div>'
+      + '<input id="list-edit-inp" type="text" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:.93rem;font-family:var(--font);outline:none;color:var(--text);background:var(--bg);" '
+      + 'onkeydown="if(event.key===\'Enter\')saveListItemEdit();if(event.key===\'Escape\')closeListItemEdit();" />'
+      + '<div style="display:flex;gap:10px;margin-top:14px;">'
+      + '<button onclick="closeListItemEdit()" style="flex:1;padding:12px;border:1.5px solid var(--border);border-radius:10px;background:var(--card);font-family:var(--font);font-size:.88rem;cursor:pointer;color:var(--text);">Cancel</button>'
+      + '<button onclick="saveListItemEdit()" style="flex:2;padding:12px;border:none;border-radius:10px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.88rem;font-weight:800;cursor:pointer;">Save</button>'
+      + '</div>'
+      + '</div>';
+    overlay.onclick = closeListItemEdit;
+    document.body.appendChild(overlay);
+  }
+  overlay.style.display = 'flex';
+  var inp = document.getElementById('list-edit-inp');
+  inp.value = curText;
+  setTimeout(function() { inp.focus(); inp.select(); }, 80);
+}
+function closeListItemEdit() {
+  var o = document.getElementById('list-edit-overlay');
+  if (o) o.style.display = 'none';
+  _listEdit = { type: null, id: null };
+}
+function saveListItemEdit() {
+  var inp = document.getElementById('list-edit-inp');
+  if (!inp || !_listEdit.type) return;
+  var newText = inp.value.trim();
+  if (!newText) return;
+  if (!appState.listItemText) appState.listItemText = {};
+  appState.listItemText[_listEdit.id] = newText;
+  // Also update text in customListItems if it's a custom item
+  var custom = appState.customListItems && appState.customListItems[_listEdit.type];
+  if (custom) {
+    for (var i = 0; i < custom.length; i++) {
+      if (custom[i].id === _listEdit.id) { custom[i].text = newText; break; }
+    }
+  }
+  saveState(appState);
+  closeListItemEdit();
+  renderLists();
+}
+
+/* ── ADD NEW SECTION (CATEGORY) ─────────────────────────────────── */
+function promptNewListSection(type) {
+  var overlay = document.getElementById('list-edit-overlay');
+  // Reuse the same overlay pattern
+  _listEdit = { type: type, id: null, mode: 'section' };
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'list-edit-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:flex-end;';
+    overlay.onclick = closeListItemEdit;
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML =
+    '<div onclick="event.stopPropagation()" style="background:var(--card);border-radius:16px 16px 0 0;padding:20px 18px 36px;width:100%;box-sizing:border-box;">'
+    + '<div style="font-weight:800;font-size:.97rem;margin-bottom:6px;color:var(--text);">📂 New Section</div>'
+    + '<div style="font-size:.8rem;color:var(--text-2);margin-bottom:14px;">Enter a section name, e.g. "Linens" or "🐕 Dog Stuff"</div>'
+    + '<input id="list-edit-inp" type="text" placeholder="Section name…" style="width:100%;box-sizing:border-box;padding:12px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:.93rem;font-family:var(--font);outline:none;color:var(--text);background:var(--bg);" '
+    + 'onkeydown="if(event.key===\'Enter\')saveNewListSection();if(event.key===\'Escape\')closeListItemEdit();" />'
+    + '<div style="display:flex;gap:10px;margin-top:14px;">'
+    + '<button onclick="closeListItemEdit()" style="flex:1;padding:12px;border:1.5px solid var(--border);border-radius:10px;background:var(--card);font-family:var(--font);font-size:.88rem;cursor:pointer;color:var(--text);">Cancel</button>'
+    + '<button onclick="saveNewListSection()" style="flex:2;padding:12px;border:none;border-radius:10px;background:var(--blue);color:#fff;font-family:var(--font);font-size:.88rem;font-weight:800;cursor:pointer;">Create Section</button>'
+    + '</div>'
+    + '</div>';
+  overlay.style.display = 'flex';
+  setTimeout(function() { var inp = document.getElementById('list-edit-inp'); if (inp) { inp.focus(); } }, 80);
+}
+function saveNewListSection() {
+  var inp = document.getElementById('list-edit-inp');
+  if (!inp || !_listEdit.type) return;
+  var sectionName = inp.value.trim();
+  if (!sectionName) return;
+  // Create a placeholder item in the new section so the section appears
+  if (!appState.customListItems) appState.customListItems = { todo:[], pack:[] };
+  var type = _listEdit.type;
+  if (!appState.customListItems[type]) appState.customListItems[type] = [];
+  var newId = 'custom_' + Date.now() + '_s';
+  appState.customListItems[type].push({ id: newId, cat: sectionName, text: '(Add items to this section)' });
+  saveState(appState);
+  closeListItemEdit();
+  renderLists();
+}
+
 function renderLists() {
   var el = document.getElementById('lists-content');
   if (!el) return;
@@ -11171,26 +11311,28 @@ function renderWhatsNew() {
 
   var releases = [
     {
-      version: 'This Week',
-      date: 'Feb 2026',
+      version: 'Latest Updates',
+      date: 'Feb 28, 2026',
       badge: '🆕',
       badgeColor: '#E8813A',
       features: [
-        { icon: '✨', title: "What's New log", desc: 'This screen! A running changelog of every feature added to the app.' },
-        { icon: '🎵', title: 'Local Music (Spotify)', desc: 'Tap "🎵 Local Music" in any day\'s orange header or the schedule phase banner. TripGenie suggests 5 real local artists, one-line backstories, and genre chips — tap any to open directly in Spotify.' },
-        { icon: '👤', title: 'Family Profiles', desc: 'Tools → Profiles. Add a name, age, emoji, and interests for each person or pet. Luna\'s pre-loaded with Sonic the Hedgehog; Leila with acting & theater.' },
-        { icon: '🎯', title: 'AI personalization', desc: 'Area Info and TripGenie now tailor suggestions to whoever\'s logged in. If Leila views an area info and a famous actor grew up there, it adds a "For Leila" section.' },
-        { icon: '📸', title: 'Gallery tab', desc: 'Photo Gallery is now its own tab in the top nav — no longer buried in Journal. 3-column grid, zoom-in lightbox, location labels.' },
-        { icon: '📋', title: 'Audit Log', desc: 'Tools → Audit Log. Timestamped history of every significant change — destinations added, decisions resolved, prefs saved. Color-coded by action type.' },
-        { icon: '👁', title: 'View-only mode', desc: 'Password "readonly" logs in with full access to all tabs but zero saves. Perfect for sharing the trip plan without risking edits.' },
-        { icon: '👨‍👩‍👧‍👦', title: 'Profile picker on login', desc: 'Choose who you are (Paul, Melissa, Leila, Luna, Eli) before entering the password. Journal author auto-populates and the header says hi.' },
-        { icon: '⚠️', title: 'Multi-user conflict detection', desc: 'If Melissa saves while Paul is editing, a red banner appears with the save time and two buttons: "Keep Mine" or "Take Theirs." No more silent overwrites.' },
-        { icon: '☁️', title: 'Last-saved-by tracking', desc: 'Cloud sync status now shows who last saved ("Saved (Paul)") so you always know whose version is live.' },
+        { icon: '✏️', title: 'Edit list items', desc: 'Tap the ✏️ pencil on any packing or to-do item to rename it — works on both default and custom items.' },
+        { icon: '🙈', title: 'Hide / show completed items', desc: 'Tap "🙈 Hide done" at the top of any list to collapse checked items out of view. Tap "👁 Show done" to bring them back.' },
+        { icon: '📂', title: 'Create new list sections', desc: 'Tap "+ Section" at the top of any list to add a brand-new category (e.g. "Linens", "Dog Stuff"). Items auto-appear under it.' },
+        { icon: '🍽️', title: 'Restaurant preferences', desc: 'Trip Settings → Restaurant Preferences. Pick your dining style (Foodie/Gastro, Farm to Table, Bars & Pubs, etc.) and TripGenie prioritizes these when suggesting restaurants.' },
+        { icon: '🔄', title: 'Refresh All Recommendations', desc: 'After changing preferences, tap "🔄 Refresh All Recommendations" in Trip Settings to clear cached AI suggestions so fresh ones are generated.' },
+        { icon: '🗺️', title: 'Map now starts in Warwick, NY', desc: 'Fixed the route map so both blue and purple route lines originate from home — the outbound leg starts at Warwick, NY and the return leg closes back there too.' },
+        { icon: '🚐', title: 'Leg 2 in drive day schedule', desc: 'Split drive days now show a second drive row in the day modal — "Continue → Destination" with Leg 2 departure time and ETA.' },
+        { icon: '🗑️', title: 'Delete items from day schedule', desc: 'Long-press any schedule row → 🗑 Remove. Hides the item from that day. Use ↺ Reset order to restore everything.' },
+        { icon: '📅', title: 'Drive day timing fixes', desc: 'Lunch is always ≥ noon. Check-in floor is 3:00 PM with a note if you arrive early. Post-arrival activities anchor to check-in time, not raw arrival.' },
+        { icon: '👨‍👩‍👧‍👦', title: 'Per-person packing groups', desc: 'Packing list now has a section for each family member generated from your Profiles — age-aware items for adults, kids, and babies.' },
+        { icon: '📌', title: 'Sticky list category headers', desc: 'List category labels stick to the top as you scroll so you always know what section you\'re in. Tap "+ Add" right in the header.' },
+        { icon: '📏', title: 'Modal scrollbar fix', desc: 'Scrollbars no longer poke past the rounded corners on the day detail, AI info, and music modals.' },
       ]
     },
     {
       version: 'Previous Build',
-      date: 'Early Feb 2026',
+      date: 'Feb 27, 2026',
       badge: '✅',
       badgeColor: '#3A8A5C',
       features: [
@@ -11437,6 +11579,49 @@ function getDietContext() {
   return 'Diet restrictions: ' + active.map(function(k){ return labels[k]||k; }).join(', ') + '. Do NOT recommend restaurants that conflict with these dietary requirements. ';
 }
 
+function _toggleRestPref(id) {
+  if (!appState.restaurantPrefs) appState.restaurantPrefs = {};
+  appState.restaurantPrefs[id] = !appState.restaurantPrefs[id];
+  var btn = document.getElementById('rest-btn-' + id);
+  if (btn) {
+    var active = appState.restaurantPrefs[id];
+    btn.style.background = active ? 'var(--orange)' : 'var(--bg)';
+    btn.style.color = active ? '#fff' : 'var(--text-2)';
+    btn.style.borderColor = active ? 'var(--orange)' : 'var(--border)';
+    var spans = btn.querySelectorAll('span');
+    // Update/remove the checkmark span
+    var lastSpan = spans[spans.length - 1];
+    if (active && spans.length < 3) {
+      var ck = document.createElement('span');
+      ck.style.fontSize = '.65rem'; ck.style.marginLeft = '2px';
+      ck.textContent = '✓'; btn.appendChild(ck);
+    } else if (!active && spans.length >= 3) {
+      btn.removeChild(lastSpan);
+    }
+  }
+}
+function saveRestPrefs() {
+  saveState(appState);
+  showToast('🍽️ Restaurant preferences saved!', 2000);
+}
+function getRestaurantPrefContext() {
+  var prefs = appState.restaurantPrefs || {};
+  var active = Object.keys(prefs).filter(function(k) { return prefs[k]; });
+  if (!active.length) return '';
+  var labels = { foodie:'Foodie/Gastro', local:'Farm to Table/Local', chain:'Chain Restaurants',
+    bars:'Bars & Pubs', ethnic:'Ethnic/International', bbq:'BBQ & Southern',
+    fast:'Fast Casual', buffet:'Buffet' };
+  return 'Restaurant style preferences: ' + active.map(function(k) { return labels[k]||k; }).join(', ') + '. Prioritize these dining styles when recommending restaurants. ';
+}
+function refreshAllRecommendations() {
+  // Clear any cached AI recommendation data so fresh calls are made
+  if (appState.aiCache) appState.aiCache = {};
+  if (appState.tripRecommendations) appState.tripRecommendations = null;
+  if (appState.adjustmentCache) appState.adjustmentCache = null;
+  saveState(appState);
+  showToast('✨ Recommendations cleared — they\'ll refresh next time you view them!', 3000);
+  _audit('refresh-recs', 'Triggered recommendation refresh after preference change');
+}
 function saveSkipPrefs() {
   if (!appState.skipPrefs) appState.skipPrefs = { items: [], custom: '' };
   var customEl = document.getElementById('skip-custom');
@@ -11800,6 +11985,38 @@ function renderTripSettings() {
   });
   html += '<button onclick="saveDietPrefs()" style="margin-left:auto;background:var(--orange);color:#fff;border:none;border-radius:20px;padding:8px 16px;font-size:.8rem;font-weight:800;cursor:pointer;font-family:var(--font);">✓ Save</button>';
   html += '</div></div>';
+
+  /* ── Restaurant Preferences ──────────────────────────────────────── */
+  var restPrefs = appState.restaurantPrefs || {};
+  var REST_OPTIONS = [
+    { id:'foodie',  label:'Foodie / Gastro',        icon:'👨‍🍳' },
+    { id:'local',   label:'Farm to Table / Local',   icon:'🌾' },
+    { id:'chain',   label:'Chain Restaurants',        icon:'🏪' },
+    { id:'bars',    label:'Bars & Pubs',              icon:'🍺' },
+    { id:'ethnic',  label:'Ethnic / International',   icon:'🌍' },
+    { id:'bbq',     label:'BBQ & Southern',           icon:'🍖' },
+    { id:'fast',    label:'Fast Casual',              icon:'🌮' },
+    { id:'buffet',  label:'Buffet / All-You-Can-Eat', icon:'🍽️' }
+  ];
+  html += '<h2 class="section-title" style="margin-top:28px;"><i class="fa-solid fa-fork-knife"></i> Restaurant Preferences</h2>';
+  html += '<div style="background:#FEF3E2;border:1px solid var(--orange);border-radius:var(--radius-s);padding:12px 15px;margin-bottom:16px;font-size:.82rem;color:var(--text);line-height:1.55;">'
+    + '🍽️ Select the dining styles you enjoy — TripGenie prioritizes these when recommending restaurants at each stop.'
+    + '</div>';
+  html += '<div class="card"><div class="card-body" style="display:flex;flex-direction:column;gap:14px;">';
+  html += '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
+  REST_OPTIONS.forEach(function(opt) {
+    var active = restPrefs[opt.id];
+    html += '<button onclick="_toggleRestPref(\'' + opt.id + '\')" id="rest-btn-' + opt.id + '" '
+      + 'style="display:flex;align-items:center;gap:6px;padding:8px 14px;background:' + (active ? 'var(--orange)' : 'var(--bg)') + ';color:' + (active ? '#fff' : 'var(--text-2)') + ';border:1.5px solid ' + (active ? 'var(--orange)' : 'var(--border)') + ';border-radius:20px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:all .15s;">'
+      + '<span>' + opt.icon + '</span><span>' + opt.label + '</span>'
+      + (active ? '<span style="font-size:.65rem;margin-left:2px;">✓</span>' : '')
+      + '</button>';
+  });
+  html += '</div>';
+  html += '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding-top:10px;border-top:1px solid var(--border);">';
+  html += '<button onclick="saveRestPrefs()" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:9px 18px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);">✓ Save Preferences</button>';
+  html += '<button onclick="refreshAllRecommendations()" style="background:var(--purple);color:#fff;border:none;border-radius:100px;padding:9px 18px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;">🔄 Refresh All Recommendations</button>';
+  html += '</div></div></div>';
 
   html += '<h2 class="section-title" style="margin-top:28px;"><i class="fa-solid fa-ban"></i> AI Preferences — Things to Skip</h2>';
   html += '<div style="background:var(--purple-l);border:1px solid #c9b8e8;border-radius:var(--radius-s);padding:12px 15px;margin-bottom:16px;font-size:.82rem;color:var(--text);line-height:1.55;">'
@@ -13774,7 +13991,8 @@ function openRecommendationInfo(info) {
   modal.classList.remove('hidden');
   var stops = TRIP_STOPS.map(function(s){ return s.name; }).join(', ');
   var diet = (typeof getDietContext === 'function') ? getDietContext() : '';
-  var prompt = 'I am on a family RV trip visiting: ' + stops + '. ' + diet + 'I have a trip recommendation: "' + (info.title||'') + '". Details: ' + (info.detail||'') + '. Impact: ' + (info.impact||'') + '. Give me a rich, helpful breakdown of this recommendation for a family with kids — what it means, pros and cons, how to execute it, and any tips. Format with clear sections. Keep it practical and friendly. Under 300 words.';
+  var restCtx = (typeof getRestaurantPrefContext === 'function') ? getRestaurantPrefContext() : '';
+  var prompt = 'I am on a family RV trip visiting: ' + stops + '. ' + diet + restCtx + 'I have a trip recommendation: "' + (info.title||'') + '". Details: ' + (info.detail||'') + '. Impact: ' + (info.impact||'') + '. Give me a rich, helpful breakdown of this recommendation for a family with kids — what it means, pros and cons, how to execute it, and any tips. Format with clear sections. Keep it practical and friendly. Under 300 words.';
   var body2 = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:600,temperature:0.7} });
   fetch(GEMINI_URL, {method:'POST',headers:{'Content-Type':'application/json'},body:body2})
     .then(function(r){return r.json();})

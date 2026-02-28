@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-02-27 (Session 6)
+2026-02-28 (Session 7)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -16,7 +16,7 @@ A personal RV trip planner web app for the Maass Family RV Adventure 2026. Stati
 
 ```
 tripgenie/
-├── index.html                    # Main app (primary working file, ~16,700 lines)
+├── index.html                    # Main app (primary working file, ~17,500 lines)
 ├── index2.html                   # Alternate version / experiment
 ├── simple-mode.html              # Simplified mode variant
 ├── mockup_desktop_v2.html        # Desktop layout mockup v2
@@ -59,10 +59,19 @@ tripgenie/
 - Session 2 (2026-02-26): Applied 10 UX/feature fixes — purple return route line, TripBuddy→TripGenie rename, removed duplicate suggestions, auto drive time on reorder, drag hint moved to orange bar, diet prefs in trip settings, removed duplicate AI ask button, AI info modal on rec cards, reworked Pause Trip modal, enhanced Decisions tab with days-over counter
 - Session 2: Set up GitHub repo (pmaass-12/tripgenie) and Netlify CI/CD auto-deploy from main branch
 - Session 3 (2026-02-27): Fixed trip start date not updating schedule; combined Schedule+Stops into Planner tab; mobile nav spacing fixes; full app nav merged; login persistence (30-day rv_session); update banner with ETag polling; RV Amps setting; campground AI prompt with hookup/laundromat/check-in; Drive Time Split rename; WHY: markdown strip in suggestItemAlternative; improved AI error diagnostics
-- Session 4 (2026-02-27): Drive day schedule logic overhaul — mornings now show departure context (leave ~8 AM), on-road lunch stop, arrival at destination; explore days unchanged. Fixed ddmArrivalTime midnight wrap bug ("13:00 PM" → correct "1:00 AM"). Added time format setting (12h/24h), departure time setting, and latest arrival time setting to Trip Settings. Added weather highs/lows to blue phase header bars (shows avg high/low from loaded weather data, with 🌡️ load button if no data). Added Escape key to close all modals. Added 🗑️ Remove button to phase headers to fully remove a stop from the schedule (with ↩ Restore capability).
-- Session 5 (2026-02-27): Fixed Drive Time Split not reflecting in day detail modal. `renderDayTimeBlocks` now reads `_overrides.splitResolved` and `_overrides.splitHours` to compute `_dispHours`; depart subtitle shows "225 mi · ~3.5h (Leg 1 of 2) · Arrive midpoint ~11:30 AM" when split is active. Also: renamed Simple→Driving / Advanced→Planning mode toggle labels; fixed Gemini API key leak (revoked key + Netlify serverless proxy + env var); built 110-test regression suite (regression_test.js) with snapshots, edge cases, mutation, serialization, and CI (GitHub Actions); fixed _getDepartureHour() NaN on invalid input.
-- Session 4 continued: Fixed "Starts in X days" banner departure city (was "Shenandoah Valley", now correctly shows home stop "Warwick, NY" via _tripHomeStop() scanning TRIP_DAYS for sleepType='home'). Fixed "Warwick, NY, NY" double-state everywhere via _sn(stop)/_snE(stop) helpers. Fixed drive day item order (saved dayOrder skipped for drive days). Fixed drive day destination name (was finding wrong stop, now uses current day's stop). Fixed drive day breakfast showing destination restaurant name (ignores customPlace override on drive days). Fixed login page dates not updating (now dynamic via _updateLoginDisplay() called from saveTripSettings and initApp). Fixed Add Destination flow: AI now returns city/region not attraction name; ATTRACTION field parsed and stored; stop created with city name, attraction added as first activity.
-- Session 6 (2026-02-27): Fixed CONFIG.startDate/endDate desync with TRIP_DAYS — now synced from TRIP_DAYS[0] in initApp() so dashboard banner shows correct departure date. Fixed planned activities from Day Planner tab not appearing in drive day schedule (renderDayTimeBlocks now passes d.day to getPlannedForStop). Fixed activity day-bleed (Dollywood + Gatlinburg Strip both showing on same day). Renamed "Stops" segment to "Day Planner". Weather forecast modal now auto-refreshes on open (no Refresh button) + blue phase bar weather updates after refresh. Fixed removed-stop (Kansas City) still appearing in drive day title — new _getDriveDayTitle(d) helper skips removed stops when computing origin city. Fixed removed stop appearing in AI "Change the Plan" context. Removed the "Removed from Schedule" banner from schedule list; restore now lives in Audit Log. Drive day timing fixes: lunch minimum noon (Math.max(12, depH + driveH/2)), check-in minimum 3 PM (Math.max(arrH, 15)) with "Check-in from 3:00 PM" sub-note when arriving early, post-arrival activities and dinner anchored to checkInH not arrH.
+- Session 4 (2026-02-27): Drive day schedule logic overhaul — mornings now show departure context (leave ~8 AM), on-road lunch stop, arrival at destination; explore days unchanged. Fixed ddmArrivalTime midnight wrap bug ("13:00 PM" → correct "1:00 AM"). Added time format setting (12h/24h), departure time setting, and latest arrival time setting to Trip Settings. Added weather highs/lows to blue phase header bars. Added Escape key to close all modals. Added 🗑️ Remove button to phase headers to fully remove a stop from the schedule (with ↩ Restore capability).
+- Session 5 (2026-02-27): Fixed Drive Time Split not reflecting in day detail modal. Renamed Simple→Driving / Advanced→Planning mode. Fixed Gemini API key leak (revoked key + Netlify serverless proxy + env var). Built 110-test regression suite.
+- Session 6 (2026-02-27): Drive day timing fixes (lunch ≥ noon, check-in ≥ 3 PM), Leg 2 drive row, per-person packing list groups, sticky category headers with inline + Add, delete items from day schedule, reset order button, states visited fix (gated on tripIsLive()), login date fix (_updateLoginDisplay uses TRIP_DAYS[0].date), mobile nav label shortening.
+- Session 7 (2026-02-28):
+  - **List item editing**: ✏️ pencil button on each item opens a bottom modal to rename. Stores in `appState.listItemText[id]`; also updates `customListItems` for custom items.
+  - **Show/hide completed**: "🙈 Hide done" toggle at top of each list. State in `appState.listHideCompleted[type]`. Total count stays correct even when hidden.
+  - **New list sections**: "+ Section" button opens modal to name a new category. Creates a placeholder item so the category appears immediately.
+  - **Restaurant Preferences**: New Trip Settings section with 8 dining-style chips (Foodie/Gastro, Farm to Table, Chain, Bars, Ethnic, BBQ, Fast Casual, Buffet). Stored in `appState.restaurantPrefs`. `getRestaurantPrefContext()` returns AI prompt string.
+  - **Refresh All Recommendations**: Button in Restaurant Prefs section clears `appState.aiCache`, `appState.adjustmentCache`, `appState.tripRecommendations` so AI generates fresh responses.
+  - **Map start point fixed**: `buildMapMarkers` now uses `_tripHomeStop()` (scans TRIP_DAYS for sleepType='home') instead of `TRIP_STOPS[0]` (was Shenandoah Valley). Both outbound and return polylines now correctly start/end at Warwick, NY. Home stop excluded from the stop-markers forEach loop.
+  - **Modal scrollbar fix**: `.ddm-card`, `.aim-card`, `.music-card` now use `overflow:hidden; display:flex; flex-direction:column` so scrollbars are clipped to the border-radius. Inner content divs (`#ddm-blocks`, `.aim-scroll-body`, `#music-body`) scroll. Safe-area padding moved to inner divs.
+  - **Conflict banner same-user fix**: When `theirName === myName` (same person, two devices/tabs), banner now shows "💻 Keep My Current Edits" / "☁️ Load Saved (HH:MM)" with a clear description instead of the confusing "Keep Paul's / Take Paul's".
+  - **What's New updated**: Added all session 7 features to the "Latest Updates" release entry.
 
 ---
 
@@ -75,6 +84,9 @@ tripgenie/
 - Time helpers: `_fmtHour(h)`, `_fmtTimeStr(str)` centralize all time display formatting respecting user's 12h/24h preference
 - Stop removal: `appState.removedStops[stopId]` flag + `phaseExtraDays[stopId] = -allDays` hides entire phase; restore clears both; Restore UI lives in Audit Log tab
 - `_getDriveDayTitle(d)` helper scans TRIP_DAYS backward skipping removed stops to compute correct "City A → City B" title
+- Map home coords: always resolved via `_tripHomeStop()` (scans TRIP_DAYS for sleepType='home'), never from `TRIP_STOPS[0]`
+- List item text: overrides stored in `appState.listItemText[id]`; `_listItemDisplayText(id, defaultText)` is the canonical getter
+- Modal scroll pattern: card has `overflow:hidden; display:flex; flex-direction:column`; inner content div has `overflow-y:auto; flex:1` — prevents scrollbar from clipping past border-radius
 
 ---
 
@@ -82,13 +94,16 @@ tripgenie/
 - Multiple mockup versions exist — needs consolidation decision (which is canonical?)
 - `saveTripSettings()` re-dates TRIP_DAYS in memory only; custom trip (AI-built) trips have their own date logic via `customTripData` — date change behavior for custom trips not yet tested
 - rv-app.zip contents unknown — may be redundant
-- Drive Time Split: Leg 2 arrival time not displayed in the schedule (only Leg 1 is shown); a full "Leg 2" row could be added in a future session
-- Regression test snapshots may need regeneration after drive time split + timing fixes (drive day HTML changed)
-- Future: fetch actual check-in time from campground/hotel data to replace hardcoded 3 PM floor (user noted as future improvement)
+- Regression test snapshots need regeneration after session 7 changes (drive day HTML changed significantly)
+- Future: fetch actual check-in time from campground/hotel data to replace hardcoded 3 PM floor
+- Gallery/Journal unification requested (all photos in one pool, accessible from either tab) — noted for next session
+- `getRestaurantPrefContext()` currently only injected into the adjustments AI prompt; could be added to campground/area info prompts as well
 
 ---
 
 ## Suggested Next Steps
-- Test drive day timing: open a drive day modal — lunch should be ≥ noon, check-in should be ≥ 3 PM, activities/dinner should follow from 3 PM
-- Optionally add a "Leg 2" drive row in the schedule for the afternoon portion of split drive days
-- Regenerate regression_test.js snapshots with `node regression_test.js` after verifying app looks correct
+- Push to GitHub (git push) when network is available — several commits pending
+- Regenerate regression_test.js snapshots with `node regression_test.js`
+- Implement Gallery/Journal photo unification (user requested: upload to gallery, all photos available in journal entry)
+- Inject `getRestaurantPrefContext()` into campground + area info AI prompts alongside `getDietContext()`
+- Consider adding "Nashville" and "Fredericksburg" as proper TRIP_STOPS entries (currently inferred from TRIP_DAYS but no markers on map)
