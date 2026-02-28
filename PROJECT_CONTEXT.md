@@ -72,6 +72,7 @@ tripgenie/
   - **Modal scrollbar fix**: `.ddm-card`, `.aim-card`, `.music-card` now use `overflow:hidden; display:flex; flex-direction:column` so scrollbars are clipped to the border-radius. Inner content divs (`#ddm-blocks`, `.aim-scroll-body`, `#music-body`) scroll. Safe-area padding moved to inner divs.
   - **Conflict banner same-user fix**: When `theirName === myName` (same person, two devices/tabs), banner now shows "💻 Keep My Current Edits" / "☁️ Load Saved (HH:MM)" with a clear description instead of the confusing "Keep Paul's / Take Paul's".
   - **What's New updated**: Added all session 7 features to the "Latest Updates" release entry.
+  - **Change Plan stop naming fix**: Change Plan AI prompt now requires `name` to always be a city/town/area, never a specific venue. Added `attraction` field to sample JSON so AI correctly separates "The Plaza Theater" → city: "El Paso, TX" + attraction: "The Plaza Theater". Attraction becomes an activity at the city stop. (Root cause: AI was returning venue name in `name` field; `_addNewStop` used `item.city || item.name`, so venue became the stop name.)
 
 ---
 
@@ -107,3 +108,4 @@ tripgenie/
 - Implement Gallery/Journal photo unification (user requested: upload to gallery, all photos available in journal entry)
 - Inject `getRestaurantPrefContext()` into campground + area info AI prompts alongside `getDietContext()`
 - Consider adding "Nashville" and "Fredericksburg" as proper TRIP_STOPS entries (currently inferred from TRIP_DAYS but no markers on map)
+- User's existing "Plaza Theater" stop in the trip was added incorrectly (venue name as stop name). User should use 🗑️ Remove on that phase, then use Change Plan again — new prompt will correctly create an "El Paso, TX" stop with the theater as an activity
