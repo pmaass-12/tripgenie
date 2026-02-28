@@ -4918,7 +4918,22 @@ function phaseHeaderHtml(phase, firstDay) {
     _wxHtml = '<button onclick="event.stopPropagation();loadStopWeather(' + firstDay.stopId + ')" style="background:rgba(255,255,255,.12);border:1px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.7);border-radius:20px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Load weather">🌡️ Weather</button>';
   }
 
+  // Determine if this phase is first / last among visible (non-removed) phases
+  var _phBlocks = _getPhaseBlocks();
+  var _phRemoved = appState.removedStops || {};
+  var _phVisible = _phBlocks.filter(function(b) { return !_phRemoved[b.stopId]; });
+  var _phMyIdx = _phVisible.findIndex(function(b) { return b.stopId === firstDay.stopId && b.phase === phase; });
+  var _phIsFirst = _phMyIdx <= 0;
+  var _phIsLast  = _phMyIdx >= _phVisible.length - 1;
+  var _safePhase = phase.replace(/'/g, "\\'");
+  var _arrowOn  = 'background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:50%;width:24px;height:24px;font-size:.72rem;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:var(--font);flex-shrink:0;line-height:1;padding:0;transition:background .12s;';
+  var _arrowOff = 'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.25);border-radius:50%;width:24px;height:24px;font-size:.72rem;cursor:default;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;padding:0;';
+
   return '<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--blue);color:#fff;border-radius:var(--radius-s);margin:20px 0 8px;flex-wrap:wrap;">'
+    + '<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;">'
+    + '<button onclick="event.stopPropagation();movePhase(' + firstDay.stopId + ',\'' + _safePhase + '\',\'up\')" style="' + (_phIsFirst ? _arrowOff : _arrowOn) + '" ' + (_phIsFirst ? 'disabled' : '') + ' title="Move stop earlier">&#9650;</button>'
+    + '<button onclick="event.stopPropagation();movePhase(' + firstDay.stopId + ',\'' + _safePhase + '\',\'down\')" style="' + (_phIsLast ? _arrowOff : _arrowOn) + '" ' + (_phIsLast ? 'disabled' : '') + ' title="Move stop later">&#9660;</button>'
+    + '</div>'
     + '<div style="flex:1;min-width:0;">'
     + '<div style="font-weight:800;font-size:.97rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + phase + '</div>'
     + '<div style="font-size:.76rem;opacity:.8;">' + totalNights + ' night' + (totalNights !== 1 ? 's' : '') + (extras > 0 ? ' (+' + extras + ' added)' : extras < 0 ? ' (' + extras + ' shortened)' : '') + '</div>'
@@ -4930,8 +4945,8 @@ function phaseHeaderHtml(phase, firstDay) {
     + '<span style="font-size:.68rem;font-weight:800;opacity:.85;letter-spacing:.02em;white-space:nowrap;">Days</span>'
     + '<button onclick="event.stopPropagation();addPhaseDay(' + firstDay.stopId + ')" style="' + btnStyle + '" title="Add a day">&#43;</button>'
     + '</div>'
-    + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + phase.replace(/'/g, "\\'") + '\')" style="background:rgba(220,80,60,.35);border:1px solid rgba(255,100,80,.5);color:#fff;border-radius:100px;padding:5px 10px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Remove this stop from trip">🗑️ Remove</button>'
-    + '<button onclick="event.stopPropagation();openAreaInfo(\'' + phase.replace(/'/g, "\\'") + '\',' + firstDay.stopId + ')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 10px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">&#128269; Area Info</button>'
+    + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + _safePhase + '\')" style="background:rgba(220,80,60,.35);border:1px solid rgba(255,100,80,.5);color:#fff;border-radius:100px;padding:5px 10px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Remove this stop from trip">🗑️ Remove</button>'
+    + '<button onclick="event.stopPropagation();openAreaInfo(\'' + _safePhase + '\',' + firstDay.stopId + ')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 10px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">&#128269; Area Info</button>'
     + '<button onclick="event.stopPropagation();_openMusicForStop(' + firstDay.stopId + ')" title="Local Music" style="background:#1DB954;border:2px solid rgba(255,255,255,.5);color:#fff;border-radius:50%;width:32px;height:32px;font-size:.9rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1;padding:0;">&#127926;</button>'
     + '</div>';
 }
@@ -4982,6 +4997,79 @@ function restoreStopToTrip(stopId) {
   var toolsSub = document.getElementById('tools-sub-content');
   if (toolsSub && toolsSub.innerHTML.indexOf('Removed from Schedule') !== -1) renderAuditLog();
   showToast('↩ Stop restored to schedule!', 1800);
+}
+
+/* ── PHASE REORDERING ─────────────────────────────────────────────
+   Returns an array of {phase, stopId, start, end} blocks representing
+   consecutive runs of (phase+stopId) in TRIP_DAYS, in document order.
+   Indices refer to positions in the live TRIP_DAYS array. */
+function _getPhaseBlocks() {
+  var blocks = [];
+  var i = 0;
+  while (i < TRIP_DAYS.length) {
+    var d = TRIP_DAYS[i];
+    var phase = d.phase, stopId = d.stopId, start = i;
+    while (i < TRIP_DAYS.length && TRIP_DAYS[i].phase === phase && TRIP_DAYS[i].stopId === stopId) i++;
+    blocks.push({ phase: phase, stopId: stopId, start: start, end: i - 1 });
+  }
+  return blocks;
+}
+
+/* Move a phase block one step up or down in the schedule.
+   Persists the new order as customTripData so it survives reloads. */
+function movePhase(stopId, phaseStr, direction) {
+  var removedIds = appState.removedStops || {};
+  var allBlocks = _getPhaseBlocks();
+  // Only move within visible (non-removed) blocks
+  var blocks = allBlocks.filter(function(b) { return !removedIds[b.stopId]; });
+  var myIdx = blocks.findIndex(function(b) { return b.stopId === stopId && b.phase === phaseStr; });
+  if (myIdx < 0) return;
+  var targetIdx = direction === 'up' ? myIdx - 1 : myIdx + 1;
+  if (targetIdx < 0 || targetIdx >= blocks.length) {
+    showToast('Already at the ' + (direction === 'up' ? 'top' : 'bottom') + ' of the schedule!', 1800);
+    return;
+  }
+  var loIdx = Math.min(myIdx, targetIdx);
+  var hiIdx = Math.max(myIdx, targetIdx);
+  // Extract the two blocks and any days in between (removed-stop days, if any)
+  var loDays  = TRIP_DAYS.slice(blocks[loIdx].start, blocks[loIdx].end + 1);
+  var hiDays  = TRIP_DAYS.slice(blocks[hiIdx].start, blocks[hiIdx].end + 1);
+  var between = TRIP_DAYS.slice(blocks[loIdx].end + 1, blocks[hiIdx].start);
+  var before  = TRIP_DAYS.slice(0, blocks[loIdx].start);
+  var after   = TRIP_DAYS.slice(blocks[hiIdx].end + 1);
+  // Swap: put hiDays first, then between, then loDays
+  var newDays = before.concat(hiDays, between, loDays, after);
+  // Re-date from CONFIG.startDate
+  var startMs = new Date(CONFIG.startDate + 'T00:00:00').getTime();
+  newDays = newDays.map(function(d, i) {
+    var dd = new Date(startMs + i * 86400000);
+    var ds = dd.getFullYear() + '-' + String(dd.getMonth()+1).padStart(2,'0') + '-' + String(dd.getDate()).padStart(2,'0');
+    return Object.assign({}, d, { day: i + 1, date: ds });
+  });
+  // Also reorder TRIP_STOPS to match (keep map route correct)
+  var newStops = TRIP_STOPS.slice();
+  var siA = newStops.findIndex(function(s) { return s.id === blocks[myIdx].stopId; });
+  var siB = newStops.findIndex(function(s) { return s.id === blocks[targetIdx].stopId; });
+  if (siA >= 0 && siB >= 0 && siA !== siB) {
+    var tmp = newStops[siA]; newStops[siA] = newStops[siB]; newStops[siB] = tmp;
+  }
+  // Persist as customTripData so the order survives a reload
+  var tripName = (appState.activeTrip === 'custom' && appState.customTripData && appState.customTripData.tripName)
+    ? appState.customTripData.tripName
+    : (((appState.tripSettings && appState.tripSettings.tripName) || 'My Trip') + ' (Modified)');
+  appState.customTripData = {
+    tripName: tripName, stops: newStops, days: newDays,
+    startDate: CONFIG.startDate, endDate: CONFIG.endDate,
+    totalDays: newDays.length, totalMiles: CONFIG.totalMiles
+  };
+  appState.activeTrip = 'custom';
+  // Apply to live globals and re-render
+  TRIP_DAYS.splice(0, TRIP_DAYS.length);  newDays.forEach(function(d) { TRIP_DAYS.push(d); });
+  TRIP_STOPS.splice(0, TRIP_STOPS.length); newStops.forEach(function(s) { TRIP_STOPS.push(s); });
+  saveState(appState);
+  renderSchedule();
+  setTimeout(function() { if (typeof refreshMainMap === 'function') refreshMainMap(); }, 400);
+  showToast('\uD83D\uDCCD ' + phaseStr + ' moved ' + direction + '!', 1800);
 }
 
 /* Wrapper to trigger weather load and re-render */
