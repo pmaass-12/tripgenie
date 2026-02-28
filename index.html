@@ -2217,9 +2217,10 @@
         </select>
       </div>
       <div style="margin-bottom:18px;">
-        <label style="font-size:.8rem;font-weight:600;color:var(--text-2);display:block;margin-bottom:5px;">Nights to stay</label>
-        <input id="map-add-stop-nights" type="number" value="2" min="1" max="30"
+        <label style="font-size:.8rem;font-weight:600;color:var(--text-2);display:block;margin-bottom:5px;">Nights to stay <span style="font-weight:400;color:var(--text-2);">(0 = drive-through waypoint)</span></label>
+        <input id="map-add-stop-nights" type="number" value="2" min="0" max="30"
           style="width:80px;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:.95rem;background:var(--bg);color:var(--text);font-family:var(--font);">
+        <span id="map-add-waypoint-hint" style="display:none;margin-left:10px;font-size:.78rem;color:var(--orange);font-weight:600;">📍 Waypoint — appears as a route marker</span>
       </div>
       <div style="display:flex;gap:10px;">
         <button onclick="_mapAddStopClose()" style="flex:1;padding:10px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text-2);font-family:var(--font);font-size:.88rem;font-weight:700;cursor:pointer;">Cancel</button>
@@ -4883,6 +4884,14 @@ function _mapAddStopOpen(latlng) {
   document.getElementById('map-add-stop-loc').textContent = _isButtonOpen ? 'Enter a city or destination below' : 'Looking up location…';
   document.getElementById('map-add-stop-name').value = '';
   document.getElementById('map-add-stop-nights').value = '2';
+  /* Wire waypoint hint toggle on nights input change */
+  var _nightsInp = document.getElementById('map-add-stop-nights');
+  var _wpHint = document.getElementById('map-add-waypoint-hint');
+  if (_nightsInp && _wpHint) {
+    _nightsInp.oninput = function() {
+      _wpHint.style.display = (parseInt(this.value)||0) === 0 ? 'inline' : 'none';
+    };
+  }
   if (_isButtonOpen) { document.getElementById('map-add-stop-name').focus(); return; }
 
   /* Reverse geocode via Nominatim */
@@ -4922,7 +4931,7 @@ function _mapAddStopConfirm() {
   var name = nameEl ? nameEl.value.trim() : '';
   if (!name) { nameEl && nameEl.focus(); return; }
   var afterIdx = afterEl ? parseInt(afterEl.value) : -1;
-  var nights = nightsEl ? Math.max(1, parseInt(nightsEl.value) || 2) : 2;
+  var nights = nightsEl ? Math.max(0, parseInt(nightsEl.value) || 0) : 2;
 
   /* If opened via button (sentinel coords), geocode the typed name first */
   var _isSentinel = (_mapAddStopLatLng.lat === 39 && _mapAddStopLatLng.lng === -98);
@@ -4995,20 +5004,40 @@ function _mapAddStopSave(name, afterIdx, nights) {
     }
   }
 
-  /* Build new day entries */
+  /* Build new day entries — 0 nights = single waypoint/transit day, no overnight stay */
   var newDays = [];
-  for (var n = 0; n < nights; n++) {
+  if (nights === 0) {
+    /* Waypoint: a single pass-through day, flagged as driveDay + waypoint.
+       Shows in schedule as a transit marker; does NOT count as an overnight stay. */
     newDays.push({
-      day: 0, /* will be renumbered below */
+      day: 0,
       date: '',
       stopId: newId,
       phase: stopName,
       name: stopName,
-      title: 'Explore ' + stopName,
-      sleep: stopName + (stopState ? ', ' + stopState : ''),
-      sleepType: 'campground',
+      title: 'Passing through ' + stopName,
+      sleep: '', /* no overnight — next stop's sleep carries forward visually */
+      sleepType: 'waypoint',
+      driveDay: true,
+      waypoint: true,
+      miles: 0,
+      driveHours: 0,
       items: []
     });
+  } else {
+    for (var n = 0; n < nights; n++) {
+      newDays.push({
+        day: 0, /* will be renumbered below */
+        date: '',
+        stopId: newId,
+        phase: stopName,
+        name: stopName,
+        title: 'Explore ' + stopName,
+        sleep: stopName + (stopState ? ', ' + stopState : ''),
+        sleepType: 'campground',
+        items: []
+      });
+    }
   }
 
   /* Splice new days in */
@@ -5123,8 +5152,10 @@ function renderStopNavigator() {
   var html = '';
   _orderedIds.forEach(function(stopId, idx) {
     var stop    = getStop(stopId);
-    var nights  = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; }).length;
     var stopDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
+    /* A waypoint has exactly 1 day and that day has waypoint:true */
+    var isWaypoint = stopDays.length === 1 && stopDays[0].waypoint;
+    var nights  = isWaypoint ? 0 : stopDays.length;
     var firstDate = stopDays.length ? stopDays[0].date : '';
     var lastDate = stopDays.length ? stopDays[stopDays.length-1].date : '';
     var dateRange = '';
@@ -5134,13 +5165,24 @@ function renderStopNavigator() {
         var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
         return months[parseInt(p[1])-1] + ' ' + parseInt(p[2]);
       };
-      dateRange = _fmt(firstDate) + (firstDate !== lastDate ? ' – ' + _fmt(lastDate) : '');
+      dateRange = isWaypoint
+        ? _fmt(firstDate)            /* waypoints: just the single date, no dash range */
+        : (_fmt(firstDate) + (firstDate !== lastDate ? ' – ' + _fmt(lastDate) : ''));
     }
     var stayMeta = (typeof _getStayMeta === 'function') ? _getStayMeta(stopId) : { icon:'🏕️' };
     var name    = stop ? (stop.name || stop.phase || ('Stop ' + (idx+1))) : ('Stop ' + (idx+1));
     var state   = stop && stop.state ? ', ' + stop.state : '';
     var num     = idx + 1;
+    /* Waypoints get a diamond badge instead of a numbered orange circle */
+    var badgeHtml = isWaypoint
+      ? '<div style="width:24px;height:24px;background:var(--blue);color:#fff;border-radius:4px;transform:rotate(45deg);display:flex;align-items:center;justify-content:center;font-size:.55rem;font-weight:900;flex-shrink:0;"><span style="transform:rotate(-45deg);">📍</span></div>'
+      : '<div style="width:24px;height:24px;background:var(--orange);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:900;flex-shrink:0;">' + num + '</div>';
+    var metaHtml = isWaypoint
+      ? '<span style="background:var(--blue);color:#fff;border-radius:4px;padding:1px 5px;font-size:.65rem;font-weight:800;letter-spacing:.02em;">WAYPOINT</span>'
+      + (dateRange ? ' ' + dateRange : '')
+      : (dateRange || (nights + 'n'));
     html += '<div class="nav-stop-item"'
+      + (isWaypoint ? ' style="opacity:.85;border-style:dashed;"' : '')
       + ' draggable="true"'
       + ' data-nav-idx="' + idx + '"'
       + ' data-nav-stopid="' + stopId + '"'
@@ -5149,10 +5191,10 @@ function renderStopNavigator() {
       + ' ondrop="_navDrop(event)"'
       + ' ondragleave="_navDragLeave(event)"'
       + ' ondragend="_navDragEnd(event)">'
-      + '<div style="width:24px;height:24px;background:var(--orange);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:900;flex-shrink:0;">' + num + '</div>'
-      + '<div style="flex:1;min-width:0;font-size:.8rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);">' + name + state + '</div>'
+      + badgeHtml
+      + '<div style="flex:1;min-width:0;font-size:.8rem;font-weight:' + (isWaypoint ? '600' : '700') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:' + (isWaypoint ? 'var(--text-2)' : 'var(--text)') + ';">' + name + state + '</div>'
       + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;color:var(--text-3);font-size:.72rem;white-space:nowrap;">'
-      + (dateRange || (nights + 'n'))
+      + metaHtml
       + '<button onclick="event.stopPropagation();_navDeleteStop(' + stopId + ',\'' + name.replace(/'/g,"\\'") + '\')" title="Remove stop" draggable="false" style="background:none;border:none;cursor:pointer;padding:2px 3px;color:var(--text-3);font-size:.75rem;line-height:1;border-radius:4px;display:flex;align-items:center;" onmouseenter="this.style.color=\'#e53e3e\'" onmouseleave="this.style.color=\'var(--text-3)\'"><i class="fa-solid fa-xmark"></i></button>'
       + '<i class="fa-solid fa-grip-vertical" style="font-size:.72rem;cursor:grab;"></i>'
       + '</div>'
@@ -5306,10 +5348,13 @@ function buildMapMarkers(mapObj) {
   var _removedIds = (appState && appState.removedStops) ? appState.removedStops : {};
   var _validStops = TRIP_STOPS.filter(function(s) { return s.lat && s.lng && s.id !== _homeStopId && !_removedIds[s.id]; });
 
-  /* Build stop number map (1-based, trip-day order, excluding home) */
+  /* Build stop number map (1-based, trip-day order, excluding home and waypoints) */
+  /* Waypoints are stops whose only day has waypoint:true — they get a separate icon */
+  var _waypointIds = {};
+  TRIP_DAYS.forEach(function(d) { if (d.waypoint) _waypointIds[d.stopId] = true; });
   var _stopNumMap = {}, _numSeenIds = {}, _numCtr = 1;
   TRIP_DAYS.forEach(function(d) {
-    if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeStopId) return;
+    if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeStopId || _waypointIds[d.stopId]) return;
     if (!_numSeenIds[d.stopId]) { _numSeenIds[d.stopId] = true; _stopNumMap[d.stopId] = _numCtr++; }
   });
 
@@ -5374,14 +5419,21 @@ function buildMapMarkers(mapObj) {
     if (!stop.lat || !stop.lng) return; // skip stops with no coordinates
     if (stop.id === _homeStopId) return;  // home already rendered above
     if (_removedIds[stop.id]) return;     // skip stops removed from the trip
+    var _isWpStop = _waypointIds[stop.id];
     var _stopNum = _stopNumMap[stop.id] || '·';
-    const icon = L.divIcon({
-      html: '<div style="width:32px;height:32px;background:#E8813A;border-radius:50%;border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:' + (_stopNum > 9 ? '11' : '13') + 'px;font-weight:900;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' + _stopNum + '</div>',
-      className: '', iconSize: [32, 32], iconAnchor: [16, 16]
-    });
+    const icon = _isWpStop
+      ? L.divIcon({
+          /* Waypoint: smaller blue diamond/route pin */
+          html: '<div style="width:26px;height:26px;background:#2C5F8A;border-radius:4px;transform:rotate(45deg);border:2px solid white;box-shadow:0 2px 6px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;"><span style="transform:rotate(-45deg);font-size:11px;">📍</span></div>',
+          className: '', iconSize: [26, 26], iconAnchor: [13, 13]
+        })
+      : L.divIcon({
+          html: '<div style="width:32px;height:32px;background:#E8813A;border-radius:50%;border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:' + (_stopNum > 9 ? '11' : '13') + 'px;font-weight:900;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' + _stopNum + '</div>',
+          className: '', iconSize: [32, 32], iconAnchor: [16, 16]
+        });
     const stopDays = TRIP_DAYS.filter(d => d.stopId === stop.id);
     const firstDay = stopDays[0];
-    const nights = stopDays.length;
+    const nights = _isWpStop ? 0 : stopDays.length;
     const acts = stop.activities || [];
     const topActs = acts.slice(0, 3).map(a => `<li style="margin-bottom:1px;">${a.name}</li>`).join('');
 
@@ -5404,7 +5456,7 @@ function buildMapMarkers(mapObj) {
     const popup = `
       <div style="min-width:230px;max-width:290px;font-family:-apple-system,sans-serif;">
         <div style="font-weight:800;font-size:.98rem;margin-bottom:2px;display:flex;align-items:center;gap:6px;"><span style="display:inline-flex;align-items:center;justify-content:center;background:#E8813A;color:#fff;border-radius:50%;width:22px;height:22px;font-size:.7rem;font-weight:900;flex-shrink:0;">${_stopNum}</span> ${stop.name}${stop.state ? ', ' + stop.state : ''}</div>
-        <div style="font-size:.76rem;color:#888;margin-bottom:9px;">${firstDay ? formatDate(firstDay.date) : ''} &nbsp;·&nbsp; ${nights} night${nights!==1?'s':''}</div>
+        <div style="font-size:.76rem;color:#888;margin-bottom:9px;">${firstDay ? formatDate(firstDay.date) : ''} &nbsp;·&nbsp; ${_isWpStop ? '<span style="color:#2C5F8A;font-weight:700;">📍 Waypoint</span>' : nights + ' night' + (nights!==1?'s':'')}</div>
         ${weatherRow}
         ${stopDesc ? `<div style="font-size:.79rem;color:#444;line-height:1.5;margin-bottom:8px;">${stopDesc.substring(0, 110)}${stopDesc.length > 110 ? '…' : ''}</div>` : ''}
         ${topActs ? `<ul style="font-size:.76rem;padding-left:16px;margin:0 0 10px;">${topActs}</ul>` : ''}
@@ -5779,6 +5831,22 @@ function saveSleep(dayNum) {
 
 /* ── PHASE HEADER HTML ───────────────────────────────────────────── */
 function phaseHeaderHtml(phase, firstDay) {
+  /* ── Waypoint: lightweight header, no nights/days controls ── */
+  if (firstDay.waypoint) {
+    var _wpStop = getStop(firstDay.stopId);
+    var _wpName = _wpStop ? (_wpStop.name || phase) : phase;
+    var _wpState = _wpStop && _wpStop.state ? ', ' + _wpStop.state : '';
+    var _wpSafe = phase.replace(/'/g, "\\'");
+    return '<div style="display:flex;align-items:center;gap:10px;padding:7px 14px;background:rgba(44,95,138,.18);color:var(--blue);border-radius:8px;margin:12px 0 4px;border:1.5px dashed rgba(44,95,138,.35);">'
+      + '<span style="font-size:1rem;flex-shrink:0;">📍</span>'
+      + '<div style="flex:1;min-width:0;">'
+      + '<div style="font-weight:800;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _wpName + _wpState + '</div>'
+      + '<div style="font-size:.7rem;opacity:.7;font-weight:600;">Waypoint — drive-through, no overnight stay</div>'
+      + '</div>'
+      + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + _wpSafe + '\')" style="background:rgba(220,60,50,.12);border:1px solid rgba(220,60,50,.2);color:#c53030;border-radius:6px;padding:3px 8px;font-size:.68rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Remove waypoint">&#128465;&#65039;</button>'
+      + '</div>';
+  }
+
   var pStop = getStop(firstDay.stopId);
   /* Check if this phase spans multiple stops — if so, scope to this stopId only */
   var _allPhaseStopIds = [];
