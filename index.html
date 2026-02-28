@@ -2569,7 +2569,7 @@
         </div>
         <button onclick="closeDayDetail()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.4rem;line-height:1;width:34px;height:34px;border-radius:50%;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;flex-shrink:0;">&#215;</button>
       </div>
-      <div style="font-size:.68rem;opacity:.7;margin-top:8px;font-weight:600;letter-spacing:.02em;">Hold a row to edit &nbsp;·&nbsp; Drag ⠿ to reorder</div>
+      <div style="font-size:.68rem;opacity:.7;margin-top:8px;font-weight:600;letter-spacing:.02em;">Hold a row to edit &nbsp;·&nbsp; Drag ⠿ to reorder &nbsp;·&nbsp; <span onclick="resetDaySchedule()" style="cursor:pointer;text-decoration:underline;opacity:1;color:rgba(255,255,255,.9);">↺ Reset order</span></div>
       <div style="display:flex;gap:8px;margin-top:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,.2);flex-wrap:wrap;align-items:center;">
         <button id="ddm-arrive-btn"
           onclick="recordArrival()"
@@ -2720,9 +2720,10 @@
       </div>
 
       <!-- Action buttons -->
-      <div style="display:flex;gap:8px;">
-        <button onclick="saveItemEdit()" style="flex:1;background:var(--orange);color:#fff;border:none;border-radius:100px;padding:12px;font-size:.92rem;font-weight:800;cursor:pointer;font-family:var(--font);">✓ Save Changes</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="saveItemEdit()" style="flex:1;background:var(--orange);color:#fff;border:none;border-radius:100px;padding:12px;font-size:.92rem;font-weight:800;cursor:pointer;font-family:var(--font);">✓ Save</button>
         <button onclick="removeItemOverride()" title="Reset to defaults" style="background:var(--bg);border:1px solid var(--border);border-radius:100px;padding:12px 14px;font-size:.82rem;cursor:pointer;font-family:var(--font);color:var(--text-2);">↺ Reset</button>
+        <button id="iem-remove-btn" onclick="hideItemFromDay()" title="Remove from today's schedule" style="background:#fff0f0;border:1px solid #f5c6c6;border-radius:100px;padding:12px 14px;font-size:.82rem;cursor:pointer;font-family:var(--font);color:var(--red);">🗑 Remove</button>
         <button onclick="closeItemEdit()" style="background:var(--bg);border:1px solid var(--border);border-radius:100px;padding:12px 14px;font-size:.82rem;cursor:pointer;font-family:var(--font);color:var(--text-2);">Cancel</button>
       </div>
     </div>
@@ -9500,6 +9501,12 @@ function renderDayTimeBlocks(d, stop) {
       null,false,'openCampInfo('+d.day+')','','sleep') });
   }
 
+  /* Remove items the user has hidden for this day */
+  var _hideable = { breakfast:true, lunch:true, act0:true, act1:true, dinner:true };
+  _items = _items.filter(function(it) {
+    return !(_hideable[it.key] && _overrides[it.key] && _overrides[it.key].hidden);
+  });
+
   /* Apply custom order if set */
   if (_orderKeys && _orderKeys.length) {
     if (d.driveDay) {
@@ -9666,6 +9673,11 @@ function openItemEdit(dayNum, itemKey, icon, title) {
   var notesEl = document.getElementById('iem-notes');
   if (notesEl) notesEl.value = ov.notes || '';
 
+  /* Show Remove button only for hideable items (not structural drive/sleep rows) */
+  var _nonRemovable = { drive:true, drive2:true, sleep:true };
+  var removeBtn = document.getElementById('iem-remove-btn');
+  if (removeBtn) removeBtn.style.display = _nonRemovable[itemKey] ? 'none' : '';
+
   document.getElementById('item-edit-modal').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
 }
@@ -9743,6 +9755,40 @@ function removeItemOverride() {
   var blocksEl = document.getElementById('ddm-blocks');
   if (blocksEl && d) blocksEl.innerHTML = renderDayTimeBlocks(d, stop);
   showToast('↺ Reset to default', 1800);
+}
+
+function resetDaySchedule() {
+  var dayNum = _ddmDayNum;
+  if (!dayNum) return;
+  /* Clear saved order */
+  if (appState.dayOrder) delete appState.dayOrder[dayNum];
+  /* Restore any hidden items for this day */
+  if (appState.dayOverrides && appState.dayOverrides[dayNum]) {
+    ['breakfast','lunch','act0','act1','dinner'].forEach(function(k) {
+      if (appState.dayOverrides[dayNum][k]) delete appState.dayOverrides[dayNum][k].hidden;
+    });
+  }
+  saveState(appState);
+  var d = getDay(dayNum);
+  var stop = d ? getStop(d.stopId) : null;
+  var blocksEl = document.getElementById('ddm-blocks');
+  if (blocksEl && d) blocksEl.innerHTML = renderDayTimeBlocks(d, stop);
+  showToast('↺ Schedule reset to default order', 2000);
+}
+
+function hideItemFromDay() {
+  if (!_ieDay || !_ieKey) return;
+  if (!appState.dayOverrides) appState.dayOverrides = {};
+  if (!appState.dayOverrides[_ieDay]) appState.dayOverrides[_ieDay] = {};
+  if (!appState.dayOverrides[_ieDay][_ieKey]) appState.dayOverrides[_ieDay][_ieKey] = {};
+  appState.dayOverrides[_ieDay][_ieKey].hidden = true;
+  saveState(appState);
+  closeItemEdit();
+  var d = getDay(_ieDay);
+  var stop = d ? getStop(d.stopId) : null;
+  var blocksEl = document.getElementById('ddm-blocks');
+  if (blocksEl && d) blocksEl.innerHTML = renderDayTimeBlocks(d, stop);
+  showToast('🗑 Removed from today\'s schedule', 2000);
 }
 
 /* AI: suggest a different activity/restaurant for the selected slot */
