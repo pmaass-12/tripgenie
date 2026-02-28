@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-02-28 (Session 7)
+2026-02-28 (Session 8)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -93,6 +93,14 @@ tripgenie/
 - Map home coords: always resolved via `_tripHomeStop()` (scans TRIP_DAYS for sleepType='home'), never from `TRIP_STOPS[0]`
 - List item text: overrides stored in `appState.listItemText[id]`; `_listItemDisplayText(id, defaultText)` is the canonical getter
 - Modal scroll pattern: card has `overflow:hidden; display:flex; flex-direction:column`; inner content div has `overflow-y:auto; flex:1` — prevents scrollbar from clipping past border-radius
+
+---
+
+- Session 8 (2026-02-28):
+  - **Multi-leg drive day title fix (`_getDriveDayTitle`)**: Rewrote to correctly handle consecutive same-phase drive days (e.g. 2-day return trip). Previously both days would show same origin (e.g. "Blue Ridge Mountains → Warwick, NY"). Now: first day uses prev-phase name as origin; second day uses first day's `sleep` field as origin (e.g. "Fredericksburg, VA → Warwick, NY"). Falls back to phase-scan if no sleep recorded.
+  - **Phase header icons removed**: Removed the emoji icon from the left side of the blue phase header bars in the schedule. User found them noisy (hearts, home icon, etc.).
+  - **Trip length "mismatch" clarification**: User confirmed the schedule extending beyond configured end-date is intentional (stops were added). No health check warning needed for this.
+  - **Uncommitted from prev session**: loadAllWeatherSilent(), auto-weather in initApp(), Skip Preferences rename, map timing fix (800ms), RV Profile JS functions (getRVContext, saveRVProfile, openDriveDirections, _buildGoogleMapsUrl, _buildAppleMapsUrl, _showDirectionsModal, _loadOSRMRoute) — all present in index.html but RV Profile UI section NOT yet added to Trip Settings HTML.
 
 ---
 

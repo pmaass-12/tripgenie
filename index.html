@@ -3907,21 +3907,33 @@ function _getDriveDayTitle(d) {
   var destStop = getStop(d.stopId);
   var destName = destStop ? _sn(destStop) : (d.phase || 'destination');
   var myPhase = d.phase || '';
-  // Scan backward using PHASE field (not just stopId) so transit overnights
-  // (e.g. Nashville Walmart stop on OKC→Blue Ridge drive) are correctly detected.
-  for (var bi = d.day - 2; bi >= 0; bi--) {
-    var prev = TRIP_DAYS[bi];
-    if (!prev) continue;
-    if (removedIds[prev.stopId]) continue;
-    var prevPhase = prev.phase || '';
-    if (prevPhase === myPhase) continue; // same phase, keep scanning
-    var originName = prevPhase;
-    if (!originName) {
-      var originStop = getStop(prev.stopId);
-      originName = originStop ? _sn(originStop) : '';
+  // Find the immediate preceding non-removed day
+  var prevDay = null;
+  for (var pi = d.day - 2; pi >= 0; pi--) {
+    var pd = TRIP_DAYS[pi];
+    if (!pd || removedIds[pd.stopId]) continue;
+    prevDay = pd; break;
+  }
+  if (!prevDay) return d.title;
+  var prevPhase = prevDay.phase || '';
+  if (prevPhase !== myPhase) {
+    // Different phase — standard case: use prev phase name as origin
+    var originName = prevPhase || (getStop(prevDay.stopId) ? _sn(getStop(prevDay.stopId)) : '');
+    return originName ? (originName + ' \u2192 ' + destName) : d.title;
+  } else {
+    // Same phase as previous day — this is a multi-leg drive (e.g. Day 2 of return trip).
+    // Use the previous day's sleep location as the departure city.
+    var prevSleep = prevDay.sleep || '';
+    if (prevSleep && prevSleep !== destName) return prevSleep + ' \u2192 ' + destName;
+    // Fallback: scan back to the first different-phase day for origin
+    for (var bi = d.day - 2; bi >= 0; bi--) {
+      var prev = TRIP_DAYS[bi];
+      if (!prev || removedIds[prev.stopId]) continue;
+      if ((prev.phase || '') === myPhase) continue;
+      var on = (prev.phase || '') || (getStop(prev.stopId) ? _sn(getStop(prev.stopId)) : '');
+      if (on) return on + ' \u2192 ' + destName;
+      break;
     }
-    if (originName) return originName + ' \u2192 ' + destName;
-    break;
   }
   return d.title; // fallback to hardcoded title
 }
@@ -4886,7 +4898,6 @@ function phaseHeaderHtml(phase, firstDay) {
   }
 
   return '<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--blue);color:#fff;border-radius:var(--radius-s);margin:20px 0 8px;flex-wrap:wrap;">'
-    + '<span style="font-size:1.3rem">' + (pStop ? pStop.emoji : '&#128663;') + '</span>'
     + '<div style="flex:1;min-width:0;">'
     + '<div style="font-weight:800;font-size:.97rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + phase + '</div>'
     + '<div style="font-size:.76rem;opacity:.8;">' + totalNights + ' night' + (totalNights !== 1 ? 's' : '') + (extras > 0 ? ' (+' + extras + ' added)' : extras < 0 ? ' (' + extras + ' shortened)' : '') + '</div>'
@@ -8818,6 +8829,12 @@ function initApp() {
 
   // Launch tutorial for first-time users (post-login, after everything renders)
   _maybeLaunchTutorial();
+
+  // Auto-load weather for stops that don't have it yet — fires 4s after init
+  // so it doesn't slow down the initial render or compete with visible renders.
+  setTimeout(function() {
+    if (typeof loadAllWeatherSilent === 'function') loadAllWeatherSilent();
+  }, 4000);
 }
 
 /* ── CHANGE THE PLAN MODAL ────────────────────────────────────────────── */
@@ -12020,9 +12037,9 @@ function renderTripSettings() {
   html += '<button onclick="refreshAllRecommendations()" style="background:var(--purple);color:#fff;border:none;border-radius:100px;padding:9px 18px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;">🔄 Refresh All Recommendations</button>';
   html += '</div></div></div>';
 
-  html += '<h2 class="section-title" style="margin-top:28px;"><i class="fa-solid fa-ban"></i> AI Preferences — Things to Skip</h2>';
+  html += '<h2 class="section-title" style="margin-top:28px;"><i class="fa-solid fa-ban"></i> Skip Preferences</h2>';
   html += '<div style="background:var(--purple-l);border:1px solid #c9b8e8;border-radius:var(--radius-s);padding:12px 15px;margin-bottom:16px;font-size:.82rem;color:var(--text);line-height:1.55;">'
-    + '&#129302; The AI uses these to filter out recommendations you\'d rather skip. TripGenie, Area Info, and activity suggestions will avoid these when possible.'
+    + '&#129302; Check off anything you\'d rather skip. TripGenie, Area Info, and activity suggestions will filter these out of all recommendations.'
     + '</div>';
   html += '<div class="card"><div class="card-body" style="display:flex;flex-direction:column;gap:16px;">';
   html += '<div style="display:flex;flex-wrap:wrap;gap:8px;" id="skip-options-grid">';
@@ -12109,6 +12126,212 @@ function restartTrip() {
   switchTab('dashboard');
   renderDashboard();
   showToast('↺ Trip has been restarted! Tap "Start Trip" on the dashboard when you\'re ready to go! 🚐', 4500);
+}
+
+/* ── RV PROFILE ──────────────────────────────────────────────────────────────
+   Stores vehicle type, height, and routing preferences.
+   getRVContext() injects these into AI prompts.
+   ──────────────────────────────────────────────────────────────────────────── */
+function getRVContext() {
+  var rp = (appState.tripSettings && appState.tripSettings.rvProfile) || {};
+  if (!rp.vehicleType && !rp.heightFt) return '';
+  var typeLabels = {
+    motorhome_a: 'Class A motorhome',
+    motorhome_c: 'Class C motorhome',
+    fifthwheel:  'fifth wheel / travel trailer',
+    van:         'Class B / Sprinter van',
+    tent:        'tent camping / no RV'
+  };
+  var parts = [];
+  if (rp.vehicleType && typeLabels[rp.vehicleType]) parts.push('Vehicle: ' + typeLabels[rp.vehicleType]);
+  if (rp.heightFt) parts.push('RV height: ' + rp.heightFt + '\'' + (rp.heightIn || 0) + '"');
+  if (rp.avoidParkways) parts.push('must avoid parkways & roads with height/weight restrictions');
+  if (rp.avoidTolls) parts.push('prefer toll-free routes');
+  if (!parts.length) return '';
+  return 'RV specs: ' + parts.join(', ') + '. Factor these into campground hookup, route, and activity suggestions. ';
+}
+function saveRVProfile() {
+  var typeEl = document.querySelector('input[name="rv-type"]:checked');
+  var ftEl   = document.getElementById('rv-height-ft');
+  var inEl   = document.getElementById('rv-height-in');
+  var pkEl   = document.getElementById('rv-avoid-parkways');
+  var tlEl   = document.getElementById('rv-avoid-tolls');
+  if (!appState.tripSettings) appState.tripSettings = {};
+  appState.tripSettings.rvProfile = {
+    vehicleType:     typeEl ? typeEl.value : '',
+    heightFt:        ftEl   ? parseInt(ftEl.value,10)  || 0 : 0,
+    heightIn:        inEl   ? parseInt(inEl.value,10)  || 0 : 0,
+    avoidParkways:   pkEl   ? pkEl.checked : false,
+    avoidTolls:      tlEl   ? tlEl.checked : false
+  };
+  saveState(appState);
+  showToast('🚐 RV profile saved!', 2000);
+}
+
+/* ── DRIVING DIRECTIONS ─────────────────────────────────────────────────────
+   Opens an in-app directions modal using OSRM (free, no API key) for
+   real driving routes on a Leaflet map with turn-by-turn steps.
+   Also provides deep links to Google Maps and Apple Maps.
+   ──────────────────────────────────────────────────────────────────────────── */
+function openDriveDirections(dayNum) {
+  var d = TRIP_DAYS[dayNum - 1];
+  if (!d || !d.driveDay) return;
+  var removedIds = appState.removedStops || {};
+  var myPhase = d.phase || '';
+  /* Find origin: most recent non-removed day in a DIFFERENT phase */
+  var originStop = null;
+  for (var bi = dayNum - 2; bi >= 0; bi--) {
+    var prev = TRIP_DAYS[bi];
+    if (!prev || removedIds[prev.stopId]) continue;
+    if ((prev.phase || '') !== myPhase) { originStop = getStop(prev.stopId); break; }
+  }
+  var destStop = getStop(d.stopId);
+  if (!destStop || !destStop.lat || !destStop.lng) {
+    showToast('No map coordinates for this stop yet', 2200); return;
+  }
+  _showDirectionsModal(d, originStop, destStop);
+}
+
+function _buildGoogleMapsUrl(origin, dest, rp) {
+  var url = 'https://www.google.com/maps/dir/?api=1';
+  if (origin && origin.lat && origin.lng) url += '&origin=' + origin.lat + ',' + origin.lng;
+  url += '&destination=' + dest.lat + ',' + dest.lng + '&travelmode=driving';
+  var avoids = [];
+  if (rp && rp.avoidParkways) avoids.push('highways');
+  if (rp && rp.avoidTolls)    avoids.push('tolls');
+  if (avoids.length) url += '&avoid=' + avoids.join('%7C');
+  return url;
+}
+function _buildAppleMapsUrl(origin, dest) {
+  var url = 'https://maps.apple.com/?';
+  if (origin && origin.lat && origin.lng) url += 'saddr=' + origin.lat + ',' + origin.lng + '&';
+  url += 'daddr=' + dest.lat + ',' + dest.lng + '&dirflg=d';
+  return url;
+}
+
+function _showDirectionsModal(day, originStop, destStop) {
+  var existing = document.getElementById('rv-directions-modal');
+  if (existing) existing.remove();
+  var rp = (appState.tripSettings && appState.tripSettings.rvProfile) || {};
+  var mapsUrl  = _buildGoogleMapsUrl(originStop, destStop, rp);
+  var appleUrl = _buildAppleMapsUrl(originStop, destStop);
+  var fromName = originStop ? (originStop.name + (originStop.state ? ', ' + originStop.state : '')) : (day.phase || 'Previous Stop');
+  var toName   = destStop.name + (destStop.state ? ', ' + destStop.state : '');
+  var heightStr = (rp.heightFt) ? (rp.heightFt + '\'' + (rp.heightIn || 0) + '"') : '';
+  var avoidNote = '';
+  if (rp.avoidParkways)
+    avoidNote = '⚠️ Avoid parkways is ON — Google Maps link routes via "avoid highways." Verify route avoids Merritt (CT), Taconic (NY), Palisades (NJ/NY).';
+  else if (rp.avoidTolls)
+    avoidNote = 'ℹ️ Avoid tolls is ON — Google Maps link will prefer toll-free routes.';
+  var heightWarn = (rp.heightFt && parseInt(rp.heightFt,10) > 11)
+    ? '⚠️ RV height ' + heightStr + ' — confirm clearances on your route before driving.'
+    : '';
+
+  var h = '<div id="rv-directions-modal" onclick="if(event.target===this)this.remove();" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9999;display:flex;align-items:flex-end;justify-content:center;">'
+    + '<div style="background:var(--card);border-radius:20px 20px 0 0;width:100%;max-width:640px;max-height:92vh;display:flex;flex-direction:column;box-sizing:border-box;">'
+    // Header
+    + '<div style="padding:18px 18px 12px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:8px;flex-shrink:0;">'
+    + '<div>'
+    + '<div style="font-weight:800;font-size:.95rem;line-height:1.3;">' + fromName + ' → ' + toName + '</div>'
+    + '<div style="font-size:.76rem;color:var(--text-2);margin-top:3px;">'
+    + '<i class="fa-solid fa-car-side" style="color:var(--orange);"></i> ' + day.miles + ' mi · ' + day.driveHours + 'h'
+    + (heightStr ? ' &nbsp;·&nbsp; 🚐 ' + heightStr : '') + '</div>'
+    + '</div>'
+    + '<button onclick="document.getElementById(\'rv-directions-modal\').remove()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-2);line-height:1;flex-shrink:0;">✕</button>'
+    + '</div>'
+    // Map
+    + '<div id="rv-dir-map" style="height:250px;background:#d6e4f0;flex-shrink:0;position:relative;">'
+    + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#999;font-size:.85rem;"><i class="fa-solid fa-spinner fa-spin"></i> Loading map…</div>'
+    + '</div>'
+    // Turn-by-turn
+    + '<div id="rv-dir-steps" style="overflow-y:auto;flex:1;padding:12px 16px;">'
+    + '<div style="text-align:center;padding:20px;color:var(--text-3);font-size:.84rem;"><i class="fa-solid fa-spinner fa-spin"></i> Fetching directions…</div>'
+    + '</div>'
+    // Notes
+    + ((avoidNote || heightWarn) ?
+        '<div style="padding:8px 16px;background:rgba(230,126,34,.08);border-top:1px solid rgba(230,126,34,.2);font-size:.79rem;color:var(--orange);flex-shrink:0;line-height:1.5;">'
+        + (heightWarn ? heightWarn + '<br>' : '') + avoidNote
+        + '</div>' : '')
+    // Action buttons
+    + '<div style="padding:12px 16px 28px;display:flex;gap:8px;flex-shrink:0;">'
+    + '<a href="' + mapsUrl + '" target="_blank" rel="noopener" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:#1a73e8;color:#fff;border-radius:100px;padding:12px 8px;font-size:.83rem;font-weight:800;cursor:pointer;font-family:var(--font);text-decoration:none;">🗺️ Google Maps' + (rp.avoidParkways ? ' (no hwys)' : rp.avoidTolls ? ' (no tolls)' : '') + '</a>'
+    + '<a href="' + appleUrl + '" target="_blank" rel="noopener" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;background:#1c1c1e;color:#fff;border-radius:100px;padding:12px 8px;font-size:.83rem;font-weight:800;cursor:pointer;font-family:var(--font);text-decoration:none;">🍎 Apple Maps</a>'
+    + '</div>'
+    + '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', h);
+
+  /* Init Leaflet map + load OSRM route after DOM settles */
+  setTimeout(function() {
+    var mapEl = document.getElementById('rv-dir-map');
+    if (!mapEl || !window.L) return;
+    mapEl.innerHTML = ''; /* clear loading spinner */
+    var dirMap = L.map('rv-dir-map', { zoomControl: true, scrollWheelZoom: false });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OSM', maxZoom: 18 }).addTo(dirMap);
+    var destLL = [destStop.lat, destStop.lng];
+    L.marker(destLL, { title: toName }).addTo(dirMap);
+    if (originStop && originStop.lat && originStop.lng) {
+      var origLL = [originStop.lat, originStop.lng];
+      L.marker(origLL, { title: fromName }).addTo(dirMap);
+      dirMap.fitBounds([origLL, destLL], { padding: [24, 24] });
+      _loadOSRMRoute(origLL[0], origLL[1], destLL[0], destLL[1], dirMap);
+    } else {
+      dirMap.setView(destLL, 7);
+      document.getElementById('rv-dir-steps').innerHTML = '<div style="padding:16px;text-align:center;font-size:.84rem;color:var(--text-2);">Origin coordinates not available.<br>Use Google or Apple Maps buttons below.</div>';
+    }
+  }, 250);
+}
+
+function _loadOSRMRoute(oLat, oLng, dLat, dLng, map) {
+  /* OSRM public demo API — free, no key required */
+  var url = 'https://router.project-osrm.org/route/v1/driving/'
+    + oLng + ',' + oLat + ';' + dLng + ',' + dLat
+    + '?overview=full&geometries=geojson&steps=true&annotations=false';
+  fetch(url).then(function(r) { return r.json(); }).then(function(data) {
+    if (!data.routes || !data.routes[0]) throw new Error('no route');
+    var route  = data.routes[0];
+    var coords = route.geometry.coordinates.map(function(c) { return [c[1], c[0]]; });
+    L.polyline(coords, { color: '#1a73e8', weight: 5, opacity: .8 }).addTo(map);
+    map.fitBounds(L.polyline(coords).getBounds(), { padding: [20, 20] });
+    /* Turn-by-turn */
+    var steps = [];
+    (route.legs || []).forEach(function(leg) {
+      (leg.steps || []).forEach(function(s) { steps.push(s); });
+    });
+    var distMi = (route.distance / 1609.344).toFixed(0);
+    var durH = Math.floor(route.duration / 3600);
+    var durM = Math.round((route.duration % 3600) / 60);
+    var icons = { 'turn':'↩', 'new name':'↗', 'depart':'▶', 'arrive':'📍', 'merge':'⤴',
+                  'roundabout':'↻', 'exit roundabout':'↗', 'fork':'⤵', 'end of road':'↩',
+                  'continue':'→', 'rotary':'↻', 'use lane':'→', 'on ramp':'⤴', 'off ramp':'⤵' };
+    var sh = '<div style="display:flex;gap:0;padding:10px 0 14px;border-bottom:1px solid var(--border);margin-bottom:10px;">';
+    sh += '<div style="flex:1;text-align:center;border-right:1px solid var(--border);"><div style="font-size:.68rem;color:var(--text-3);text-transform:uppercase;font-weight:700;margin-bottom:2px;">Distance</div><div style="font-size:1.05rem;font-weight:900;">' + distMi + ' mi</div></div>';
+    sh += '<div style="flex:1;text-align:center;"><div style="font-size:.68rem;color:var(--text-3);text-transform:uppercase;font-weight:700;margin-bottom:2px;">Drive Time</div><div style="font-size:1.05rem;font-weight:900;">' + durH + 'h ' + durM + 'm</div></div>';
+    sh += '</div>';
+    sh += '<div style="font-size:.7rem;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">Turn-by-Turn (OSRM)</div>';
+    var shown = 0;
+    steps.forEach(function(step) {
+      var nm = step.name || '';
+      var type = step.maneuver && step.maneuver.type;
+      if (!nm && type !== 'arrive') return;
+      if (shown >= 35) return;
+      shown++;
+      var icon = icons[type] || '→';
+      var dist = step.distance > 1600 ? (step.distance/1609.344).toFixed(1)+' mi' : Math.round(step.distance)+' m';
+      var label = (type === 'arrive') ? 'Arrive at ' + (nm || 'destination') : nm;
+      sh += '<div style="display:flex;gap:8px;align-items:flex-start;padding:5px 0;border-bottom:1px solid var(--border);">';
+      sh += '<span style="font-size:.95rem;min-width:22px;text-align:center;">' + icon + '</span>';
+      sh += '<span style="flex:1;font-size:.82rem;color:var(--text);line-height:1.4;">' + label + '</span>';
+      sh += '<span style="font-size:.73rem;color:var(--text-3);white-space:nowrap;padding-top:2px;">' + dist + '</span>';
+      sh += '</div>';
+    });
+    if (steps.length - shown > 0) sh += '<div style="font-size:.78rem;color:var(--text-3);text-align:center;padding:8px;">…and ' + (steps.length - shown) + ' more steps</div>';
+    sh += '<div style="font-size:.7rem;color:var(--text-3);text-align:center;padding-top:10px;border-top:1px solid var(--border);margin-top:8px;">Route data © OpenStreetMap contributors via OSRM</div>';
+    var stepsEl = document.getElementById('rv-dir-steps');
+    if (stepsEl) stepsEl.innerHTML = sh;
+  }).catch(function() {
+    var stepsEl = document.getElementById('rv-dir-steps');
+    if (stepsEl) stepsEl.innerHTML = '<div style="text-align:center;padding:20px;font-size:.84rem;color:var(--text-3);">⚠ Route unavailable — use Google or Apple Maps below.</div>';
+  });
 }
 
 /* ── TRIP HEALTH CHECK / REFRESH ────────────────────────────────────────────
@@ -12268,14 +12491,17 @@ function refreshTripPlan() {
     issues.push({ type:'info', msg: 'AI cache has ' + cacheSize + ' stored responses. If the trip changed significantly, use "Refresh All Recommendations" in Restaurant Preferences to clear it.' });
   }
 
-  /* ── 12. Weather data coverage ───────────────────────────────────────────── */
-  var wxData = appState.weatherCache || {};
+  /* ── 12. Weather data coverage — auto-load any missing stops ─────────────── */
   var activeStops = stops.filter(function(s) { return !removedIds[s.id] && s.lat && s.lng; });
-  var noWx = activeStops.filter(function(s) { return !wxData[s.id]; });
+  var noWx = activeStops.filter(function(s) {
+    var wx = appState.weather && appState.weather[s.id];
+    return !wx || Object.keys(wx).length === 0;
+  });
   if (noWx.length > 0) {
-    issues.push({ type:'info', msg: 'Weather not loaded for ' + noWx.length + ' stop(s): ' + noWx.map(function(s){return s.name;}).slice(0,4).join(', ') + (noWx.length > 4 ? '…' : '') + '. Expand each phase in the Planner to load weather.' });
+    issues.push({ type:'fix', msg: 'Auto-loading weather for ' + noWx.length + ' stop(s): ' + noWx.map(function(s){return s.name;}).slice(0,5).join(', ') + (noWx.length > 5 ? '…' : '') + '. Temperatures will appear in phase headers once loaded.' });
+    fixCount++; /* counted as a fix so the map/weather reload runs */
   } else if (activeStops.length > 0) {
-    issues.push({ type:'info', msg: 'Weather ✓ Loaded for all ' + activeStops.length + ' active stops' });
+    issues.push({ type:'info', msg: 'Weather ✓ Temperature data loaded for all ' + activeStops.length + ' active stops' });
   }
 
   /* ── APPLY FIXES ─────────────────────────────────────────────────────────── */
@@ -12298,24 +12524,59 @@ function refreshTripPlan() {
     initApp();
   }
 
-  /* Refresh map regardless */
-  if (typeof refreshMainMap === 'function') setTimeout(refreshMainMap, 400);
-
-  /* ── SELF-VERIFICATION: spot-check that fixes were actually applied ─────── */
+  /* ── SELF-VERIFICATION + MAP REFRESH ──────────────────────────────────────
+     Wait for initApp() to fully settle before refreshing map and verifying.
+     initApp() re-renders the DOM and may re-create the map container.
+  ─────────────────────────────────────────────────────────────────────────── */
   var verifyNotes = [];
-  if (fixCount > 0) {
-    /* Re-load TRIP_DAYS after initApp() and verify day count and date of first day */
-    setTimeout(function() {
+  setTimeout(function() {
+    /* Refresh map — fires after initApp() has re-rendered */
+    if (typeof refreshMainMap === 'function') refreshMainMap();
+
+    /* Kick off background weather load for any stops missing weather */
+    if (typeof loadAllWeatherSilent === 'function') loadAllWeatherSilent();
+
+    if (fixCount > 0) {
       var vDays = TRIP_DAYS;
       var vOk = true;
-      if (vDays.length !== days.length) { verifyNotes.push('⚠ Day count changed after apply (' + vDays.length + ' vs ' + days.length + ')'); vOk = false; }
+      if (vDays.length !== days.length) { verifyNotes.push('⚠ Day count mismatch after apply (' + vDays.length + ' vs ' + days.length + ')'); vOk = false; }
       if (vDays[0] && vDays[0].date !== days[0].date) { verifyNotes.push('⚠ First day date mismatch after apply'); vOk = false; }
-      if (vOk) verifyNotes.push('✓ Verified: ' + fixCount + ' fix(es) confirmed in live trip data');
-      _showRefreshResultsModal(issues, fixCount, verifyNotes);
-    }, 600);
-  } else {
-    _showRefreshResultsModal(issues, fixCount, ['✓ No changes needed — trip data is consistent']);
+      if (vOk) verifyNotes.push('✓ Verified: ' + fixCount + ' fix(es) confirmed in live trip data · Map refreshed · Weather loading in background');
+    } else {
+      verifyNotes.push('✓ No structural changes needed — trip data is consistent');
+    }
+    _showRefreshResultsModal(issues, fixCount, verifyNotes);
+  }, 800);
+}
+
+/* ── AUTO-LOAD WEATHER FOR ALL STOPS ─────────────────────────────────────────
+   Silently fetches weather for every active stop that doesn't have cached data.
+   Calls are staggered 700ms apart to avoid hammering Open-Meteo.
+   Safe to call multiple times — skips stops that already have weather.
+   ──────────────────────────────────────────────────────────────────────────── */
+function loadAllWeatherSilent(onComplete) {
+  var removedIds = appState.removedStops || {};
+  var needsWeather = TRIP_STOPS.filter(function(s) {
+    if (!s.lat || !s.lng || removedIds[s.id]) return false;
+    var wx = appState.weather && appState.weather[s.id];
+    return !wx || Object.keys(wx).length === 0;
+  });
+  if (!needsWeather.length) {
+    if (onComplete) onComplete(0);
+    return;
   }
+  var loaded = 0;
+  needsWeather.forEach(function(stop, idx) {
+    setTimeout(function() {
+      _loadStopWeatherSilent(stop.id, function() {
+        loaded++;
+        if (loaded === needsWeather.length) {
+          if (typeof renderSchedule === 'function') renderSchedule();
+          if (onComplete) onComplete(loaded);
+        }
+      });
+    }, idx * 700); /* stagger calls 700ms apart */
+  });
 }
 
 function _showRefreshResultsModal(issues, fixCount, verifyNotes) {
