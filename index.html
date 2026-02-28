@@ -791,9 +791,9 @@
       .nav-stop-item:hover { background:var(--blue-l); border-color:rgba(44,95,138,.25); }
       .nav-stop-item.nav-drag-over { border-color:var(--orange) !important; background:var(--orange-l) !important; box-shadow:0 0 0 2px rgba(232,129,58,.18); }
       .nav-stop-item.nav-dragging { opacity:.4; }
-      @media (max-width:700px) {
+      @media (max-width:480px) {
         .map-nav-wrap { flex-direction:column; }
-        #map-stop-nav { width:100%; max-height:120px; border-right:none; border-bottom:1px solid var(--border); }
+        #map-stop-nav { width:100%; max-height:110px; border-right:none; border-bottom:1px solid var(--border); }
         #map-nav-list { flex-direction:row; overflow-x:auto; overflow-y:hidden; padding:5px 6px; gap:5px; }
         .nav-stop-item { flex-shrink:0; min-width:120px; }
       }
@@ -2196,6 +2196,34 @@
       </button>
     </div>
   </header>
+
+  <!-- ADD STOP FROM MAP MODAL -->
+  <div id="map-add-stop-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.5);backdrop-filter:blur(3px);align-items:center;justify-content:center;" onclick="if(event.target===this)_mapAddStopClose()">
+    <div style="background:var(--card);border-radius:16px;padding:24px;width:min(420px,90vw);box-shadow:0 20px 60px rgba(0,0,0,.3);border:1px solid var(--border);">
+      <div style="font-size:1.1rem;font-weight:800;color:var(--text);margin-bottom:4px;">📍 Add Stop Here?</div>
+      <div id="map-add-stop-loc" style="font-size:.85rem;color:var(--text-2);margin-bottom:16px;min-height:20px;">Looking up location…</div>
+      <div style="margin-bottom:14px;">
+        <label style="font-size:.8rem;font-weight:600;color:var(--text-2);display:block;margin-bottom:5px;">Stop name</label>
+        <input id="map-add-stop-name" type="text" placeholder="e.g. Sedona, AZ"
+          style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:.95rem;background:var(--bg);color:var(--text);font-family:var(--font);">
+      </div>
+      <div style="margin-bottom:18px;">
+        <label style="font-size:.8rem;font-weight:600;color:var(--text-2);display:block;margin-bottom:5px;">Insert after stop #</label>
+        <select id="map-add-stop-after"
+          style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:.88rem;background:var(--bg);color:var(--text);font-family:var(--font);">
+        </select>
+      </div>
+      <div style="margin-bottom:18px;">
+        <label style="font-size:.8rem;font-weight:600;color:var(--text-2);display:block;margin-bottom:5px;">Nights to stay</label>
+        <input id="map-add-stop-nights" type="number" value="2" min="1" max="30"
+          style="width:80px;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:.95rem;background:var(--bg);color:var(--text);font-family:var(--font);">
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button onclick="_mapAddStopClose()" style="flex:1;padding:10px;border:1.5px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text-2);font-family:var(--font);font-size:.88rem;font-weight:700;cursor:pointer;">Cancel</button>
+        <button onclick="_mapAddStopConfirm()" style="flex:2;padding:10px;border:none;border-radius:10px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.88rem;font-weight:700;cursor:pointer;">✅ Add to Trip</button>
+      </div>
+    </div>
+  </div>
 
   <!-- DEBUG CONSOLE OVERLAY -->
   <div id="debug-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,.6);backdrop-filter:blur(2px);" onclick="if(event.target===this)_dbgClose()">
@@ -4780,6 +4808,160 @@ function _fetchRoadRoute(waypoints, gen, callback) {
 
 var _navDragSrcIdx = null;
 
+/* ── ADD STOP FROM MAP ─────────────────────────────────────────────── */
+var _mapAddStopLatLng = null;
+
+function _mapAddStopOpen(latlng) {
+  _mapAddStopLatLng = latlng;
+  var modal = document.getElementById('map-add-stop-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+
+  /* Populate the "insert after" dropdown */
+  var sel = document.getElementById('map-add-stop-after');
+  var _removedIds = appState.removedStops || {};
+  var _homeStop = (typeof _tripHomeStop === 'function') ? _tripHomeStop() : null;
+  var _homeId = _homeStop ? _homeStop.id : 15;
+  var _seenIds = {}, _orderedIds = [];
+  TRIP_DAYS.forEach(function(d) {
+    if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeId) return;
+    if (!_seenIds[d.stopId]) { _seenIds[d.stopId] = true; _orderedIds.push(d.stopId); }
+  });
+  sel.innerHTML = '<option value="-1">— At the beginning —</option>'
+    + _orderedIds.map(function(sid, i) {
+      var s = getStop(sid); var name = s ? s.name : ('Stop ' + (i+1));
+      return '<option value="' + i + '" ' + (i === _orderedIds.length - 1 ? 'selected' : '') + '>#' + (i+1) + ' ' + name + '</option>';
+    }).join('');
+
+  /* Reset fields */
+  document.getElementById('map-add-stop-loc').textContent = 'Looking up location…';
+  document.getElementById('map-add-stop-name').value = '';
+  document.getElementById('map-add-stop-nights').value = '2';
+
+  /* Reverse geocode via Nominatim */
+  fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + latlng.lat + '&lon=' + latlng.lng + '&zoom=10', {
+    headers: { 'Accept-Language': 'en' }
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    var addr = data.address || {};
+    var city = addr.city || addr.town || addr.village || addr.county || '';
+    var state = addr.state || '';
+    var stateAbbr = _usStateAbbr(state);
+    var suggested = city ? (city + (stateAbbr ? ', ' + stateAbbr : '')) : (data.display_name || '').split(',').slice(0,2).join(',').trim();
+    document.getElementById('map-add-stop-loc').textContent = data.display_name ? data.display_name.split(',').slice(0,3).join(',') : (latlng.lat.toFixed(4) + ', ' + latlng.lng.toFixed(4));
+    if (!document.getElementById('map-add-stop-name').value) {
+      document.getElementById('map-add-stop-name').value = suggested;
+    }
+  }).catch(function() {
+    document.getElementById('map-add-stop-loc').textContent = latlng.lat.toFixed(4) + ', ' + latlng.lng.toFixed(4);
+  });
+}
+
+function _usStateAbbr(stateName) {
+  var map = { 'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR','California':'CA','Colorado':'CO','Connecticut':'CT','Delaware':'DE','Florida':'FL','Georgia':'GA','Hawaii':'HI','Idaho':'ID','Illinois':'IL','Indiana':'IN','Iowa':'IA','Kansas':'KS','Kentucky':'KY','Louisiana':'LA','Maine':'ME','Maryland':'MD','Massachusetts':'MA','Michigan':'MI','Minnesota':'MN','Mississippi':'MS','Missouri':'MO','Montana':'MT','Nebraska':'NE','Nevada':'NV','New Hampshire':'NH','New Jersey':'NJ','New Mexico':'NM','New York':'NY','North Carolina':'NC','North Dakota':'ND','Ohio':'OH','Oklahoma':'OK','Oregon':'OR','Pennsylvania':'PA','Rhode Island':'RI','South Carolina':'SC','South Dakota':'SD','Tennessee':'TN','Texas':'TX','Utah':'UT','Vermont':'VT','Virginia':'VA','Washington':'WA','West Virginia':'WV','Wisconsin':'WI','Wyoming':'WY' };
+  return map[stateName] || '';
+}
+
+function _mapAddStopClose() {
+  var modal = document.getElementById('map-add-stop-modal');
+  if (modal) modal.style.display = 'none';
+  _mapAddStopLatLng = null;
+}
+
+function _mapAddStopConfirm() {
+  if (!_mapAddStopLatLng) return;
+  var nameEl = document.getElementById('map-add-stop-name');
+  var afterEl = document.getElementById('map-add-stop-after');
+  var nightsEl = document.getElementById('map-add-stop-nights');
+  var name = nameEl ? nameEl.value.trim() : '';
+  if (!name) { nameEl && nameEl.focus(); return; }
+  var afterIdx = afterEl ? parseInt(afterEl.value) : -1;
+  var nights = nightsEl ? Math.max(1, parseInt(nightsEl.value) || 2) : 2;
+
+  /* Build ordered stop ID list (same as renderStopNavigator) */
+  var _removedIds = appState.removedStops || {};
+  var _homeStop = (typeof _tripHomeStop === 'function') ? _tripHomeStop() : null;
+  var _homeId = _homeStop ? _homeStop.id : 15;
+  var _seenIds = {}, _orderedIds = [];
+  TRIP_DAYS.forEach(function(d) {
+    if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeId) return;
+    if (!_seenIds[d.stopId]) { _seenIds[d.stopId] = true; _orderedIds.push(d.stopId); }
+  });
+
+  /* Parse name and state */
+  var parts = name.split(',');
+  var stopName = parts[0].trim();
+  var stopState = parts[1] ? parts[1].trim() : '';
+
+  /* Create new stop */
+  var newId = Date.now();
+  var newStop = {
+    id: newId,
+    name: stopName,
+    state: stopState,
+    lat: _mapAddStopLatLng.lat,
+    lng: _mapAddStopLatLng.lng,
+    phase: stopName,
+    sleepType: 'campground',
+    description: '',
+    activities: []
+  };
+  TRIP_STOPS.push(newStop);
+
+  /* Find the insertion point in TRIP_DAYS — insert after all days of the stop at afterIdx */
+  var insertAfterStopId = afterIdx >= 0 && afterIdx < _orderedIds.length ? _orderedIds[afterIdx] : null;
+  var insertPos = -1;
+  if (insertAfterStopId) {
+    for (var i = TRIP_DAYS.length - 1; i >= 0; i--) {
+      if (TRIP_DAYS[i].stopId === insertAfterStopId) { insertPos = i + 1; break; }
+    }
+  }
+  /* If inserting at beginning (afterIdx === -1) or not found, insert before first non-home day */
+  if (insertPos < 0) {
+    insertPos = 0;
+    for (var j = 0; j < TRIP_DAYS.length; j++) {
+      if (TRIP_DAYS[j].stopId === _homeId) break;
+      insertPos = j;
+    }
+  }
+
+  /* Build new day entries */
+  var newDays = [];
+  for (var n = 0; n < nights; n++) {
+    newDays.push({
+      day: 0, /* will be renumbered below */
+      date: '',
+      stopId: newId,
+      phase: stopName,
+      name: stopName,
+      sleep: stopName + (stopState ? ', ' + stopState : ''),
+      sleepType: 'campground',
+      items: []
+    });
+  }
+
+  /* Splice new days in */
+  TRIP_DAYS.splice.apply(TRIP_DAYS, [insertPos, 0].concat(newDays));
+
+  /* Re-date all days from CONFIG.startDate */
+  var _startMs = new Date(CONFIG.startDate + 'T12:00:00').getTime();
+  TRIP_DAYS.forEach(function(d, i) {
+    d.day = i + 1;
+    var dt = new Date(_startMs + i * 86400000);
+    d.date = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
+  });
+
+  /* Save as custom trip data */
+  appState.customTripData = { stops: TRIP_STOPS.slice(), days: TRIP_DAYS.slice() };
+  saveState(appState);
+
+  _mapAddStopClose();
+  renderStopNavigator();
+  renderSchedule();
+  if (mainMap) _clearAndRebuildMapMarkers(mainMap);
+  showToast('📍 ' + name + ' added to your trip!', 2500);
+}
+/* ─────────────────────────────────────────────────────────────────── */
+
 function renderStopNavigator() {
   var listEl = document.getElementById('map-nav-list');
   if (!listEl) return;
@@ -4811,12 +4993,12 @@ function renderStopNavigator() {
       + ' ondrop="_navDrop(event)"'
       + ' ondragleave="_navDragLeave(event)"'
       + ' ondragend="_navDragEnd(event)">'
-      + '<div style="width:26px;height:26px;background:var(--orange);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:900;flex-shrink:0;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.18);">' + num + '</div>'
-      + '<div style="flex:1;min-width:0;">'
-      + '<div style="font-size:.82rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);">' + name + state + '</div>'
-      + '<div style="font-size:.68rem;color:var(--text-3);margin-top:1px;">' + stayMeta.icon + ' ' + nights + ' night' + (nights !== 1 ? 's' : '') + '</div>'
+      + '<div style="width:24px;height:24px;background:var(--orange);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:900;flex-shrink:0;">' + num + '</div>'
+      + '<div style="flex:1;min-width:0;font-size:.8rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);">' + name + state + '</div>'
+      + '<div style="display:flex;align-items:center;gap:5px;flex-shrink:0;color:var(--text-3);font-size:.72rem;white-space:nowrap;">'
+      + stayMeta.icon + ' ' + nights + 'n'
+      + '<i class="fa-solid fa-grip-vertical" style="font-size:.72rem;cursor:grab;"></i>'
       + '</div>'
-      + '<i class="fa-solid fa-grip-vertical" style="color:var(--text-3);font-size:.75rem;flex-shrink:0;cursor:grab;"></i>'
       + '</div>';
   });
 
@@ -5099,6 +5281,12 @@ function initMainMap() {
     attribution: '© OpenStreetMap contributors', maxZoom: 18
   }).addTo(mainMap);
   buildMapMarkers(mainMap);
+  /* Click on map → offer to add a stop */
+  mainMap.on('click', function(e) {
+    /* Don't fire if clicking a marker popup */
+    if (e.originalEvent && e.originalEvent.target && e.originalEvent.target.closest && e.originalEvent.target.closest('.leaflet-popup')) return;
+    _mapAddStopOpen(e.latlng);
+  });
   renderStopNavigator();
 }
 
