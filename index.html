@@ -3455,8 +3455,9 @@ function _resolveConflict(choice) {
     appState = window._conflictTheirState;
     _cloudLoadedAt = new Date((appState._savedAt || 0)).getTime();
     localStorage.setItem('rv_state', JSON.stringify(appState));
-    // Re-render everything
+    // Re-render everything including the map
     renderDashboard(); renderSchedule(); renderDecisions(); renderSchedule();
+    refreshMainMap();
     showToast('✓ Synced to ' + (appState._savedBy || 'their') + '\'s version', 3000);
     _setSyncStatus('&#9729;', 'Synced', 'rgba(255,255,255,.45)');
   }
@@ -4934,7 +4935,7 @@ function removeStopFromTrip(stopId, phaseName) {
   /* Also set phaseExtraDays to max negative to collapse days via existing logic */
   appState.phaseExtraDays[stopId] = -(phaseDays.length);
   saveState(appState);
-  renderSchedule();
+  renderSchedule(); refreshMainMap();
   showToast('🗑️ ' + phaseName + ' removed from schedule. Use + to restore days.', 2800);
 }
 
@@ -4943,7 +4944,7 @@ function restoreStopToTrip(stopId) {
   delete appState.removedStops[stopId];
   if (appState.phaseExtraDays) appState.phaseExtraDays[stopId] = 0;
   saveState(appState);
-  renderSchedule();
+  renderSchedule(); refreshMainMap();
   /* Re-render audit log if it's currently visible so the removed-stops section updates */
   var toolsSub = document.getElementById('tools-sub-content');
   if (toolsSub && toolsSub.innerHTML.indexOf('Removed from Schedule') !== -1) renderAuditLog();
