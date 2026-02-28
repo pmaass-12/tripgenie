@@ -5101,8 +5101,9 @@ function renderStopNavigator() {
       + ' ondragend="_navDragEnd(event)">'
       + '<div style="width:24px;height:24px;background:var(--orange);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:900;flex-shrink:0;">' + num + '</div>'
       + '<div style="flex:1;min-width:0;font-size:.8rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);">' + name + state + '</div>'
-      + '<div style="display:flex;align-items:center;gap:5px;flex-shrink:0;color:var(--text-3);font-size:.72rem;white-space:nowrap;">'
-      + nights + ' night' + (nights !== 1 ? 's' : '')
+      + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;color:var(--text-3);font-size:.72rem;white-space:nowrap;">'
+      + nights + 'n'
+      + '<button onclick="event.stopPropagation();_navDeleteStop(' + stopId + ',\'' + name.replace(/'/g,"\\'") + '\')" title="Remove stop" draggable="false" style="background:none;border:none;cursor:pointer;padding:2px 3px;color:var(--text-3);font-size:.75rem;line-height:1;border-radius:4px;display:flex;align-items:center;" onmouseenter="this.style.color=\'#e53e3e\'" onmouseleave="this.style.color=\'var(--text-3)\'"><i class="fa-solid fa-xmark"></i></button>'
       + '<i class="fa-solid fa-grip-vertical" style="font-size:.72rem;cursor:grab;"></i>'
       + '</div>'
       + '</div>';
@@ -5110,6 +5111,21 @@ function renderStopNavigator() {
 
   if (!html) html = '<div style="padding:16px;font-size:.8rem;color:var(--text-3);text-align:center;">No stops yet</div>';
   listEl.innerHTML = html;
+}
+
+function _navDeleteStop(stopId, stopName) {
+  var phaseDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
+  if (!phaseDays.length) return;
+  if (!confirm('Remove "' + stopName + '" from your trip?\n\nThis hides all ' + phaseDays.length + ' days at this stop. You can restore it from the Schedule view using the + button.')) return;
+  if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
+  if (!appState.removedStops)   appState.removedStops = {};
+  appState.removedStops[stopId] = true;
+  appState.phaseExtraDays[stopId] = -(phaseDays.length);
+  saveState(appState);
+  renderStopNavigator();
+  renderSchedule();
+  if (window.mainMap) setTimeout(function() { _clearAndRebuildMapMarkers(window.mainMap); }, 150);
+  showToast('🗑️ ' + stopName + ' removed. Restore it via the Schedule + button.', 2800);
 }
 
 function _navDragStart(e) {
