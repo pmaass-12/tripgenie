@@ -759,6 +759,7 @@
         position: relative;   /* for adj-badge absolute positioning */
       }
       .nav-tab i { font-size: 1.1rem; margin-bottom: 1px; }
+      .nav-tab-lbl { white-space: nowrap; }
       .nav-tab.active {
         border-bottom: none;
         border-top-color: var(--orange);
@@ -2263,26 +2264,24 @@
     <span class="nav-tab-lbl">Suggestions</span></button>
     <button class="nav-tab" data-tab="adjustments" id="adj-nav-tab" data-tooltip="Recommendations" style="position:relative;">
       <i class="fa-solid fa-wand-magic-sparkles"></i>
-    <span class="nav-tab-lbl">Recommendations</span></button>
+    <span class="nav-tab-lbl">Tips</span></button>
     <button class="nav-tab" data-tab="decisions" id="decisions-nav-tab" data-tooltip="Decisions" style="position:relative;">
       <i class="fa-solid fa-triangle-exclamation" style="color:var(--red);"></i>
-    <span class="nav-tab-lbl">Decisions</span></button>
+    <span class="nav-tab-lbl">Alerts</span></button>
     <button class="nav-tab" data-tab="fun" data-tooltip="Fun">
       <i class="fa-solid fa-face-laugh-beam"></i>
     <span class="nav-tab-lbl">Fun</span></button>
     <button class="nav-tab" data-tab="whatsnew" data-tooltip="What's New" style="position:relative;">
       <i class="fa-solid fa-newspaper"></i>
       <span id="whatsnew-dot" style="position:absolute;top:8px;right:8px;width:7px;height:7px;background:var(--orange);border-radius:50%;display:block;"></span>
-    
-    <span class="nav-tab-lbl">What's New</span></button></span></button>
+    <span class="nav-tab-lbl">Updates</span></button>
     <button class="nav-tab" data-tab="tools" data-tooltip="Tools" style="position:relative;">
       <i class="fa-solid fa-screwdriver-wrench"></i>
     <span class="nav-tab-lbl">Tools</span></button>
     <button class="nav-tab" data-tab="ideas" data-tooltip="Ideas" title="Share an Idea" style="position:relative;">
       <i class="fa-solid fa-lightbulb"></i>
       <span id="ideas-new-dot" style="position:absolute;top:8px;right:8px;width:7px;height:7px;background:var(--green);border-radius:50%;display:none;"></span>
-    
-    <span class="nav-tab-lbl">Ideas</span></button></span></button>
+    <span class="nav-tab-lbl">Ideas</span></button>
   </nav>
 
   <!-- TEST MODE BANNER (hidden by default, shown in test mode) -->
@@ -4234,10 +4233,13 @@ function renderDashboard() {
   }
 
   // States visited — unique states from stops we've reached so far
+  // Only count after the trip has actually started (tripDay() always returns ≥1 even pre-trip)
   var _visitedStateSet = {};
-  for (var _vsi = 0; _vsi < Math.min(dayNum, TRIP_DAYS.length); _vsi++) {
-    var _vsStop = getStop(TRIP_DAYS[_vsi].stopId);
-    if (_vsStop && _vsStop.state) _visitedStateSet[_vsStop.state] = true;
+  if (tripIsLive()) {
+    for (var _vsi = 0; _vsi < Math.min(dayNum, TRIP_DAYS.length); _vsi++) {
+      var _vsStop = getStop(TRIP_DAYS[_vsi].stopId);
+      if (_vsStop && _vsStop.state) _visitedStateSet[_vsStop.state] = true;
+    }
   }
   var _statesList = Object.keys(_visitedStateSet);
   var _statesCount = _statesList.length;
@@ -12092,9 +12094,10 @@ function saveDrivingPrefs() {
 function _updateLoginDisplay() {
   var ts    = appState.tripSettings || {};
   var name  = ts.tripName  || 'Maass Family RV 2026';
-  var start = ts.startDate || CONFIG.startDate;
-  var end   = ts.endDate   || CONFIG.endDate;
-  var days  = ts.totalDays || CONFIG.totalDays || 46;
+  /* Use TRIP_DAYS as ground truth — falls back to tripSettings then CONFIG */
+  var start = (TRIP_DAYS && TRIP_DAYS.length && TRIP_DAYS[0].date) || ts.startDate || CONFIG.startDate;
+  var end   = (TRIP_DAYS && TRIP_DAYS.length && TRIP_DAYS[TRIP_DAYS.length-1].date) || ts.endDate || CONFIG.endDate;
+  var days  = (TRIP_DAYS && TRIP_DAYS.length) || ts.totalDays || CONFIG.totalDays || 46;
   function _ldf(d) {
     return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
   }
