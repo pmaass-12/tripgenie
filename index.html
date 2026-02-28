@@ -6792,6 +6792,7 @@ var DEFAULT_TODO = [
   { id:'t23', cat:'Coming Home',  text:'Return borrowed / rented gear' }
 ];
 var DEFAULT_PACKING = [
+  /* ── Shared / Trip Logistics ─────────────────────────────────── */
   { id:'p1',  cat:'Documents', text:'Driver\'s license & RV registration' },
   { id:'p2',  cat:'Documents', text:'Insurance cards (health, RV, auto)' },
   { id:'p3',  cat:'Documents', text:'Campground reservation confirmations' },
@@ -6814,19 +6815,6 @@ var DEFAULT_PACKING = [
   { id:'p20', cat:'Kitchen', text:'Paper towels, dish soap, sponges' },
   { id:'p21', cat:'Kitchen', text:'Snack bin (granola bars, nuts, crackers, fruit pouches)' },
   { id:'p22', cat:'Kitchen', text:'Spice kit (salt, pepper, olive oil, garlic, cumin)' },
-  { id:'p23', cat:'Clothing', text:'Leila: 7 days clothes + 2 warm layers' },
-  { id:'p24', cat:'Clothing', text:'Luna: 7 days clothes + 2 warm layers' },
-  { id:'p25', cat:'Clothing', text:'Eli: extra onesies & pants (10+ sets)' },
-  { id:'p26', cat:'Clothing', text:'Rain jackets for everyone' },
-  { id:'p27', cat:'Clothing', text:'Hiking shoes / trail runners' },
-  { id:'p28', cat:'Clothing', text:'Water shoes (all kids)' },
-  { id:'p29', cat:'Clothing', text:'Pajamas, underwear, socks' },
-  { id:'p30', cat:'Kids & Fun', text:'Leila\'s chapter books (3–4)' },
-  { id:'p31', cat:'Kids & Fun', text:'Luna\'s coloring books & markers' },
-  { id:'p32', cat:'Kids & Fun', text:'Eli\'s comfort items & favorite toys' },
-  { id:'p33', cat:'Kids & Fun', text:'Card games (Uno, Go Fish, etc.)' },
-  { id:'p34', cat:'Kids & Fun', text:'Travel journal / sticker books' },
-  { id:'p35', cat:'Kids & Fun', text:'Portable white noise machine (Eli)' },
   { id:'p36', cat:'Health & Safety', text:'First aid kit (bandages, antiseptic, gauze)' },
   { id:'p37', cat:'Health & Safety', text:'Ibuprofen, Tylenol (adult & kids)' },
   { id:'p38', cat:'Health & Safety', text:'Allergy medication (Zyrtec, Benadryl)' },
@@ -6839,8 +6827,49 @@ var DEFAULT_PACKING = [
   { id:'p45', cat:'Outdoor Gear', text:'Headlamps + extra batteries' },
   { id:'p46', cat:'Outdoor Gear', text:'Daypacks / hiking backpacks' },
   { id:'p47', cat:'Outdoor Gear', text:'Reusable water bottles (5)' },
-  { id:'p48', cat:'Outdoor Gear', text:'Swimsuits & beach towels' },
-  { id:'p49', cat:'Outdoor Gear', text:'Binoculars (for wildlife & stargazing)' }
+  { id:'p48', cat:'Outdoor Gear', text:'Beach towels (5)' },
+  { id:'p49', cat:'Outdoor Gear', text:'Binoculars (for wildlife & stargazing)' },
+  { id:'p50', cat:'Outdoor Gear', text:'Card games (Uno, Go Fish, etc.)' },
+  /* ── Paul ────────────────────────────────────────────────────── */
+  { id:'pm1', cat:'👨 Paul', text:'7 days casual clothes + 2 warm layers' },
+  { id:'pm2', cat:'👨 Paul', text:'Underwear & socks' },
+  { id:'pm3', cat:'👨 Paul', text:'Pajamas' },
+  { id:'pm4', cat:'👨 Paul', text:'Hiking shoes / trail runners' },
+  { id:'pm5', cat:'👨 Paul', text:'Rain jacket' },
+  { id:'pm6', cat:'👨 Paul', text:'Swim trunks' },
+  /* ── Melissa ─────────────────────────────────────────────────── */
+  { id:'me1', cat:'👩 Melissa', text:'7 days casual clothes + 2 warm layers' },
+  { id:'me2', cat:'👩 Melissa', text:'Underwear & socks' },
+  { id:'me3', cat:'👩 Melissa', text:'Pajamas' },
+  { id:'me4', cat:'👩 Melissa', text:'Hiking shoes / trail runners' },
+  { id:'me5', cat:'👩 Melissa', text:'Rain jacket' },
+  { id:'me6', cat:'👩 Melissa', text:'Swimsuit' },
+  /* ── Leila ───────────────────────────────────────────────────── */
+  { id:'le1', cat:'👧 Leila', text:'7 days clothes + 2 warm layers' },
+  { id:'le2', cat:'👧 Leila', text:'Underwear & socks' },
+  { id:'le3', cat:'👧 Leila', text:'Pajamas' },
+  { id:'le4', cat:'👧 Leila', text:'Rain jacket' },
+  { id:'le5', cat:'👧 Leila', text:'Hiking shoes & water shoes' },
+  { id:'le6', cat:'👧 Leila', text:'Swimsuit' },
+  { id:'le7', cat:'👧 Leila', text:'Chapter books (3–4)' },
+  { id:'le8', cat:'👧 Leila', text:'Travel journal & sticker book' },
+  /* ── Luna ────────────────────────────────────────────────────── */
+  { id:'lu1', cat:'🧒 Luna', text:'7 days clothes + 2 warm layers' },
+  { id:'lu2', cat:'🧒 Luna', text:'Underwear & socks' },
+  { id:'lu3', cat:'🧒 Luna', text:'Pajamas' },
+  { id:'lu4', cat:'🧒 Luna', text:'Rain jacket' },
+  { id:'lu5', cat:'🧒 Luna', text:'Hiking shoes & water shoes' },
+  { id:'lu6', cat:'🧒 Luna', text:'Swimsuit' },
+  { id:'lu7', cat:'🧒 Luna', text:'Coloring books & markers' },
+  { id:'lu8', cat:'🧒 Luna', text:'Travel journal & sticker book' },
+  /* ── Eli ─────────────────────────────────────────────────────── */
+  { id:'el1', cat:'👶 Eli', text:'Extra onesies & pants (10+ sets)' },
+  { id:'el2', cat:'👶 Eli', text:'Warm layers & pajamas' },
+  { id:'el3', cat:'👶 Eli', text:'Water shoes' },
+  { id:'el4', cat:'👶 Eli', text:'Comfort items & favorite toys' },
+  { id:'el5', cat:'👶 Eli', text:'Portable white noise machine' },
+  { id:'el6', cat:'👶 Eli', text:'Diapers & wipes (bulk supply)' },
+  { id:'el7', cat:'👶 Eli', text:'Baby toiletries (shampoo, lotion, etc.)' },
 ];
 /* ── SWIPE-TO-DELETE ─────────────────────────────────────────────── */
 var _sw = { el: null, startX: 0, startY: 0, moved: false, locked: false };
@@ -7064,7 +7093,7 @@ function renderListSection(items, customItems, type, checkedMap) {
     }
   }
   // Section dropdown + add row
-  var todoCats = type === 'todo' ? ['Before We Leave','On The Road','Coming Home'] : ['Documents','Clothing','Sleeping','Kitchen & Food','Kids','Tools & RV','Fun & Entertainment','First Aid','Toiletries'];
+  var todoCats = type === 'todo' ? ['Before We Leave','On The Road','Coming Home'] : ['Documents','Tech & Power','RV Essentials','Kitchen','Health & Safety','Outdoor Gear','👨 Paul','👩 Melissa','👧 Leila','🧒 Luna','👶 Eli'];
   h += '<div style="margin-top:14px;display:flex;flex-direction:column;gap:7px;">';
   h += '<select id="list-cat-' + type + '" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:100px;font-size:.85rem;font-family:var(--font);background:var(--bg);color:var(--text);">';
   for (var tci = 0; tci < todoCats.length; tci++) {
