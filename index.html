@@ -15595,97 +15595,120 @@ function _adjStartMic() {
 }
 
 /* ── TRIP OPTIMIZER ──────────────────────────────────────────────────
-   Analyzes the whole trip for pacing, drive load, and wasted transitions.
-   Returns coordinated multi-stop suggestion packages using the same JSON
-   op format as Change Plan so _applyGenieChangeWithAI can apply them. */
+   Returns 3 named trade-off "packages" — each is a coordinated set of
+   2-3 linked changes with a compelling before/after story.
+   Deliberately different from Recommendations (single-change ideas):
+   these are holistic swaps like "drop X, get Y instead, recover Z days". */
 function _runTripOptimizer() {
   var btn     = document.getElementById('trip-optimizer-btn');
   var results = document.getElementById('adj-voice-results');
   var adjBtn  = document.getElementById('adj-voice-btn');
-  if (btn)    { btn.innerHTML = '<i class="fa-solid fa-brain fa-beat"></i> Analyzing your trip…'; btn.disabled = true; }
+  if (btn)    { btn.innerHTML = '<i class="fa-solid fa-brain fa-beat"></i> Analyzing your whole trip\u2026'; btn.disabled = true; }
   if (adjBtn) { adjBtn.disabled = true; }
   if (results){ results.innerHTML = ''; }
 
-  /* Build stop list (same as Change Plan) */
+  /* Build stop summary */
   var _removedIds = appState.removedStops || {};
   var _activeStops = TRIP_STOPS.filter(function(s) { return !_removedIds[s.id]; });
   var _firstId = _activeStops.length ? _activeStops[0].id : null;
   var _lastId  = _activeStops.length ? _activeStops[_activeStops.length - 1].id : null;
   var _round   = _tripIsRoundTrip();
+  var _maxPref = (appState.drivingPrefs && appState.drivingPrefs.maxHours) || 4;
+  var _plannedDays = CONFIG.totalDays || 46;
+
   var stopSummaryArr = _activeStops.map(function(s) {
-    var nights = TRIP_DAYS.filter(function(d) { return d.stopId === s.id && !d.driveDay; }).length;
-    var driveDays = TRIP_DAYS.filter(function(d) { return d.stopId === s.id && d.driveDay; });
-    var driveIn = driveDays.length ? driveDays[0].driveHours : 0;
-    var driveMi = driveDays.length ? driveDays[0].miles : 0;
-    var isStart = (s.id === _firstId);
-    var isEnd   = (!_round && s.id === _lastId);
-    return { stopId: s.id, name: s.name, state: s.state || '', nights: nights,
-             driveHoursIn: driveIn, driveMiIn: driveMi,
+    var nights    = TRIP_DAYS.filter(function(d){ return d.stopId === s.id && !d.driveDay; }).length;
+    var driveDays = TRIP_DAYS.filter(function(d){ return d.stopId === s.id && d.driveDay; });
+    var driveIn   = driveDays.length ? driveDays[0].driveHours : 0;
+    var driveMi   = driveDays.length ? driveDays[0].miles : 0;
+    var isStart   = (s.id === _firstId);
+    var isEnd     = (!_round && s.id === _lastId);
+    return { stopId: s.id, name: s.name, state: s.state || '',
+             nights: nights, driveHoursIn: driveIn, driveMiIn: driveMi,
              protected: isStart || isEnd,
              protectedReason: isStart ? 'START' : (isEnd ? 'END' : '') };
   });
   var stopLines = stopSummaryArr.map(function(s) {
-    var tag = s.protected ? ' [PROTECTED-' + s.protectedReason + ': never remove]' : '';
+    var tag = s.protected ? ' [PROTECTED-' + s.protectedReason + ']' : '';
     return 'stopId ' + s.stopId + ': ' + s.name + ', ' + s.state
-      + ' | ' + s.nights + ' nights' + (s.driveHoursIn ? ' | ' + s.driveHoursIn + 'h drive to get here (' + s.driveMiIn + 'mi)' : '') + tag;
+      + ' | ' + s.nights + ' explore nights'
+      + (s.driveHoursIn ? ' | drive in: ' + s.driveHoursIn + 'h (' + s.driveMiIn + 'mi)' : '') + tag;
   }).join('\n');
 
-  /* Identify pain points for the prompt */
-  var _pains = [];
-  var _maxPref = (appState.drivingPrefs && appState.drivingPrefs.maxHours) || 4;
-  /* Back-to-back drive days */
-  var _prevDrive = false;
+  /* Detect trip pressure points to give AI real signal */
+  var _issues = [];
+  var _prevWasDrive = false;
+  var _consecutiveDrives = 0;
   TRIP_DAYS.forEach(function(d) {
     if (_removedIds[d.stopId]) return;
-    if (d.driveDay && _prevDrive) _pains.push('Back-to-back drive days around Day ' + d.day + ' (' + d.title + ')');
-    _prevDrive = d.driveDay;
+    if (d.driveDay) {
+      _consecutiveDrives++;
+      if (_consecutiveDrives >= 2)
+        _issues.push('Back-to-back drive days at Day ' + d.day + ' (' + d.title.substring(0, 50) + ')');
+      if (d.driveHours > _maxPref + 2)
+        _issues.push('Brutal ' + d.driveHours + 'h drive on Day ' + d.day + ' (' + d.miles + 'mi — ' + d.title.substring(0, 40) + ')');
+    } else {
+      _consecutiveDrives = 0;
+    }
+    _prevWasDrive = d.driveDay;
   });
-  /* Long drives */
-  TRIP_DAYS.forEach(function(d) {
-    if (!_removedIds[d.stopId] && d.driveDay && d.driveHours > _maxPref + 2)
-      _pains.push('Very long drive on Day ' + d.day + ': ' + d.driveHours + 'h (' + d.miles + ' mi) — ' + d.title);
-  });
-  /* Short stays */
   stopSummaryArr.forEach(function(s) {
-    if (!s.protected && s.nights === 1)
-      _pains.push('Only 1 explore night at ' + s.name + ', ' + s.state + ' — rushed stop');
+    if (!s.protected && s.nights <= 1)
+      _issues.push('Rushed 1-night stay at ' + s.name + ', ' + s.state + ' — barely worth the drive');
   });
-  /* Total days vs plan */
   var _totalDays = TRIP_DAYS.filter(function(d){ return !_removedIds[d.stopId]; }).length;
-  var _plannedDays = CONFIG.totalDays || 46;
-  if (_totalDays !== _plannedDays) _pains.push('Current trip is ' + _totalDays + ' days vs planned ' + _plannedDays + ' days');
+  if (_totalDays > _plannedDays)
+    _issues.push('Trip is ' + (_totalDays - _plannedDays) + ' days OVER the planned ' + _plannedDays + '-day budget');
 
-  var painStr = _pains.length ? _pains.map(function(p){ return '• ' + p; }).join('\n') : '(no obvious pain points detected — focus on pacing and experience quality)';
+  var issueStr = _issues.length
+    ? _issues.map(function(p){ return '• ' + p; }).join('\n')
+    : '• No critical issues — focus on memorable experience upgrades';
 
-  var prompt = 'You are an expert RV trip optimizer. Analyze this family\'s cross-country RV itinerary and return coordinated improvement packages.\n\n'
-    + 'TRIP: ' + CONFIG.startDate + ' to ' + CONFIG.endDate + ' (' + _plannedDays + ' planned days)\n'
-    + 'Family: 2 adults, kids ages 9, 4, 2. Max comfortable daily drive: ' + _maxPref + ' hours.\n\n'
-    + 'CURRENT STOPS:\n' + stopLines + '\n\n'
-    + 'DETECTED ISSUES:\n' + painStr + '\n\n'
-    + 'Return a JSON array of 3-4 coordinated suggestions. Each suggestion MUST directly fix one of the detected issues above.\n'
-    + 'Each item uses the SAME op types as the Change Plan tool:\n'
+  /* The key difference from Recommendations: ask for PACKAGES with trade-off stories */
+  var prompt =
+    'You are an expert family RV trip optimizer. You think in TRADE-OFFS — you never just suggest adding; you swap, reroute, and reconfigure to make the trip better without busting the schedule.\n\n'
+    + 'TRIP: ' + CONFIG.startDate + ' → ' + CONFIG.endDate + ' (' + _plannedDays + ' days planned, ' + _totalDays + ' days current)\n'
+    + 'Family: 2 adults + kids ages 9, 4, 2. Max comfortable drive per day: ' + _maxPref + ' hours.\n\n'
+    + 'CURRENT ITINERARY:\n' + stopLines + '\n\n'
+    + 'PRESSURE POINTS DETECTED:\n' + issueStr + '\n\n'
+    + 'Return EXACTLY 3 optimization packages as a JSON array. Each package is a COORDINATED set of 2-3 linked changes that work together — not individual suggestions. Think: "skip X, swap in Y instead, recover Z days".\n\n'
+    + 'JSON FORMAT — return ONLY this array, no markdown:\n'
     + '[\n'
-    + '  {"op":"set_nights","stopId":3,"stopName":"Name","nights":4,"text":"Why this improves the trip."},\n'
-    + '  {"op":"remove","stopId":5,"stopName":"Name","text":"Why removing this is better."},\n'
-    + '  {"op":"add_stop","name":"City Name","state":"XX","region":"Region","lat":35.5,"lng":-90.1,"nights":2,"afterStopId":3,"text":"Why adding this helps."}\n'
+    + '  {\n'
+    + '    "title": "Catchy package name (3-5 words)",\n'
+    + '    "hook": "One punchy sentence: although [stop A] is nice, [alternative] gives you [specific benefit] and gets [N days/hours] back.",\n'
+    + '    "tradeoff": "One sentence: what you give up and why it\'s worth it.",\n'
+    + '    "saves": "e.g. \\"2 days\\" or \\"14h of driving\\" — the concrete win",\n'
+    + '    "ops": [\n'
+    + '      {"op":"remove","stopId":5,"stopName":"Name"},\n'
+    + '      {"op":"add_stop","name":"City","state":"XX","lat":33.8,"lng":-115.9,"nights":1,"afterStopId":4},\n'
+    + '      {"op":"set_nights","stopId":6,"stopName":"Name","nights":4}\n'
+    + '    ]\n'
+    + '  }\n'
     + ']\n\n'
-    + 'RULES:\n'
-    + '1. NEVER suggest removing a [PROTECTED-START] or [PROTECTED-END] stop.\n'
-    + '2. When suggesting a removal, ALSO suggest where those freed days go (a set_nights on another stop).\n'
-    + '3. Each suggestion must clearly solve a specific detected issue — reference it in the "text" field.\n'
-    + '4. Do NOT re-suggest stops already in the itinerary as add_stop.\n'
-    + '5. Output ONLY raw JSON. No markdown, no commentary.\n'
-    + '6. "text" in each item = one plain English sentence the family will read.\n'
-    + '7. Each op item is applied INDEPENDENTLY — present the best 3-4 individual improvements, not one big package.';
+    + 'OP RULES:\n'
+    + '• op types: "remove", "set_nights", "add_stop" — same as Change Plan\n'
+    + '• NEVER remove a [PROTECTED-START] or [PROTECTED-END] stop\n'
+    + '• Each package must fix at least one of the detected pressure points above\n'
+    + '• add_stop: name must be a CITY or REGION (not a venue). Provide accurate lat/lng.\n'
+    + '• Each package is self-contained — all ops in it work together as a single coherent move\n'
+    + '• Packages must be meaningfully different from each other — different stops, different trade-offs\n'
+    + '• Do NOT add stops already in the itinerary as add_stop\n'
+    + '• Output ONLY the raw JSON array. No text before or after.';
 
-  var body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 800, temperature: 0.65 } });
+  var body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: 1200, temperature: 0.7 }
+  });
 
   fetch(GEMINI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
     .then(function(r) { return r.json(); })
     .then(function(data) {
       if (btn)    { btn.innerHTML = '<i class="fa-solid fa-brain"></i> Optimize My Trip'; btn.disabled = false; }
       if (adjBtn) { adjBtn.disabled = false; }
-      var rawText = ((data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || '').trim();
+      var rawText = ((data.candidates && data.candidates[0] && data.candidates[0].content
+        && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
+        && data.candidates[0].content.parts[0].text) || '').trim();
       rawText = rawText.replace(/^```[a-z]*\n?/i,'').replace(/\n?```$/i,'').trim();
       var parsed = [];
       try { parsed = JSON.parse(rawText); } catch(e) {
@@ -15696,43 +15719,60 @@ function _runTripOptimizer() {
         if (results) results.innerHTML = '<div style="padding:16px;color:var(--text-2);font-size:.84rem;">Could not parse optimizer results. Try again.</div>';
         return;
       }
-      /* Render using the same card system as Change Plan */
-      if (results) {
-        var hdr = '<div style="font-size:.78rem;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><i class="fa-solid fa-brain"></i> Optimizer Suggestions</div>';
-        /* Store items for Apply buttons */
-        if (!window._optimizerItems) window._optimizerItems = [];
-        window._optimizerItems = parsed.map(function(item) { return { text: item.text, op: item.op, raw: item }; });
-        var cards = parsed.map(function(item, idx) {
-          var opIcon = item.op === 'remove' ? '🗑️' : item.op === 'set_nights' ? '📅' : item.op === 'add_stop' ? '📍' : '💡';
-          var opLabel = item.op === 'remove' ? 'Remove stop' : item.op === 'set_nights' ? 'Adjust nights at ' + (item.stopName||'') : item.op === 'add_stop' ? 'Add ' + (item.name||'') + (item.state ? ', '+item.state : '') : 'Info';
-          var applyBtnId = 'opt-apply-' + idx;
-          return '<div style="border:1px solid var(--border);border-left:3px solid var(--green);border-radius:var(--radius-s);padding:12px 14px;margin-bottom:8px;background:var(--card);">'
-            + '<div style="font-weight:800;font-size:.88rem;margin-bottom:4px;">' + opIcon + ' ' + opLabel + '</div>'
-            + '<div style="font-size:.82rem;color:var(--text-2);line-height:1.5;margin-bottom:10px;">' + (item.text||'') + '</div>'
-            + '<button id="' + applyBtnId + '" onclick="_applyOptimizerItem(' + idx + ',\'' + applyBtnId + '\')" style="background:var(--green);color:#fff;border:none;border-radius:100px;padding:7px 16px;font-size:.8rem;font-weight:800;cursor:pointer;font-family:var(--font);">Apply</button>'
-            + '</div>';
-        }).join('');
-        results.innerHTML = hdr + cards;
-      }
+      /* Store packages for Apply buttons */
+      window._optimizerPackages = parsed;
+      /* Render each package as a distinct card */
+      var hdr = '<div style="font-size:.78rem;font-weight:800;color:#1a6b3c;text-transform:uppercase;letter-spacing:.05em;margin-bottom:12px;display:flex;align-items:center;gap:6px;">'
+        + '<i class="fa-solid fa-brain"></i> Trip Optimizer — 3 Packages</div>';
+      var cards = parsed.map(function(pkg, idx) {
+        var ops = Array.isArray(pkg.ops) ? pkg.ops : [];
+        var opTags = ops.map(function(op) {
+          if (op.op === 'remove')     return '<span style="background:#fdecea;color:#c62828;border-radius:100px;padding:2px 8px;font-size:.7rem;font-weight:700;">— Remove ' + (op.stopName||'') + '</span>';
+          if (op.op === 'set_nights') return '<span style="background:var(--blue-l);color:var(--blue);border-radius:100px;padding:2px 8px;font-size:.7rem;font-weight:700;">📅 ' + (op.stopName||'') + ' → ' + op.nights + ' nights</span>';
+          if (op.op === 'add_stop')   return '<span style="background:#e8f5e9;color:#1a6b3c;border-radius:100px;padding:2px 8px;font-size:.7rem;font-weight:700;">+ Add ' + (op.name||'') + (op.state ? ', '+op.state : '') + '</span>';
+          return '';
+        }).filter(Boolean).join(' ');
+        var applyId = 'opt-pkg-' + idx;
+        return '<div style="border:1px solid #c8e6c9;border-radius:12px;overflow:hidden;margin-bottom:14px;background:var(--card);">'
+          /* Header bar */
+          + '<div style="background:linear-gradient(135deg,#1a6b3c,#2e8b57);padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;">'
+          + '<div style="font-weight:900;font-size:.97rem;color:#fff;">' + (pkg.title||'Package '+(idx+1)) + '</div>'
+          + (pkg.saves ? '<div style="background:rgba(255,255,255,.2);border-radius:100px;padding:3px 10px;font-size:.72rem;font-weight:800;color:#fff;white-space:nowrap;">Saves ' + pkg.saves + '</div>' : '')
+          + '</div>'
+          /* Hook — the trade-off pitch */
+          + '<div style="padding:12px 16px 0;">'
+          + '<div style="font-size:.88rem;font-weight:700;color:var(--text);line-height:1.5;margin-bottom:6px;">' + (pkg.hook||'') + '</div>'
+          + (pkg.tradeoff ? '<div style="font-size:.78rem;color:var(--text-2);line-height:1.4;margin-bottom:10px;font-style:italic;">Trade-off: ' + pkg.tradeoff + '</div>' : '')
+          /* Op tags — what changes */
+          + (opTags ? '<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;">' + opTags + '</div>' : '')
+          /* Apply button */
+          + '<button id="' + applyId + '" onclick="_applyOptimizerPackage(' + idx + ',\'' + applyId + '\')" style="background:linear-gradient(135deg,#1a6b3c,#2e8b57);color:#fff;border:none;border-radius:100px;padding:9px 18px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);width:100%;margin-bottom:14px;"><i class="fa-solid fa-check"></i> Apply This Package</button>'
+          + '</div>'
+          + '</div>';
+      }).join('');
+      if (results) results.innerHTML = hdr + cards;
     })
     .catch(function() {
       if (btn)    { btn.innerHTML = '<i class="fa-solid fa-brain"></i> Optimize My Trip'; btn.disabled = false; }
       if (adjBtn) { adjBtn.disabled = false; }
-      if (results) results.innerHTML = '<div style="padding:16px;color:var(--red);font-size:.84rem;">Network error. Try again.</div>';
+      if (results) results.innerHTML = '<div style="padding:16px;color:var(--red);font-size:.84rem;">Network error — try again.</div>';
     });
 }
 
-function _applyOptimizerItem(idx, btnId) {
-  var items = window._optimizerItems || [];
-  var item = items[idx];
-  if (!item) return;
-  /* Feed the raw op item into the Change Plan framework — same path as genie suggestions */
-  /* Build a human-readable instruction from the raw op */
-  var instruction = item.text;
-  var raw = item.raw || {};
-  if (raw.op === 'set_nights' && raw.stopName) instruction = 'Change ' + raw.stopName + ' to ' + raw.nights + ' nights. ' + item.text;
-  if (raw.op === 'remove'    && raw.stopName) instruction = 'Remove ' + raw.stopName + ' from the trip. ' + item.text;
-  if (raw.op === 'add_stop'  && raw.name)     instruction = 'Add ' + raw.name + (raw.state ? ', ' + raw.state : '') + ' for ' + (raw.nights||2) + ' nights after ' + (raw.afterStopId ? 'stop ' + raw.afterStopId : 'the nearest stop') + '. ' + item.text;
+function _applyOptimizerPackage(pkgIdx, btnId) {
+  var pkgs = window._optimizerPackages || [];
+  var pkg  = pkgs[pkgIdx];
+  if (!pkg) return;
+  /* Build a comprehensive plain-English instruction from all ops in the package */
+  var ops = Array.isArray(pkg.ops) ? pkg.ops : [];
+  var parts = ops.map(function(op) {
+    if (op.op === 'remove')     return 'Remove ' + (op.stopName||'the stop') + ' from the itinerary';
+    if (op.op === 'set_nights') return 'Change ' + (op.stopName||'the stop') + ' to ' + op.nights + ' nights';
+    if (op.op === 'add_stop')   return 'Add ' + (op.name||'a new stop') + (op.state ? ', '+op.state : '') + ' for ' + (op.nights||2) + ' nights' + (op.afterStopId ? ' after stop '+op.afterStopId : '');
+    return null;
+  }).filter(Boolean);
+  /* Prepend the rationale so Change Plan AI understands the intent */
+  var instruction = (pkg.hook ? pkg.hook + ' ' : '') + parts.join('. ') + '.';
   _applyGenieChangeWithAI(instruction, btnId);
 }
 
