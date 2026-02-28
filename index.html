@@ -2222,6 +2222,13 @@
           <button id="adj-voice-mic-btn" onclick="_adjStartMic()" title="Tap to speak" style="position:absolute;bottom:10px;right:10px;width:34px;height:34px;border-radius:50%;background:var(--orange);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:.9rem;flex-shrink:0;"><i class="fa-solid fa-microphone"></i></button>
         </div>
         <button id="adj-voice-btn" onclick="_adjGetSuggestions()" style="background:linear-gradient(135deg,var(--blue) 0%,#5b2d8a 100%);color:#fff;border:none;border-radius:100px;padding:12px 20px;font-size:.9rem;font-weight:800;cursor:pointer;font-family:var(--font);width:100%;"><i class="fa-solid fa-wand-magic-sparkles"></i> Get Suggestions</button>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:8px;">
+          <div style="flex:1;height:1px;background:var(--border);"></div>
+          <span style="font-size:.72rem;color:var(--text-3);white-space:nowrap;">or</span>
+          <div style="flex:1;height:1px;background:var(--border);"></div>
+        </div>
+        <button id="trip-optimizer-btn" onclick="_runTripOptimizer()" style="background:linear-gradient(135deg,#1a6b3c 0%,#2e8b57 100%);color:#fff;border:none;border-radius:100px;padding:11px 20px;font-size:.88rem;font-weight:800;cursor:pointer;font-family:var(--font);width:100%;display:flex;align-items:center;justify-content:center;gap:8px;" title="Analyze your whole trip and get coordinated multi-stop optimization packages"><i class="fa-solid fa-brain"></i> Optimize My Trip</button>
+        <div style="font-size:.72rem;color:var(--text-3);text-align:center;margin-top:5px;line-height:1.4;">Analyzes pace, miles &amp; stops — returns coordinated packages of changes</div>
         <div id="adj-voice-results" style="margin-top:8px;"></div>
         <div id="adj-reply-bar" style="display:none;margin-top:12px;border-top:1px solid var(--border);padding-top:12px;">
           <div style="font-size:.75rem;font-weight:700;color:var(--text-2);margin-bottom:6px;"><i class="fa-solid fa-reply"></i> Not right? Refine your request:</div>
@@ -14826,16 +14833,25 @@ function geminiAdjustSchedule(dayNum, type, stop, hoursAdj) {
     remaining.push('Day ' + rd.day + ' (' + rd.date + '): ' + rd.title + (rs ? ' [' + rs.name + ', ' + rs.state + ']' : ''));
   }
   if (TRIP_DAYS.length > dayNum + 12) remaining.push('... and ' + (TRIP_DAYS.length - dayNum - 12) + ' more days');
+  /* Build full planned-stop list so AI won't re-suggest what's already there */
+  var _removedIds = appState.removedStops || {};
+  var _plannedStops = TRIP_STOPS
+    .filter(function(s) { return !_removedIds[s.id]; })
+    .map(function(s) { return s.name + (s.state ? ', ' + s.state : ''); })
+    .join(' → ');
   var direction = hoursAdj > 2  ? 'AHEAD of schedule by ~' + Math.round(hoursAdj) + ' hours'
                 : hoursAdj < -2 ? 'BEHIND schedule by ~' + Math.round(-hoursAdj) + ' hours'
                 : 'roughly ON schedule';
   var prompt = 'We are on a 46-day family RV road trip (kids 9, 4, 2). Today: ' + new Date().toLocaleDateString() + '.\n'
+    + 'Full planned itinerary (ALREADY CONFIRMED — do NOT suggest these again): ' + _plannedStops + '\n\n'
     + 'We just ' + (type === 'arrive' ? 'ARRIVED at' : 'DEPARTED from') + ' '
     + (stop ? _sn(stop) : 'a stop') + ' and are ' + direction + '.\n\n'
     + 'Remaining schedule:\n' + remaining.join('\n') + '\n\n'
-    + 'Return a JSON array of 3-4 practical trip adjustment suggestions:\n'
+    + 'Return a JSON array of 3-4 practical trip adjustment suggestions.\n'
+    + 'CRITICAL: Do NOT suggest any stop that is already in the planned itinerary above.\n'
+    + 'Suggestions should be about timing, pacing, duration adjustments, or genuinely NEW additions not on the list.\n'
     + '[{"id":"s1","title":"Short action","detail":"1-2 sentence explanation","impact":"e.g. Saves 1 day","affectedDays":[14,15]}]\n'
-    + (hoursAdj > 2 ? 'Extra time \u2014 suggest additions.' : 'Behind schedule \u2014 suggest cuts.')
+    + (hoursAdj > 2 ? 'Extra time — suggest new experiences or extra days at existing stops.' : 'Behind schedule — suggest cuts or shorter stays.')
     + '\nRespond ONLY with the JSON array.';
   var body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
@@ -14908,10 +14924,31 @@ function openRecommendationInfo(info) {
     });
 }
 
+function _suggAlreadyInTrip(s) {
+  /* Returns true if a pending suggestion references a stop already in the itinerary */
+  var titleLower = (s.title + ' ' + (s.detail || '')).toLowerCase();
+  var _removedIds = appState.removedStops || {};
+  return TRIP_STOPS.some(function(ts) {
+    if (_removedIds[ts.id]) return false;
+    var name = (ts.name || '').toLowerCase();
+    /* Match if 4+ chars of stop name appear in suggestion title */
+    return name.length >= 4 && titleLower.indexOf(name) !== -1;
+  });
+}
+
 function renderAdjustments() {
   var el = document.getElementById('adjustments-content');
   if (!el) return;
   var all      = appState.aiSuggestions || [];
+  /* Auto-dismiss stale suggestions that reference places already planned */
+  var _didAutoDismiss = false;
+  all.forEach(function(s) {
+    if (s.status === 'pending' && !s.isNewDest && _suggAlreadyInTrip(s)) {
+      s.status = 'dismissed';
+      _didAutoDismiss = true;
+    }
+  });
+  if (_didAutoDismiss) { saveState(appState); updateAdjBadge(); }
   var pending  = all.filter(function(s) { return s.status === 'pending'; });
   var accepted = all.filter(function(s) { return s.status === 'accepted'; });
   var dismissed= all.filter(function(s) { return s.status === 'dismissed'; });
@@ -15555,6 +15592,148 @@ function _adjStartMic() {
     if (ta)  { ta.style.borderColor = '#b3d4f5'; }
   };
   rec.start();
+}
+
+/* ── TRIP OPTIMIZER ──────────────────────────────────────────────────
+   Analyzes the whole trip for pacing, drive load, and wasted transitions.
+   Returns coordinated multi-stop suggestion packages using the same JSON
+   op format as Change Plan so _applyGenieChangeWithAI can apply them. */
+function _runTripOptimizer() {
+  var btn     = document.getElementById('trip-optimizer-btn');
+  var results = document.getElementById('adj-voice-results');
+  var adjBtn  = document.getElementById('adj-voice-btn');
+  if (btn)    { btn.innerHTML = '<i class="fa-solid fa-brain fa-beat"></i> Analyzing your trip…'; btn.disabled = true; }
+  if (adjBtn) { adjBtn.disabled = true; }
+  if (results){ results.innerHTML = ''; }
+
+  /* Build stop list (same as Change Plan) */
+  var _removedIds = appState.removedStops || {};
+  var _activeStops = TRIP_STOPS.filter(function(s) { return !_removedIds[s.id]; });
+  var _firstId = _activeStops.length ? _activeStops[0].id : null;
+  var _lastId  = _activeStops.length ? _activeStops[_activeStops.length - 1].id : null;
+  var _round   = _tripIsRoundTrip();
+  var stopSummaryArr = _activeStops.map(function(s) {
+    var nights = TRIP_DAYS.filter(function(d) { return d.stopId === s.id && !d.driveDay; }).length;
+    var driveDays = TRIP_DAYS.filter(function(d) { return d.stopId === s.id && d.driveDay; });
+    var driveIn = driveDays.length ? driveDays[0].driveHours : 0;
+    var driveMi = driveDays.length ? driveDays[0].miles : 0;
+    var isStart = (s.id === _firstId);
+    var isEnd   = (!_round && s.id === _lastId);
+    return { stopId: s.id, name: s.name, state: s.state || '', nights: nights,
+             driveHoursIn: driveIn, driveMiIn: driveMi,
+             protected: isStart || isEnd,
+             protectedReason: isStart ? 'START' : (isEnd ? 'END' : '') };
+  });
+  var stopLines = stopSummaryArr.map(function(s) {
+    var tag = s.protected ? ' [PROTECTED-' + s.protectedReason + ': never remove]' : '';
+    return 'stopId ' + s.stopId + ': ' + s.name + ', ' + s.state
+      + ' | ' + s.nights + ' nights' + (s.driveHoursIn ? ' | ' + s.driveHoursIn + 'h drive to get here (' + s.driveMiIn + 'mi)' : '') + tag;
+  }).join('\n');
+
+  /* Identify pain points for the prompt */
+  var _pains = [];
+  var _maxPref = (appState.drivingPrefs && appState.drivingPrefs.maxHours) || 4;
+  /* Back-to-back drive days */
+  var _prevDrive = false;
+  TRIP_DAYS.forEach(function(d) {
+    if (_removedIds[d.stopId]) return;
+    if (d.driveDay && _prevDrive) _pains.push('Back-to-back drive days around Day ' + d.day + ' (' + d.title + ')');
+    _prevDrive = d.driveDay;
+  });
+  /* Long drives */
+  TRIP_DAYS.forEach(function(d) {
+    if (!_removedIds[d.stopId] && d.driveDay && d.driveHours > _maxPref + 2)
+      _pains.push('Very long drive on Day ' + d.day + ': ' + d.driveHours + 'h (' + d.miles + ' mi) — ' + d.title);
+  });
+  /* Short stays */
+  stopSummaryArr.forEach(function(s) {
+    if (!s.protected && s.nights === 1)
+      _pains.push('Only 1 explore night at ' + s.name + ', ' + s.state + ' — rushed stop');
+  });
+  /* Total days vs plan */
+  var _totalDays = TRIP_DAYS.filter(function(d){ return !_removedIds[d.stopId]; }).length;
+  var _plannedDays = CONFIG.totalDays || 46;
+  if (_totalDays !== _plannedDays) _pains.push('Current trip is ' + _totalDays + ' days vs planned ' + _plannedDays + ' days');
+
+  var painStr = _pains.length ? _pains.map(function(p){ return '• ' + p; }).join('\n') : '(no obvious pain points detected — focus on pacing and experience quality)';
+
+  var prompt = 'You are an expert RV trip optimizer. Analyze this family\'s cross-country RV itinerary and return coordinated improvement packages.\n\n'
+    + 'TRIP: ' + CONFIG.startDate + ' to ' + CONFIG.endDate + ' (' + _plannedDays + ' planned days)\n'
+    + 'Family: 2 adults, kids ages 9, 4, 2. Max comfortable daily drive: ' + _maxPref + ' hours.\n\n'
+    + 'CURRENT STOPS:\n' + stopLines + '\n\n'
+    + 'DETECTED ISSUES:\n' + painStr + '\n\n'
+    + 'Return a JSON array of 3-4 coordinated suggestions. Each suggestion MUST directly fix one of the detected issues above.\n'
+    + 'Each item uses the SAME op types as the Change Plan tool:\n'
+    + '[\n'
+    + '  {"op":"set_nights","stopId":3,"stopName":"Name","nights":4,"text":"Why this improves the trip."},\n'
+    + '  {"op":"remove","stopId":5,"stopName":"Name","text":"Why removing this is better."},\n'
+    + '  {"op":"add_stop","name":"City Name","state":"XX","region":"Region","lat":35.5,"lng":-90.1,"nights":2,"afterStopId":3,"text":"Why adding this helps."}\n'
+    + ']\n\n'
+    + 'RULES:\n'
+    + '1. NEVER suggest removing a [PROTECTED-START] or [PROTECTED-END] stop.\n'
+    + '2. When suggesting a removal, ALSO suggest where those freed days go (a set_nights on another stop).\n'
+    + '3. Each suggestion must clearly solve a specific detected issue — reference it in the "text" field.\n'
+    + '4. Do NOT re-suggest stops already in the itinerary as add_stop.\n'
+    + '5. Output ONLY raw JSON. No markdown, no commentary.\n'
+    + '6. "text" in each item = one plain English sentence the family will read.\n'
+    + '7. Each op item is applied INDEPENDENTLY — present the best 3-4 individual improvements, not one big package.';
+
+  var body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { maxOutputTokens: 800, temperature: 0.65 } });
+
+  fetch(GEMINI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (btn)    { btn.innerHTML = '<i class="fa-solid fa-brain"></i> Optimize My Trip'; btn.disabled = false; }
+      if (adjBtn) { adjBtn.disabled = false; }
+      var rawText = ((data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || '').trim();
+      rawText = rawText.replace(/^```[a-z]*\n?/i,'').replace(/\n?```$/i,'').trim();
+      var parsed = [];
+      try { parsed = JSON.parse(rawText); } catch(e) {
+        var m = rawText.match(/\[[\s\S]*\]/);
+        if (m) { try { parsed = JSON.parse(m[0]); } catch(e2) {} }
+      }
+      if (!Array.isArray(parsed) || !parsed.length) {
+        if (results) results.innerHTML = '<div style="padding:16px;color:var(--text-2);font-size:.84rem;">Could not parse optimizer results. Try again.</div>';
+        return;
+      }
+      /* Render using the same card system as Change Plan */
+      if (results) {
+        var hdr = '<div style="font-size:.78rem;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><i class="fa-solid fa-brain"></i> Optimizer Suggestions</div>';
+        /* Store items for Apply buttons */
+        if (!window._optimizerItems) window._optimizerItems = [];
+        window._optimizerItems = parsed.map(function(item) { return { text: item.text, op: item.op, raw: item }; });
+        var cards = parsed.map(function(item, idx) {
+          var opIcon = item.op === 'remove' ? '🗑️' : item.op === 'set_nights' ? '📅' : item.op === 'add_stop' ? '📍' : '💡';
+          var opLabel = item.op === 'remove' ? 'Remove stop' : item.op === 'set_nights' ? 'Adjust nights at ' + (item.stopName||'') : item.op === 'add_stop' ? 'Add ' + (item.name||'') + (item.state ? ', '+item.state : '') : 'Info';
+          var applyBtnId = 'opt-apply-' + idx;
+          return '<div style="border:1px solid var(--border);border-left:3px solid var(--green);border-radius:var(--radius-s);padding:12px 14px;margin-bottom:8px;background:var(--card);">'
+            + '<div style="font-weight:800;font-size:.88rem;margin-bottom:4px;">' + opIcon + ' ' + opLabel + '</div>'
+            + '<div style="font-size:.82rem;color:var(--text-2);line-height:1.5;margin-bottom:10px;">' + (item.text||'') + '</div>'
+            + '<button id="' + applyBtnId + '" onclick="_applyOptimizerItem(' + idx + ',\'' + applyBtnId + '\')" style="background:var(--green);color:#fff;border:none;border-radius:100px;padding:7px 16px;font-size:.8rem;font-weight:800;cursor:pointer;font-family:var(--font);">Apply</button>'
+            + '</div>';
+        }).join('');
+        results.innerHTML = hdr + cards;
+      }
+    })
+    .catch(function() {
+      if (btn)    { btn.innerHTML = '<i class="fa-solid fa-brain"></i> Optimize My Trip'; btn.disabled = false; }
+      if (adjBtn) { adjBtn.disabled = false; }
+      if (results) results.innerHTML = '<div style="padding:16px;color:var(--red);font-size:.84rem;">Network error. Try again.</div>';
+    });
+}
+
+function _applyOptimizerItem(idx, btnId) {
+  var items = window._optimizerItems || [];
+  var item = items[idx];
+  if (!item) return;
+  /* Feed the raw op item into the Change Plan framework — same path as genie suggestions */
+  /* Build a human-readable instruction from the raw op */
+  var instruction = item.text;
+  var raw = item.raw || {};
+  if (raw.op === 'set_nights' && raw.stopName) instruction = 'Change ' + raw.stopName + ' to ' + raw.nights + ' nights. ' + item.text;
+  if (raw.op === 'remove'    && raw.stopName) instruction = 'Remove ' + raw.stopName + ' from the trip. ' + item.text;
+  if (raw.op === 'add_stop'  && raw.name)     instruction = 'Add ' + raw.name + (raw.state ? ', ' + raw.state : '') + ' for ' + (raw.nights||2) + ' nights after ' + (raw.afterStopId ? 'stop ' + raw.afterStopId : 'the nearest stop') + '. ' + item.text;
+  _applyGenieChangeWithAI(instruction, btnId);
 }
 
 function _adjGetSuggestions() {
