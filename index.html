@@ -5041,6 +5041,31 @@ function _navRestoreWidth() {
     }
   } catch(e) {}
 }
+/* Auto-repair stops whose coordinates are missing or stuck at sentinel values */
+function _fixSentinelStopCoords() {
+  var bad = TRIP_STOPS.filter(function(s) {
+    if (!s.lat || !s.lng) return true;
+    /* sentinel values used as fallbacks when geocoding was unavailable */
+    var isSentinel = (Math.round(s.lat) === 39 && Math.round(s.lng) === -98) ||
+                     (Math.round(s.lat) === 37 && Math.round(s.lng) === -98);
+    return isSentinel;
+  });
+  if (!bad.length) return;
+  bad.forEach(function(stop) {
+    var q = stop.name + (stop.state ? ', ' + stop.state : '') + ', USA';
+    fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q) + '&limit=1', {
+      headers: { 'Accept-Language': 'en' }
+    }).then(function(r) { return r.json(); }).then(function(results) {
+      if (results && results[0]) {
+        stop.lat = parseFloat(results[0].lat);
+        stop.lng = parseFloat(results[0].lon);
+        appState.customTripData = { stops: TRIP_STOPS.slice(), days: TRIP_DAYS.slice() };
+        saveState(appState);
+        if (mainMap) setTimeout(function() { _clearAndRebuildMapMarkers(mainMap); }, 300);
+      }
+    }).catch(function() {});
+  });
+}
 /* ─────────────────────────────────────────────────────────────────── */
 
 function renderStopNavigator() {
@@ -5077,7 +5102,7 @@ function renderStopNavigator() {
       + '<div style="width:24px;height:24px;background:var(--orange);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:900;flex-shrink:0;">' + num + '</div>'
       + '<div style="flex:1;min-width:0;font-size:.8rem;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text);">' + name + state + '</div>'
       + '<div style="display:flex;align-items:center;gap:5px;flex-shrink:0;color:var(--text-3);font-size:.72rem;white-space:nowrap;">'
-      + stayMeta.icon + ' ' + nights + 'n'
+      + nights + ' night' + (nights !== 1 ? 's' : '')
       + '<i class="fa-solid fa-grip-vertical" style="font-size:.72rem;cursor:grab;"></i>'
       + '</div>'
       + '</div>';
@@ -5370,6 +5395,7 @@ function initMainMap() {
   });
   renderStopNavigator();
   _navRestoreWidth();
+  _fixSentinelStopCoords(); /* geocode any stops with bad/missing coordinates */
 }
 
 /* Called from initApp() after trip data changes — redraws map markers without re-creating the map */
@@ -15964,7 +15990,7 @@ function renderAdjustments() {
   var dayOpts = '';
   for (var dpi = 0; dpi < TRIP_DAYS.length; dpi++) {
     var dpd = TRIP_DAYS[dpi];
-    dayOpts += '<option value="' + dpd.day + '">Day ' + dpd.day + ' \u2014 ' + dpd.title.substring(0, 40) + '</option>';
+    dayOpts += '<option value="' + dpd.day + '">Day ' + dpd.day + ' \u2014 ' + (dpd.title || dpd.name || '').substring(0, 40) + '</option>';
   }
 
   /* ── Day-count warning ─────────────────────────────────────────── */
