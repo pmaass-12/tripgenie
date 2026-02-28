@@ -6830,47 +6830,51 @@ var DEFAULT_PACKING = [
   { id:'p48', cat:'Outdoor Gear', text:'Beach towels (5)' },
   { id:'p49', cat:'Outdoor Gear', text:'Binoculars (for wildlife & stargazing)' },
   { id:'p50', cat:'Outdoor Gear', text:'Card games (Uno, Go Fish, etc.)' },
-  /* ── Paul ────────────────────────────────────────────────────── */
-  { id:'pm1', cat:'👨 Paul', text:'7 days casual clothes + 2 warm layers' },
-  { id:'pm2', cat:'👨 Paul', text:'Underwear & socks' },
-  { id:'pm3', cat:'👨 Paul', text:'Pajamas' },
-  { id:'pm4', cat:'👨 Paul', text:'Hiking shoes / trail runners' },
-  { id:'pm5', cat:'👨 Paul', text:'Rain jacket' },
-  { id:'pm6', cat:'👨 Paul', text:'Swim trunks' },
-  /* ── Melissa ─────────────────────────────────────────────────── */
-  { id:'me1', cat:'👩 Melissa', text:'7 days casual clothes + 2 warm layers' },
-  { id:'me2', cat:'👩 Melissa', text:'Underwear & socks' },
-  { id:'me3', cat:'👩 Melissa', text:'Pajamas' },
-  { id:'me4', cat:'👩 Melissa', text:'Hiking shoes / trail runners' },
-  { id:'me5', cat:'👩 Melissa', text:'Rain jacket' },
-  { id:'me6', cat:'👩 Melissa', text:'Swimsuit' },
-  /* ── Leila ───────────────────────────────────────────────────── */
-  { id:'le1', cat:'👧 Leila', text:'7 days clothes + 2 warm layers' },
-  { id:'le2', cat:'👧 Leila', text:'Underwear & socks' },
-  { id:'le3', cat:'👧 Leila', text:'Pajamas' },
-  { id:'le4', cat:'👧 Leila', text:'Rain jacket' },
-  { id:'le5', cat:'👧 Leila', text:'Hiking shoes & water shoes' },
-  { id:'le6', cat:'👧 Leila', text:'Swimsuit' },
-  { id:'le7', cat:'👧 Leila', text:'Chapter books (3–4)' },
-  { id:'le8', cat:'👧 Leila', text:'Travel journal & sticker book' },
-  /* ── Luna ────────────────────────────────────────────────────── */
-  { id:'lu1', cat:'🧒 Luna', text:'7 days clothes + 2 warm layers' },
-  { id:'lu2', cat:'🧒 Luna', text:'Underwear & socks' },
-  { id:'lu3', cat:'🧒 Luna', text:'Pajamas' },
-  { id:'lu4', cat:'🧒 Luna', text:'Rain jacket' },
-  { id:'lu5', cat:'🧒 Luna', text:'Hiking shoes & water shoes' },
-  { id:'lu6', cat:'🧒 Luna', text:'Swimsuit' },
-  { id:'lu7', cat:'🧒 Luna', text:'Coloring books & markers' },
-  { id:'lu8', cat:'🧒 Luna', text:'Travel journal & sticker book' },
-  /* ── Eli ─────────────────────────────────────────────────────── */
-  { id:'el1', cat:'👶 Eli', text:'Extra onesies & pants (10+ sets)' },
-  { id:'el2', cat:'👶 Eli', text:'Warm layers & pajamas' },
-  { id:'el3', cat:'👶 Eli', text:'Water shoes' },
-  { id:'el4', cat:'👶 Eli', text:'Comfort items & favorite toys' },
-  { id:'el5', cat:'👶 Eli', text:'Portable white noise machine' },
-  { id:'el6', cat:'👶 Eli', text:'Diapers & wipes (bulk supply)' },
-  { id:'el7', cat:'👶 Eli', text:'Baby toiletries (shampoo, lotion, etc.)' },
 ];
+/* ── PER-PROFILE PACKING ITEMS (age-aware, profile-driven) ────────── */
+function _getProfilePackItems(p) {
+  var pfx = 'pp_' + p.id + '_';
+  var cat = p.emoji + ' ' + p.name;
+  var age = parseInt(p.age) || 99;
+  if (age <= 2) {
+    return [
+      { id:pfx+'onesies',    cat:cat, text:'Extra onesies & pants (10+ sets)' },
+      { id:pfx+'layers',     cat:cat, text:'Warm layers & pajamas' },
+      { id:pfx+'shoes',      cat:cat, text:'Water shoes' },
+      { id:pfx+'toys',       cat:cat, text:'Comfort items & favorite toys' },
+      { id:pfx+'noise',      cat:cat, text:'Portable white noise machine' },
+      { id:pfx+'diapers',    cat:cat, text:'Diapers & wipes (bulk supply)' },
+      { id:pfx+'toiletries', cat:cat, text:'Baby toiletries (shampoo, lotion, etc.)' },
+    ];
+  } else if (age <= 12) {
+    return [
+      { id:pfx+'clothes', cat:cat, text:'7 days clothes + 2 warm layers' },
+      { id:pfx+'undies',  cat:cat, text:'Underwear & socks' },
+      { id:pfx+'pjs',     cat:cat, text:'Pajamas' },
+      { id:pfx+'rain',    cat:cat, text:'Rain jacket' },
+      { id:pfx+'shoes',   cat:cat, text:'Hiking shoes & water shoes' },
+      { id:pfx+'swim',    cat:cat, text:'Swimsuit' },
+    ];
+  } else {
+    return [
+      { id:pfx+'clothes', cat:cat, text:'7 days casual clothes + 2 warm layers' },
+      { id:pfx+'undies',  cat:cat, text:'Underwear & socks' },
+      { id:pfx+'pjs',     cat:cat, text:'Pajamas' },
+      { id:pfx+'rain',    cat:cat, text:'Rain jacket' },
+      { id:pfx+'shoes',   cat:cat, text:'Hiking shoes / trail runners' },
+      { id:pfx+'swim',    cat:cat, text:'Swimsuit' },
+    ];
+  }
+}
+function _getDynamicPackingList() {
+  var list = DEFAULT_PACKING.slice();
+  var profiles = _getProfiles().filter(function(p) { return p.role === 'person'; });
+  profiles.forEach(function(p) {
+    _getProfilePackItems(p).forEach(function(item) { list.push(item); });
+  });
+  return list;
+}
+
 /* ── SWIPE-TO-DELETE ─────────────────────────────────────────────── */
 var _sw = { el: null, startX: 0, startY: 0, moved: false, locked: false };
 
@@ -7093,7 +7097,13 @@ function renderListSection(items, customItems, type, checkedMap) {
     }
   }
   // Section dropdown + add row
-  var todoCats = type === 'todo' ? ['Before We Leave','On The Road','Coming Home'] : ['Documents','Tech & Power','RV Essentials','Kitchen','Health & Safety','Outdoor Gear','👨 Paul','👩 Melissa','👧 Leila','🧒 Luna','👶 Eli'];
+  var todoCats = type === 'todo' ? ['Before We Leave','On The Road','Coming Home'] : (function() {
+    var shared = ['Documents','Tech & Power','RV Essentials','Kitchen','Health & Safety','Outdoor Gear'];
+    _getProfiles().filter(function(p) { return p.role === 'person'; }).forEach(function(p) {
+      shared.push(p.emoji + ' ' + p.name);
+    });
+    return shared;
+  }());
   h += '<div style="margin-top:14px;display:flex;flex-direction:column;gap:7px;">';
   h += '<select id="list-cat-' + type + '" style="width:100%;padding:8px 12px;border:1.5px solid var(--border);border-radius:100px;font-size:.85rem;font-family:var(--font);background:var(--bg);color:var(--text);">';
   for (var tci = 0; tci < todoCats.length; tci++) {
@@ -7137,7 +7147,7 @@ function renderLists() {
     html += renderListSection(DEFAULT_TODO, customItems.todo, 'todo', ls.todo);
   } else if (activeTab === 'pack') {
     html += '<h3 style="font-size:.97rem;font-weight:800;color:var(--text);margin-bottom:10px;">&#127959; Packing Checklist</h3>';
-    html += renderListSection(DEFAULT_PACKING, customItems.pack, 'pack', ls.pack);
+    html += renderListSection(_getDynamicPackingList(), customItems.pack, 'pack', ls.pack);
   } else {
     html += renderBookings();
   }
