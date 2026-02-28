@@ -4386,7 +4386,7 @@ function _initVersionCheck() {
   // so the login page shows accurate trip info even before the user logs in
   (function() {
     try {
-      var raw = localStorage.getItem('rv_app_state');
+      var raw = localStorage.getItem('rv_state');
       if (!raw) return;
       var saved = JSON.parse(raw);
       var ct = saved && saved.customTripData;
