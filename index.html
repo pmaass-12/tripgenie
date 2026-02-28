@@ -4877,8 +4877,19 @@ function saveSleep(dayNum) {
 /* ── PHASE HEADER HTML ───────────────────────────────────────────── */
 function phaseHeaderHtml(phase, firstDay) {
   var pStop = getStop(firstDay.stopId);
+  /* Check if this phase spans multiple stops — if so, scope to this stopId only */
+  var _allPhaseStopIds = [];
+  TRIP_DAYS.forEach(function(td) {
+    if (td.phase === phase && _allPhaseStopIds.indexOf(td.stopId) === -1) _allPhaseStopIds.push(td.stopId);
+  });
+  var _multiStop = _allPhaseStopIds.length > 1;
+  /* When the phase is a generic region name with multiple stops, use the actual stop's city name */
+  var _displayPhase = (_multiStop && pStop) ? _sn(pStop) : phase;
   var totalMi = 0;
-  var phaseDays = TRIP_DAYS.filter(function(d) { return d.phase === phase; });
+  /* Count nights for this specific stopId only (handles multi-stop phases correctly) */
+  var phaseDays = _multiStop
+    ? TRIP_DAYS.filter(function(d) { return d.stopId === firstDay.stopId; })
+    : TRIP_DAYS.filter(function(d) { return d.phase === phase; });
   for (var i = 0; i < TRIP_DAYS.length; i++) {
     if (TRIP_DAYS[i].phase === phase) totalMi += TRIP_DAYS[i].miles;
   }
@@ -4928,17 +4939,17 @@ function phaseHeaderHtml(phase, firstDay) {
   var _phIsFirst = _phMyIdx <= 0;
   var _phIsLast  = _phMyIdx >= _phVisible.length - 1;
   var _safePhase = phase.replace(/'/g, "\\'");
-  var _arrowOn  = 'background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:50%;width:24px;height:24px;font-size:.72rem;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:var(--font);flex-shrink:0;line-height:1;padding:0;transition:background .12s;';
-  var _arrowOff = 'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);color:rgba(255,255,255,.25);border-radius:50%;width:24px;height:24px;font-size:.72rem;cursor:default;display:flex;align-items:center;justify-content:center;flex-shrink:0;line-height:1;padding:0;';
+  var _arrowOn  = 'background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:50%;width:26px;height:26px;font-size:.68rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s,border-color .15s;';
+  var _arrowOff = 'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.2);border-radius:50%;width:26px;height:26px;font-size:.68rem;cursor:default;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;';
 
   return '<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--blue);color:#fff;border-radius:var(--radius-s);margin:20px 0 8px;flex-wrap:wrap;">'
-    + '<div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;">'
-    + '<button onclick="event.stopPropagation();movePhase(' + firstDay.stopId + ',\'' + _safePhase + '\',\'up\')" style="' + (_phIsFirst ? _arrowOff : _arrowOn) + '" ' + (_phIsFirst ? 'disabled' : '') + ' title="Move stop earlier">&#9650;</button>'
-    + '<button onclick="event.stopPropagation();movePhase(' + firstDay.stopId + ',\'' + _safePhase + '\',\'down\')" style="' + (_phIsLast ? _arrowOff : _arrowOn) + '" ' + (_phIsLast ? 'disabled' : '') + ' title="Move stop later">&#9660;</button>'
+    + '<div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;">'
+    + '<button onclick="event.stopPropagation();movePhase(' + firstDay.stopId + ',\'' + _safePhase + '\',\'up\')" style="' + (_phIsFirst ? _arrowOff : _arrowOn) + '" ' + (_phIsFirst ? 'disabled' : '') + ' title="Move stop earlier"><i class="fa-solid fa-chevron-up"></i></button>'
+    + '<button onclick="event.stopPropagation();movePhase(' + firstDay.stopId + ',\'' + _safePhase + '\',\'down\')" style="' + (_phIsLast ? _arrowOff : _arrowOn) + '" ' + (_phIsLast ? 'disabled' : '') + ' title="Move stop later"><i class="fa-solid fa-chevron-down"></i></button>'
     + '</div>'
     + '<div style="flex:1;min-width:0;">'
-    + '<div style="font-weight:800;font-size:.97rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + phase + '</div>'
-    + '<div style="font-size:.76rem;opacity:.8;">' + totalNights + ' night' + (totalNights !== 1 ? 's' : '') + (extras > 0 ? ' (+' + extras + ' added)' : extras < 0 ? ' (' + extras + ' shortened)' : '') + '</div>'
+    + '<div style="font-weight:800;font-size:.97rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _displayPhase + '</div>'
+    + '<div style="font-size:.76rem;opacity:.8;">' + totalNights + ' night' + (totalNights !== 1 ? 's' : '') + (extras > 0 ? ' (+' + extras + ' added)' : '') + '</div>'
     + '</div>'
     + (firstDay.springBreak ? '<span style="background:rgba(255,255,255,.2);border-radius:20px;padding:3px 10px;font-size:.73rem;font-weight:700;flex-shrink:0;">&#127775; Spring Break</span>' : '')
     + _wxHtml
@@ -5110,6 +5121,7 @@ function renderSchedule() {
   var todayNum  = tripDay();
   var _live     = tripIsLive(); // only mark "Today" if trip has actually started
   var lastPhase = '';
+  var lastStopId = null;
   var html      = '';
 
   /* Pre-compute which day numbers are hidden because a stop had days removed */
@@ -5171,12 +5183,14 @@ function renderSchedule() {
     var isToday  = _live && d.day === todayNum;
     var isBefore = _live && d.day < todayNum;
 
-    // Phase header when phase changes — skip entirely for removed stops (restore lives in Audit Log)
-    if (d.phase !== lastPhase) {
+    // Phase header when phase OR stop changes — each stop gets its own blue bar
+    // (handles generic region phases like "Southwest" containing White Sands + Albuquerque)
+    if (d.phase !== lastPhase || d.stopId !== lastStopId) {
       if (!removedStopIds[d.stopId]) {
         html += phaseHeaderHtml(d.phase, d);
       }
       lastPhase = d.phase;
+      lastStopId = d.stopId;
     }
 
     // Skip this day if it was hidden by the - button or full stop removal
@@ -5194,8 +5208,9 @@ function renderSchedule() {
     html += '<div style="display:grid;grid-template-columns:76px 1fr auto;align-items:center;gap:0;">';
 
     // Day badge: date in colored bar, Day# in white area
+    // Use _effectiveDate (pause-shifted) so days after a pause show their real calendar date
     var dayBg = isToday ? 'var(--orange)' : d.springBreak ? 'var(--purple)' : isBefore ? '#aaa' : 'var(--blue)';
-    var dObj2 = new Date(d.date + 'T12:00:00');
+    var dObj2 = new Date(_effectiveDate.getTime());
     var dWday = dObj2.toLocaleDateString('en-US', { weekday:'short' });
     var dMDay = dObj2.toLocaleDateString('en-US', { month:'short', day:'numeric' });
     html += '<div style="display:flex;flex-direction:column;align-self:stretch;min-width:76px;">'
@@ -14592,11 +14607,25 @@ function askTripGenie() {
   var dayData  = getDay(dayNum);
   var stop     = dayData ? getStop(dayData.stopId) : null;
   var _tgTripName = (appState && appState.tripSettings && appState.tripSettings.tripName) || CONFIG.tripName || 'RV trip';
+  /* Build a compact itinerary summary for context */
+  var _tgStopList = [];
+  var _tgSeenIds = {};
+  TRIP_DAYS.forEach(function(td) {
+    if (!td.stopId || _tgSeenIds[td.stopId]) return;
+    _tgSeenIds[td.stopId] = true;
+    var s = getStop(td.stopId);
+    if (s) _tgStopList.push(s.name + (s.state ? ', ' + s.state : ''));
+  });
+  var _tgItinerary = _tgStopList.join(' → ');
+
   var context  = 'You are TripGenie, a friendly and knowledgeable AI assistant for this family\'s RV trip. '
     + 'They are on a ' + _tgTripName + ' from ' + _tripStartCity()
     + (_tripIsRoundTrip() ? ' (round trip)' : ' to ' + _tripEndCity())
     + ', dates ' + CONFIG.startDate + ' to ' + CONFIG.endDate + '. '
-    + (stop ? 'They are currently at/near: ' + stop.name + ' (' + (stop.description || '') + '). ' : '')
+    + 'Their full itinerary: ' + _tgItinerary + '. '
+    + (stop ? 'They are currently near: ' + stop.name + '. ' : '')
+    + 'IMPORTANT: Answer questions about ANY location they ask about — not just their current stop. '
+    + 'If they ask about a specific place, answer about THAT place even if it\'s far from their current location. '
     + 'Give practical, friendly, helpful answers. '
     + 'For RV maintenance questions, be specific and safety-conscious. '
     + 'For local attraction questions, focus on family-friendly options. '
