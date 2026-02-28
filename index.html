@@ -4637,30 +4637,9 @@ function renderDashboard() {
 var mainMap = null;
 var miniMap = null;
 
-// Route coordinates in order: outbound + return
-const ROUTE_OUT = [
-  [41.2559, -74.3593], // Warwick
-  [38.6648, -78.4647], // Shenandoah
-  [35.7143, -83.5102], // Smokies
-  [36.2298, -93.1077], // Ozarks
-  [30.2752, -98.8720], // TX Hill Country
-  [32.1479,-104.5567], // Carlsbad
-  [34.8697,-111.7610], // Sedona
-  [36.0544,-112.2401], // Grand Canyon
-  [37.2982,-113.0263], // Zion
-  [37.6283,-112.1669], // Bryce
-  [38.5733,-109.5498], // Moab
-  [37.2753,-107.8801], // Durango
-];
-const ROUTE_RETURN = [
-  [37.2753,-107.8801], // Durango
-  [35.4676, -97.5164], // OKC
-  [39.0997, -94.5786], // KC
-  [36.1627, -86.7816], // Nashville
-  [37.2710, -79.9414], // Blue Ridge
-  [38.3032, -77.4605], // Fredericksburg VA
-  [41.2559, -74.3593], // Warwick
-];
+// ROUTE_OUT and ROUTE_RETURN removed — route is now built dynamically from
+// TRIP_DAYS + TRIP_STOPS in buildMapMarkers() so any changes to the plan
+// are always reflected without hardcoded coordinates.
 
 function buildMapMarkers(mapObj) {
   // Draw route dynamically from TRIP_STOPS so any added/removed stops are always reflected
@@ -4672,20 +4651,41 @@ function buildMapMarkers(mapObj) {
     : [41.2559, -74.3593]; // fallback: Warwick, NY
   // Exclude the home stop from the destination markers (it gets its own home icon below)
   var _homeStopId = _homeStop ? _homeStop.id : 15;
-  var _validStops = TRIP_STOPS.filter(function(s) { return s.lat && s.lng && s.id !== _homeStopId; });
+  // Exclude removed stops from both the polyline and the markers
+  var _removedIds = (appState && appState.removedStops) ? appState.removedStops : {};
+  var _validStops = TRIP_STOPS.filter(function(s) { return s.lat && s.lng && s.id !== _homeStopId && !_removedIds[s.id]; });
 
   if (_validStops.length) {
-    // Draw outbound (blue) leg: home → destination stops through the turnaround (Durango, id≤11)
-    var _outboundStops = _validStops.filter(function(s) { return s.id <= 11; });
-    // Draw return (purple, dashed) leg: turnaround → return stops → home
-    var _returnStops   = _validStops.filter(function(s) { return s.id >= 11; });
+    // Build the ordered stop sequence from TRIP_DAYS (never hardcoded IDs).
+    // Walk TRIP_DAYS in order; collect unique stopIds in the order they first appear,
+    // skipping removed stops and the home stop.
+    var _seenIds = {};
+    var _orderedIds = [];
+    TRIP_DAYS.forEach(function(d) {
+      if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeStopId) return;
+      if (!_seenIds[d.stopId]) { _seenIds[d.stopId] = true; _orderedIds.push(d.stopId); }
+    });
+
+    // Split into outbound / return at the furthest-west stop (the turnaround).
+    // "Furthest west" = the stop with the minimum (most negative) longitude.
+    var _validMap = {};
+    _validStops.forEach(function(s) { _validMap[s.id] = s; });
+    var _orderedStops = _orderedIds.map(function(id) { return _validMap[id]; }).filter(Boolean);
+
+    var _turnIdx = 0;
+    var _minLng = Infinity;
+    _orderedStops.forEach(function(s, i) {
+      if (s.lng < _minLng) { _minLng = s.lng; _turnIdx = i; }
+    });
+
+    var _outboundStops = _orderedStops.slice(0, _turnIdx + 1);
+    var _returnStops   = _orderedStops.slice(_turnIdx);
+
     if (_outboundStops.length > 0) {
-      // Prepend home so the blue line starts from Warwick, NY
       var _outLine = [_homeCoords].concat(_outboundStops.map(function(s) { return [s.lat, s.lng]; }));
       L.polyline(_outLine, { color: '#2C5F8A', weight: 3, opacity: .8 }).addTo(mapObj);
     }
     if (_returnStops.length > 0) {
-      // Append home so the purple dashed line ends at Warwick, NY
       var _retLine = _returnStops.map(function(s) { return [s.lat, s.lng]; }).concat([_homeCoords]);
       L.polyline(_retLine, { color: '#7B5EA7', weight: 3, opacity: .8, dashArray: '8 4' }).addTo(mapObj);
     }
@@ -4700,10 +4700,11 @@ function buildMapMarkers(mapObj) {
     .addTo(mapObj)
     .bindPopup('<strong>🏠 ' + _tripStartCity() + '</strong><br>' + (_roundTrip ? 'Start &amp; End' : 'Start'));
 
-  // Add all destination stops (skip the home stop — it already has its own home marker above)
+  // Add all destination stops (skip removed stops and home stop)
   TRIP_STOPS.forEach(stop => {
     if (!stop.lat || !stop.lng) return; // skip stops with no coordinates
     if (stop.id === _homeStopId) return;  // home already rendered above
+    if (_removedIds[stop.id]) return;     // skip stops removed from the trip
     const bgColor = '#E8813A';
     const stopEmoji = stop.emoji || '📍';
     const icon = L.divIcon({
