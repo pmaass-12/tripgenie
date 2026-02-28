@@ -5106,6 +5106,23 @@ function _getStayContext(stopId) {
   if (meta.v === 'cabin') return 'staying at a cabin or glamping site (check for RV parking or alternative transport)';
   return 'staying at a vacation rental (check driveway access for RV, parking alternatives)';
 }
+function _cycleToStayType(stopId, targetType) {
+  if (!appState.stayType) appState.stayType = {};
+  appState.stayType[stopId] = targetType;
+  saveState(appState);
+  var meta = _getStayMeta(stopId);
+  showToast(meta.icon + ' Switched to ' + meta.label + ' for this stop', 2000);
+  /* Re-render the day detail blocks so the buttons update immediately */
+  if (typeof _ddmDayNum !== 'undefined' && _ddmDayNum) {
+    var _d = TRIP_DAYS[_ddmDayNum - 1];
+    var _s = _d ? getStop(_d.stopId) : null;
+    var blocksEl = document.getElementById('ddm-blocks');
+    if (blocksEl && _d) blocksEl.innerHTML = renderDayTimeBlocks(_d, _s);
+    _initDragDrop();
+  }
+  /* Also refresh the schedule phase header */
+  renderSchedule();
+}
 
 function addPhaseDay(stopId) {
   if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
@@ -6120,6 +6137,24 @@ function toggleStop(stopId) {
 var _journalEntries  = [];
 var _pendingPhotos   = [];
 var _pendingAudio    = null;
+
+/* ── PHOTO POOL ──────────────────────────────────────────────────── */
+/* Unified photo pool: all photos from gallery and journal */
+function _addToPhotoPool(dataUrl, opts) {
+  if (!appState.photoPool) appState.photoPool = [];
+  var entry = {
+    id: Date.now() + '_' + Math.random().toString(36).substr(2,6),
+    dataUrl: dataUrl,
+    timestamp: new Date().toISOString(),
+    caption: opts.caption || '',
+    stopId:  opts.stopId  || null,
+    dayNum:  opts.dayNum  || null,
+    source:  opts.source  || 'gallery'
+  };
+  appState.photoPool.unshift(entry);
+  saveState(appState);
+  return entry;
+}
 var _mediaRecorder   = null;
 var _audioChunks     = [];
 var _recTimerInt     = null;
@@ -6609,6 +6644,15 @@ function submitJournalEntry() {
   _journalEntries.push(entry);
   saveJournal();
 
+  // Add photos to unified photoPool
+  if (_pendingPhotos && _pendingPhotos.length > 0) {
+    _pendingPhotos.forEach(function(photoObj) {
+      if (photoObj && photoObj.dataUrl) {
+        _addToPhotoPool(photoObj.dataUrl, { caption: '', stopId: entry.stopId, dayNum: dayNum, source: 'journal' });
+      }
+    });
+  }
+
   // Reset compose form
   text.value    = '';
   _pendingPhotos = [];
@@ -6700,7 +6744,7 @@ function renderGalleryTab() {
   if (!el) return;
   loadJournal();
 
-  // Collect all photos and videos from journal entries
+  // Collect all photos and videos from journal entries and photoPool
   var allPhotos = [];
   _journalEntries.forEach(function(entry) {
     (entry.photos || []).forEach(function(p) {
@@ -6716,6 +6760,26 @@ function renderGalleryTab() {
       });
     });
   });
+
+  // Also include photos from unified photoPool (if not already in journal)
+  if (appState.photoPool && appState.photoPool.length > 0) {
+    var poolPhotoIds = {};
+    appState.photoPool.forEach(function(poolPhoto) {
+      poolPhotoIds[poolPhoto.id] = true;
+    });
+    appState.photoPool.forEach(function(poolPhoto) {
+      var stop = poolPhoto.stopId ? getStop(poolPhoto.stopId) : null;
+      allPhotos.push({
+        src: poolPhoto.dataUrl,
+        type: 'image',
+        caption: poolPhoto.caption || '',
+        location: stop ? _sn(stop) : '',
+        date: poolPhoto.timestamp ? poolPhoto.timestamp.split('T')[0] : '',
+        day: poolPhoto.dayNum,
+        source: 'pool'
+      });
+    });
+  }
 
   var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">'
     + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-images"></i> Photo Gallery</h2>'
@@ -10074,9 +10138,25 @@ function renderDayTimeBlocks(d, stop) {
       _items.push({ key:'dinner', html: tbbRow(ovTime('dinner', _fmtHour(17.5)),'&#127869;',ovTitle('dinner','Dinner \u2014 '+dRest.item.name),dSub,'eat',dRest.planned,stop ? tbbAiBtn('r',stop.id,dRest.idx) : '',dSkip,'dinner') });
     }
 
+    var _stayMeta = _getStayMeta(d.stopId);
+    var _stayTitle = 'Evening at ' + (_stayMeta.v === 'campground' ? 'Camp' : _stayMeta.v === 'hotel' ? 'Hotel' : _stayMeta.v === 'cabin' ? 'Cabin' : 'Rental');
+    var _staySub = (d.sleep || 'Relax and unwind')
+      + '<br><span style="display:inline-flex;gap:4px;margin-top:5px;flex-wrap:wrap;">'
+      + [
+          {v:'campground',icon:'🏕️',l:'Camp'},
+          {v:'hotel',icon:'🏨',l:'Hotel'},
+          {v:'cabin',icon:'🌲',l:'Cabin'},
+          {v:'airbnb',icon:'🏠',l:'Rental'}
+        ].map(function(t) {
+          var active = _stayMeta.v === t.v;
+          return '<button onclick="event.stopPropagation();_cycleToStayType(' + d.stopId + ',\'' + t.v + '\')" '
+            + 'style="background:' + (active ? 'var(--blue)' : 'var(--bg)') + ';color:' + (active ? '#fff' : 'var(--text-2)') + ';border:1.5px solid ' + (active ? 'var(--blue)' : 'var(--border)') + ';border-radius:100px;padding:3px 9px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;">'
+            + t.icon + ' ' + t.l + '</button>';
+        }).join('')
+      + '</span>';
     _items.push({ key:'sleep', html: tbbRow(ovTime('sleep', _fmtHour(19)),'&#127769;',
-      ovTitle('sleep','Evening at Camp'),
-      ovSub('sleep', d.sleep || 'Relax and unwind'),
+      ovTitle('sleep', _stayTitle),
+      _staySub,
       null,false,'openCampInfo('+d.day+')','','sleep') });
   }
 
@@ -10757,7 +10837,9 @@ function fetchAreaInfo(phase, location) {
         return '**For ' + prof.name + '** (ONLY include this section if there\'s a genuine surprising connection to their interests: ' + (prof.interests||[]).join(', ') + ' — e.g. a famous actor from this town, a local connection to their favorite character or hobby. Skip this section entirely if no real connection exists.)\n';
       }())
     + 'Be specific, concise, and engaging. Friendly family tone. No asterisk decorations.'
-    + _getPersonalizationContext();
+    + _getPersonalizationContext()
+    + (function() { var rc = (typeof getRestaurantPrefContext === 'function') ? getRestaurantPrefContext() : ''; return rc ? ' Dining style preferences: ' + rc : ''; }())
+    + (function() { var rv = (typeof getRVContext === 'function') ? getRVContext() : ''; return rv ? ' ' + rv : ''; }());
   var body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { maxOutputTokens: 800, temperature: 0.75 }
@@ -10855,12 +10937,19 @@ function openCampInfo(dayNum) {
   document.getElementById('ai-info-modal').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
   fetchAimPhotos(campName + ' campground ' + loc);
-  fetchCampInfo(campName, loc);
+  fetchCampInfo(campName, loc, d.stopId);
 }
-function fetchCampInfo(campName, location) {
+function fetchCampInfo(campName, location, stopId) {
   var _campAmps = (appState.tripSettings && appState.tripSettings.rvAmps) ? appState.tripSettings.rvAmps + '-amp' : '50-amp';
-  var prompt = 'You are a helpful RV travel guide. Provide a detailed info page for the campground/RV park "'
-    + campName + '" near ' + location + '. Our RV requires ' + _campAmps + ' service.\n\n'
+  var _stayCtx = (typeof _getStayContext === 'function' && stopId) ? _getStayContext(stopId) : '';
+  var _restCtx = (typeof getRestaurantPrefContext === 'function') ? getRestaurantPrefContext() : '';
+  var _rvCtx   = (typeof getRVContext === 'function') ? getRVContext() : '';
+  var prompt = 'You are a helpful RV travel guide. Provide a detailed info page for "'
+    + campName + '" near ' + location + '. Our RV requires ' + _campAmps + ' service. '
+    + (_stayCtx ? 'Note: we are ' + _stayCtx + '. ' : '')
+    + (_rvCtx || '')
+    + (_restCtx ? 'Dining preferences: ' + _restCtx + ' ' : '')
+    + '\n\n'
     + 'CRITICAL: Output ONE raw JSON object on its own line first — NO markdown fences:\n'
     + '{"address":"full street address","phone":"phone number or empty","website":"url or empty","nightly":"$XX/night or range","hookups":"full/water-electric/dry","amps":"30/50/both or unknown","checkIn":"3pm","checkOut":"11am","googleRating":4.2,"reviewCount":340}\n\n'
     + 'Then output sections with EXACT bold headers:\n'

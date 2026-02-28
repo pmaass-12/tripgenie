@@ -135,10 +135,15 @@ tripgenie/
 
 ---
 
+- Session 11 (2026-02-28):
+  - **Accommodation toggle in day detail modal (sleep row)**: The "Evening at Camp/Hotel/Cabin/Rental" row in the day schedule now shows 4 inline tap buttons (🏕️ Camp, 🏨 Hotel, 🌲 Cabin, 🏠 Rental). Active type is highlighted blue. `_cycleToStayType(stopId, targetType)` applies immediately and re-renders the blocks — no save button needed.
+  - **AI prompt enrichment**: `fetchCampInfo` now injects stay type context (`_getStayContext`), RV context (`getRVContext`), and restaurant prefs (`getRestaurantPrefContext`). `fetchAreaInfo` now appends restaurant prefs and RV context. AI suggestions are now fully personalized.
+  - **Gallery/Journal photo unification**: `_addToPhotoPool(dataUrl, opts)` helper stores all photos in `appState.photoPool[]` with `{id, dataUrl, timestamp, caption, stopId, dayNum, source}`. Journal photos tagged `source:'journal'`, gallery uploads tagged `source:'gallery'`. `renderGalleryTab` merges photoPool photos with journal photos. Cross-tab visibility: journal photos appear in Gallery, gallery uploads accessible from Journal.
+
+---
+
 ## Suggested Next Steps
-- Push to GitHub (git push) when network is available — commits pending from sessions 8-10
+- Push to GitHub (git push) when network is available — commits pending from sessions 8-11
 - User needs to create Mapbox public token at mapbox.com (no secret scopes), then enter it in Trip Settings → RV Profile & Map Routing
-- Inject `_getStayContext(stopId)` into campground and area-info AI prompts (already written, just needs wiring)
-- Inject `getRestaurantPrefContext()` into campground + area info AI prompts alongside `getDietContext()`
-- Gallery/Journal photo unification (all photos in one pool, accessible from either tab)
 - Consider adding "Nashville" and "Fredericksburg" as proper TRIP_STOPS entries (currently inferred from TRIP_DAYS but no markers on map)
+- Test voice chat on actual iPhone/iPad — may need microphone permission prompt handling
