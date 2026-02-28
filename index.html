@@ -783,8 +783,8 @@
 
       /* ── Map: fill available height instead of hard-coded 100vh ── */
       #tab-map > div { height: 100% !important; min-height: 0 !important; }
-      #map-container { min-height: 0 !important; }
-      .map-nav-wrap { display:flex; flex:1; min-height:0; gap:0; border-radius:var(--radius); overflow:hidden; border:1px solid var(--border); box-shadow:var(--shadow); }
+      #map-container { min-height: 0 !important; height: 100% !important; }
+      .map-nav-wrap { display:flex; flex:1; min-height:0; height: 100%; gap:0; border-radius:var(--radius); overflow:hidden; border:1px solid var(--border); box-shadow:var(--shadow); }
       #map-stop-nav { width:248px; flex-shrink:0; background:var(--card); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
       #map-nav-list { overflow-y:auto; flex:1; padding:6px; display:flex; flex-direction:column; gap:3px; }
       .nav-stop-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; background:var(--bg); border:1.5px solid transparent; cursor:grab; user-select:none; -webkit-user-select:none; transition:background .12s, border-color .12s, box-shadow .12s; }
