@@ -781,22 +781,9 @@
       /* No bottom padding needed since nav is in-flow, not overlapping */
       .tab-panel { padding: 12px !important; }
 
-      /* ── Map: fill available height instead of hard-coded 100vh ── */
+      /* ── Map: fill available height (mobile override only) ── */
       #tab-map > div { height: 100% !important; min-height: 0 !important; }
       #map-container { min-height: 0 !important; height: 100% !important; }
-      .map-nav-wrap { display:flex; flex:1; min-height:0; height: 100%; gap:0; border-radius:var(--radius); overflow:hidden; border:1px solid var(--border); box-shadow:var(--shadow); }
-      #map-stop-nav { width:248px; flex-shrink:0; background:var(--card); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
-      #map-nav-list { overflow-y:auto; flex:1; padding:6px; display:flex; flex-direction:column; gap:3px; }
-      .nav-stop-item { display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:8px; background:var(--bg); border:1.5px solid transparent; cursor:grab; user-select:none; -webkit-user-select:none; transition:background .12s, border-color .12s, box-shadow .12s; }
-      .nav-stop-item:hover { background:var(--blue-l); border-color:rgba(44,95,138,.25); }
-      .nav-stop-item.nav-drag-over { border-color:var(--orange) !important; background:var(--orange-l) !important; box-shadow:0 0 0 2px rgba(232,129,58,.18); }
-      .nav-stop-item.nav-dragging { opacity:.4; }
-      @media (max-width:480px) {
-        .map-nav-wrap { flex-direction:column; }
-        #map-stop-nav { width:100%; max-height:110px; border-right:none; border-bottom:1px solid var(--border); }
-        #map-nav-list { flex-direction:row; overflow-x:auto; overflow-y:hidden; padding:5px 6px; gap:5px; }
-        .nav-stop-item { flex-shrink:0; min-width:120px; }
-      }
 
       /* ── Journal: stack meta fields single-column ───────────────── */
       .journal-meta-grid {
@@ -2060,6 +2047,21 @@
     .screen { padding: 44px 60px 44px; }
   }
 
+  /* ── Map stop navigator: always side-by-side (row) layout ───────── */
+  .map-nav-wrap { display:flex; flex-direction:row; flex:1; min-height:0; gap:0; border-radius:var(--radius); overflow:hidden; border:1px solid var(--border); box-shadow:var(--shadow); }
+  #map-stop-nav { width:220px; flex-shrink:0; background:var(--card); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
+  #map-nav-list { overflow-y:auto; flex:1; padding:6px; display:flex; flex-direction:column; gap:3px; }
+  .nav-stop-item { display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:8px; background:var(--bg); border:1.5px solid transparent; cursor:grab; user-select:none; -webkit-user-select:none; transition:background .12s, border-color .12s, box-shadow .12s; }
+  .nav-stop-item:hover { background:var(--blue-l); border-color:rgba(44,95,138,.25); }
+  .nav-stop-item.nav-drag-over { border-color:var(--orange) !important; background:var(--orange-l) !important; box-shadow:0 0 0 2px rgba(232,129,58,.18); }
+  .nav-stop-item.nav-dragging { opacity:.4; }
+  @media (max-width:480px) {
+    .map-nav-wrap { flex-direction:column !important; }
+    #map-stop-nav { width:100% !important; max-height:110px; border-right:none; border-bottom:1px solid var(--border); }
+    #map-nav-list { flex-direction:row !important; overflow-x:auto; overflow-y:hidden; padding:5px 6px; gap:5px; }
+    .nav-stop-item { flex-shrink:0; min-width:110px; }
+  }
+
   </style>
 </head>
 <body>
@@ -2385,9 +2387,12 @@
         <div class="map-nav-wrap">
           <!-- Stop navigator sidebar -->
           <div id="map-stop-nav">
-            <div style="padding:9px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+            <div style="padding:8px 10px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:6px;">
               <span style="font-size:.7rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--text-2);">Stops</span>
-              <span style="font-size:.65rem;color:var(--text-3);display:flex;align-items:center;gap:3px;"><i class="fa-solid fa-grip-vertical" style="font-size:.6rem;"></i> drag to reorder</span>
+              <div style="display:flex;align-items:center;gap:5px;">
+                <span style="font-size:.6rem;color:var(--text-3);display:flex;align-items:center;gap:2px;"><i class="fa-solid fa-grip-vertical" style="font-size:.55rem;"></i> drag</span>
+                <button onclick="_mapAddStopOpen({lat:39,lng:-98})" title="Add a new stop" style="background:var(--orange);border:none;color:#fff;border-radius:6px;padding:3px 7px;font-size:.7rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:3px;line-height:1;"><i class="fa-solid fa-plus"></i> Add</button>
+              </div>
             </div>
             <div id="map-nav-list"></div>
           </div>
@@ -4834,9 +4839,11 @@ function _mapAddStopOpen(latlng) {
     }).join('');
 
   /* Reset fields */
-  document.getElementById('map-add-stop-loc').textContent = 'Looking up location…';
+  var _isButtonOpen = (latlng.lat === 39 && latlng.lng === -98); /* sentinel for button-triggered open */
+  document.getElementById('map-add-stop-loc').textContent = _isButtonOpen ? 'Enter a city or destination below' : 'Looking up location…';
   document.getElementById('map-add-stop-name').value = '';
   document.getElementById('map-add-stop-nights').value = '2';
+  if (_isButtonOpen) { document.getElementById('map-add-stop-name').focus(); return; }
 
   /* Reverse geocode via Nominatim */
   fetch('https://nominatim.openstreetmap.org/reverse?format=json&lat=' + latlng.lat + '&lon=' + latlng.lng + '&zoom=10', {
