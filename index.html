@@ -5036,38 +5036,56 @@ function phaseHeaderHtml(phase, firstDay) {
   var _arrowOn  = 'background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);color:#fff;border-radius:50%;width:26px;height:26px;font-size:.68rem;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s,border-color .15s;';
   var _arrowOff = 'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:rgba(255,255,255,.2);border-radius:50%;width:26px;height:26px;font-size:.68rem;cursor:default;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;';
 
-  return '<div style="background:var(--blue);color:#fff;border-radius:var(--radius-s);margin:20px 0 8px;overflow:hidden;">'
-    /* ── Row 1: location info ── */
-    + '<div style="display:flex;align-items:center;gap:10px;padding:11px 14px;">'
-    + '<div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">'
-    + '<button onclick="event.stopPropagation();movePhase(' + firstDay.stopId + ',\'' + _safePhase + '\',\'up\')" style="' + (_phIsFirst ? _arrowOff : _arrowOn) + '" ' + (_phIsFirst ? 'disabled' : '') + ' title="Move stop earlier"><i class="fa-solid fa-chevron-up"></i></button>'
-    + '<button onclick="event.stopPropagation();movePhase(' + firstDay.stopId + ',\'' + _safePhase + '\',\'down\')" style="' + (_phIsLast ? _arrowOff : _arrowOn) + '" ' + (_phIsLast ? 'disabled' : '') + ' title="Move stop later"><i class="fa-solid fa-chevron-down"></i></button>'
+  /* Shared icon-button style for reorder arrows */
+  var _iBtn  = 'background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:8px;width:26px;height:26px;font-size:.62rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;';
+  var _iBtnD = 'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.18);border-radius:8px;width:26px;height:26px;font-size:.62rem;cursor:default;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;';
+
+  return '<div style="display:flex;align-items:center;gap:0;padding:11px 16px;background:var(--blue);color:#fff;border-radius:10px;margin:18px 0 6px;flex-wrap:wrap;row-gap:8px;">'
+
+    /* ── Left: reorder column ── */
+    + '<div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0;margin-right:12px;">'
+    + '<button onclick="event.stopPropagation();movePhase(' + firstDay.stopId + ',\'' + _safePhase + '\',\'up\')" style="' + (_phIsFirst ? _iBtnD : _iBtn) + '" ' + (_phIsFirst ? 'disabled' : '') + ' title="Move earlier"><i class="fa-solid fa-chevron-up"></i></button>'
+    + '<button onclick="event.stopPropagation();movePhase(' + firstDay.stopId + ',\'' + _safePhase + '\',\'down\')" style="' + (_phIsLast ? _iBtnD : _iBtn) + '" ' + (_phIsLast ? 'disabled' : '') + ' title="Move later"><i class="fa-solid fa-chevron-down"></i></button>'
     + '</div>'
-    + '<div style="flex:1;min-width:0;">'
-    + '<div style="font-weight:900;font-size:1.05rem;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _displayPhase + '</div>'
-    + '<div style="font-size:.74rem;opacity:.85;margin-top:3px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
-    + '<span>' + totalNights + ' night' + (totalNights !== 1 ? 's' : '') + (extras > 0 ? ' (+' + extras + ')' : '') + '</span>'
-    + (firstDay.springBreak ? '<span style="background:rgba(255,255,255,.25);border-radius:20px;padding:1px 8px;font-size:.7rem;font-weight:700;">&#127775; Spring Break</span>' : '')
-    + '<button onclick="event.stopPropagation();_cycleStayType(' + firstDay.stopId + ')" title="Tap to change accommodation type" style="background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:20px;padding:2px 8px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;">'
-    + _getStayMeta(firstDay.stopId).icon + ' ' + _getStayMeta(firstDay.stopId).label
+
+    /* ── Center: name + meta ── */
+    + '<div style="flex:1;min-width:160px;">'
+    + '<div style="font-weight:900;font-size:1.08rem;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;">' + _displayPhase + '</div>'
+    + '<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+    + '<span style="font-size:.75rem;opacity:.7;font-weight:600;">' + totalNights + ' night' + (totalNights !== 1 ? 's' : '') + (extras > 0 ? ' <span style="opacity:.7">(+' + extras + ')</span>' : '') + '</span>'
+    + '<span style="opacity:.35;font-size:.7rem;">·</span>'
+    + '<button onclick="event.stopPropagation();_cycleStayType(' + firstDay.stopId + ')" title="Change accommodation type" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">'
+    + _getStayMeta(firstDay.stopId).icon + '&thinsp;' + _getStayMeta(firstDay.stopId).label
     + '</button>'
+    + (firstDay.springBreak ? '<span style="background:rgba(255,215,0,.2);border:1px solid rgba(255,215,0,.4);border-radius:6px;padding:2px 7px;font-size:.68rem;font-weight:700;color:rgba(255,230,100,.95);">&#127775; Spring Break</span>' : '')
     + '</div>'
     + '</div>'
-    + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0;">'
+
+    /* ── Right: controls cluster ── */
+    + '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:12px;flex-wrap:wrap;justify-content:flex-end;">'
+
+    /* Weather */
     + _wxHtml
-    + '<button onclick="event.stopPropagation();_openMusicForStop(' + firstDay.stopId + ')" title="Local Music" style="background:#1DB954;border:none;color:#fff;border-radius:50%;width:30px;height:30px;font-size:.85rem;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;padding:0;">&#127926;</button>'
+
+    /* Music */
+    + '<button onclick="event.stopPropagation();_openMusicForStop(' + firstDay.stopId + ')" title="Local Music" style="background:#1DB954;border:none;color:#fff;border-radius:8px;width:30px;height:30px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;">&#127926;</button>'
+
+    /* Divider */
+    + '<div style="width:1px;height:22px;background:rgba(255,255,255,.2);flex-shrink:0;"></div>'
+
+    /* Area Info */
+    + '<button onclick="event.stopPropagation();openAreaInfo(\'' + _safePhase + '\',' + firstDay.stopId + ')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:5px 11px;font-size:.73rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">&#128269; Area Info</button>'
+
+    /* − Days + */
+    + '<div style="display:inline-flex;align-items:center;gap:0;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;overflow:hidden;flex-shrink:0;">'
+    + '<button onclick="event.stopPropagation();removePhaseDay(' + firstDay.stopId + ')" style="background:none;border:none;color:#fff;width:28px;height:28px;font-size:1rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s;" title="Remove a day">&#8722;</button>'
+    + '<span style="font-size:.65rem;font-weight:700;opacity:.6;letter-spacing:.04em;padding:0 2px;">DAYS</span>'
+    + '<button onclick="event.stopPropagation();addPhaseDay(' + firstDay.stopId + ')" style="background:none;border:none;color:#fff;width:28px;height:28px;font-size:1rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s;" title="Add a day">&#43;</button>'
     + '</div>'
-    + '</div>'
-    /* ── Row 2: action strip ── */
-    + '<div style="display:flex;align-items:center;gap:6px;padding:7px 14px;border-top:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.12);flex-wrap:wrap;">'
-    + '<button onclick="event.stopPropagation();openAreaInfo(\'' + _safePhase + '\',' + firstDay.stopId + ')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:6px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">&#128269; Area Info</button>'
-    + '<div style="flex:1;"></div>'
-    + '<div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">'
-    + '<button onclick="event.stopPropagation();removePhaseDay(' + firstDay.stopId + ')" style="' + btnStyle + '" title="Remove a day">&#8722;</button>'
-    + '<span style="font-size:.68rem;font-weight:800;opacity:.85;letter-spacing:.02em;white-space:nowrap;">Days</span>'
-    + '<button onclick="event.stopPropagation();addPhaseDay(' + firstDay.stopId + ')" style="' + btnStyle + '" title="Add a day">&#43;</button>'
-    + '</div>'
-    + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + _safePhase + '\')" style="background:rgba(220,80,60,.35);border:1px solid rgba(255,100,80,.5);color:#fff;border-radius:100px;padding:6px 10px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Remove this stop from trip">&#128465;&#65039; Remove</button>'
+
+    /* Remove (destructive — subtle) */
+    + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + _safePhase + '\')" style="background:rgba(220,60,50,.25);border:1px solid rgba(255,90,80,.3);color:rgba(255,180,170,.9);border-radius:8px;padding:5px 10px;font-size:.72rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;" title="Remove this stop">&#128465;&#65039;</button>'
+
     + '</div>'
     + '</div>';
 }
