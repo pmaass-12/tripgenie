@@ -12922,7 +12922,16 @@ function renderTripSettings() {
   html += '<input id="ts-max-days" type="number" min="1" max="30" value="' + _tsMaxDays + '" style="width:72px;padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius-s);font-size:1rem;background:var(--bg);color:var(--text);outline:none;" />';
   html += '<span style="color:var(--text-muted);font-size:.9rem;">days maximum at any single stop</span>';
   html += '</div>';
-  html += '<div style="font-size:.75rem;color:var(--text-3);margin-top:4px;">TripOptimizer will suggest trimming stops that exceed this limit.</div>';
+  // Show which stops are currently over the limit
+  var _overList = _getOverstayedStops(_tsMaxDays);
+  if (_overList.length) {
+    html += '<div style="margin-top:8px;padding:8px 10px;background:#fff3cd;border:1px solid #f0c040;border-radius:8px;font-size:.78rem;color:#7a5c00;">';
+    html += '<strong>⚠️ ' + _overList.length + ' stop' + (_overList.length > 1 ? 's' : '') + ' exceed this limit:</strong> ' + _overList.join(', ');
+    html += '<div style="margin-top:6px;"><button onclick="_enforceMaxDays()" style="background:#E8813A;color:#fff;border:none;border-radius:6px;padding:5px 12px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);">✂️ Trim to ' + _tsMaxDays + ' nights now</button></div>';
+    html += '</div>';
+  } else {
+    html += '<div style="font-size:.75rem;color:var(--text-3);margin-top:4px;">✅ All stops are within this limit.</div>';
+  }
   html += '</div>';
 
   // Save button
@@ -16641,6 +16650,55 @@ function _getOverstayedStops(maxDays) {
   return Object.keys(counts)
     .filter(function(id) { return counts[id] > maxDays; })
     .map(function(id) { return names[id] + ' (' + counts[id] + ' days)'; });
+}
+
+function _enforceMaxDays() {
+  var maxDays = (appState.tripSettings && appState.tripSettings.maxDaysPerStop) || 5;
+  var _removedIds = appState.removedStops || {};
+  var _homeStop = (typeof _tripHomeStop === 'function') ? _tripHomeStop() : null;
+  var _homeId = _homeStop ? _homeStop.id : 15;
+
+  /* Count days per stop */
+  var counts = {};
+  TRIP_DAYS.forEach(function(d) {
+    if (!d.stopId || d.phase === 'drive' || d.sleepType === 'home' || _removedIds[d.stopId]) return;
+    counts[d.stopId] = (counts[d.stopId] || 0) + 1;
+  });
+
+  /* For each over-limit stop, remove excess days (from the end of that stop's block) */
+  var trimmed = 0;
+  Object.keys(counts).forEach(function(stopId) {
+    var excess = counts[stopId] - maxDays;
+    if (excess <= 0) return;
+    /* Find all day indices for this stop, remove the last `excess` ones */
+    var stopDayIndices = [];
+    TRIP_DAYS.forEach(function(d, i) {
+      if (String(d.stopId) === String(stopId)) stopDayIndices.push(i);
+    });
+    /* Remove from the end, in reverse order so indices stay valid */
+    var toRemove = stopDayIndices.slice(-excess);
+    for (var r = toRemove.length - 1; r >= 0; r--) {
+      TRIP_DAYS.splice(toRemove[r], 1);
+    }
+    trimmed += excess;
+  });
+
+  if (!trimmed) { showToast('All stops already within ' + maxDays + '-night limit ✅', 2500); return; }
+
+  /* Re-date all days */
+  var _startMs = new Date(CONFIG.startDate + 'T12:00:00').getTime();
+  TRIP_DAYS.forEach(function(d, i) {
+    d.day = i + 1;
+    var dt = new Date(_startMs + i * 86400000);
+    d.date = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
+  });
+
+  appState.customTripData = { stops: TRIP_STOPS.slice(), days: TRIP_DAYS.slice() };
+  saveState(appState);
+  renderSchedule();
+  renderTripSettings();
+  if (window.mainMap) setTimeout(function() { _clearAndRebuildMapMarkers(window.mainMap); }, 200);
+  showToast('✂️ Trimmed ' + trimmed + ' day' + (trimmed !== 1 ? 's' : '') + ' — all stops now ≤ ' + maxDays + ' nights', 3000);
 }
 
 /* ── TRIP OPTIMIZER ──────────────────────────────────────────────────
