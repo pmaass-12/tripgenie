@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-02-28 (Session 14)
+2026-02-28 (Session 15)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -179,6 +179,27 @@ tripgenie/
   - **Login screen date pre-loading**: Added pre-login date updater in the page startup IIFE. Before the user logs in, reads `rv_app_state` from localStorage and updates the login screen's trip name, date range, and day count to reflect the user's saved custom trip data. Falls back gracefully to hardcoded defaults if nothing is saved. Keeps login screen accurate after the user customizes trip dates or adds/removes stops.
 
 ---
+
+---
+
+- Session 15 (2026-02-28):
+  - **Multi-user Supabase auth + My Trips dashboard**: Implemented complete per-user authentication flow with Supabase JS v2 SDK.
+  - **Supabase client initialization**: Added `_initSbClient()` function after SUPA constants that creates a new supabase-js v2 client instance once and caches it. Global vars: `_sbClient`, `_sbUser`, `_currentTripId`.
+  - **Enhanced login form**: Updated HTML to show email + password fields + Sign In / Create Account mode toggle tabs. Forgot Password link appears only in Sign In mode. All inputs styled consistently with existing design tokens.
+  - **Auth mode functions**: `_setLoginMode(mode)` toggles between 'signin' and 'signup' modes, updating button styles and showing/hiding Forgot Password link. `_doForgotPassword()` calls Supabase `resetPasswordForEmail` API and shows success/error toast.
+  - **Rewritten doLogin()**: Now async. If email is provided, routes to Supabase: `signUp()` for signup mode, `signInWithPassword()` for signin mode. Detects unconfirmed email in signup and shows toast. On success, sets `_sbUser` and calls `_showMyTrips()`. If no email, falls through to `_doLegacyLogin()` (password-only family/friend/viewer modes for backward compatibility).
+  - **My Trips dashboard (`_showMyTrips`)**: Fetches user's trips from Supabase `trips` table, displays as 2-column grid of trip cards. Each card shows trip name, date range, last updated timestamp. Buttons: "Open Trip" (loads trip_data into appState), "Delete" (removes from DB). "New Trip" button opens the wizard. Email in header.
+  - **Trip card rendering (`_renderTripCards`)**: Renders array of trips as cards with emoji icons, trip name, dates, updated timestamp, and Open/Delete buttons. Includes "New Trip" CTA card with dashed border and plus icon.
+  - **Open trip (`_openTrip`)**: Loads trip_data from Supabase, merges into appState, persists to localStorage, closes overlays, and calls `_doLegacyInitAfterSbAuth()` to launch the app.
+  - **Delete trip (`_deleteTrip`)**: Confirms deletion, removes from Supabase `trips` table, refreshes My Trips list.
+  - **New Trip Wizard (`_showNewTripWizard`)**: Step 1 collects trip name, trip type (US Road, RV, International, Blank), start/end dates. Types us_road/rv clone TRIP_STOPS + TRIP_DAYS; international prompts for destinations; blank starts empty. Step 2 (for international): add destinations with geocoding via Nominatim API (free, no key) — resolves lat/lng and lets user specify nights per stop. Creates full trip data structure, inserts into Supabase `trips` table, and launches app.
+  - **_createTripFromSettings()**: Takes wizard options and builds complete appState.customTripData (stops array, days array with proper sequencing, dates, total days, miles, trip name). Handles template cloning (us_road/rv), international (from geocoded stops), or blank (single stop, N days). Saves to localStorage, inserts trip row to DB, then launches app.
+  - **Per-user trip sync (`_syncToSupabaseTrips`)**: Debounced to 1200ms. On first save, creates new `trips` table row with user_id. On subsequent saves, updates existing trip's trip_data JSON. Called from `saveState()` only if `_sbUser` is set (Supabase auth active).
+  - **Sign out button (`_sbSignOut`)**: Clears Supabase session via `client.auth.signOut()`, clears global vars, removes rv_session from localStorage, and reloads page to show login screen.
+  - **My Trips and New Trip Wizard overlays**: Added 2 new overlay divs (`#my-trips-overlay`, `#new-trip-wizard-overlay`) with fixed positioning, flexbox centering, and appropriate z-index (9000 and 9100). Styled consistently with existing design tokens and modal patterns. New Trip Wizard has close button (×) and supports click-outside to dismiss.
+  - **Backward compatibility**: Legacy password-only auth (CONFIG.password, CONFIG.viewerPassword, CONFIG.friendsPassword) still works via `_doLegacyLogin()`. No email required — existing users can keep using family/friend/viewer passwords. Both flows coexist.
+  - **File changes**: index.html increased from ~20,132 to ~20,656 lines (524 lines added). All changes are insertions/additions; no existing functionality removed.
+
 
 ## Suggested Next Steps
 - **0-day waypoint stops**: User wants stops with 0 nights for driving waypoints (fuel, Walmart overnight, route planning) — not yet built
