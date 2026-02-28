@@ -2080,77 +2080,32 @@
       <span id="login-trip-dates">Feb 28 – Apr 14, 2026</span>
     </div>
 
-    <!-- Profile picker — choose who you are FIRST -->
-    <div style="margin-bottom:20px;">
-      <div style="font-size:.75rem;font-weight:700;color:var(--text-2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;">Choose Profile</div>
-      <div class="login-family" style="margin-top:0;">
-        <div class="family-avatar">
-          <button class="login-profile-btn" id="profile-btn-Paul" onclick="selectLoginProfile('Paul')" type="button" title="Paul">
-            <div class="avatar-circle" style="background:#2C5F8A">P</div>
-          </button>
-          <span class="avatar-name">Paul</span>
-        </div>
-        <div class="family-avatar">
-          <button class="login-profile-btn" id="profile-btn-Melissa" onclick="selectLoginProfile('Melissa')" type="button" title="Melissa">
-            <div class="avatar-circle" style="background:#3A8A5C">M</div>
-          </button>
-          <span class="avatar-name">Melissa</span>
-        </div>
-        <div class="family-avatar">
-          <button class="login-profile-btn" id="profile-btn-Leila" onclick="selectLoginProfile('Leila')" type="button" title="Leila">
-            <div class="avatar-circle" style="background:#E8813A">L</div>
-          </button>
-          <span class="avatar-name">Leila, 9</span>
-        </div>
-        <div class="family-avatar">
-          <button class="login-profile-btn" id="profile-btn-Luna" onclick="selectLoginProfile('Luna')" type="button" title="Luna">
-            <div class="avatar-circle" style="background:#7B5EA7">L</div>
-          </button>
-          <span class="avatar-name">Luna, 4</span>
-        </div>
-        <div class="family-avatar">
-          <button class="login-profile-btn" id="profile-btn-Eli" onclick="selectLoginProfile('Eli')" type="button" title="Eli">
-            <div class="avatar-circle" style="background:#D4A017">E</div>
-          </button>
-          <span class="avatar-name">Eli, 2</span>
-        </div>
-      </div>
-    </div>
-
     <div class="login-form" id="login-form">
-      <!-- Family password (default flow — no email needed) -->
-      <div style="margin-bottom:16px;">
-        <input type="password" id="password-input" placeholder="Family password" autocomplete="current-password"
+      <!-- Auth mode toggle -->
+      <div id="login-mode-tabs" style="display:flex;gap:0;background:rgba(255,255,255,.12);border-radius:10px;padding:3px;margin-bottom:14px;">
+        <button id="login-tab-in"  onclick="_setLoginMode('signin')"  style="flex:1;background:rgba(255,255,255,.9);color:#2C5F8A;border:none;border-radius:7px;padding:7px 0;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);transition:all .2s;">Sign In</button>
+        <button id="login-tab-up"  onclick="_setLoginMode('signup')"  style="flex:1;background:none;color:rgba(255,255,255,.75);border:none;border-radius:7px;padding:7px 0;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);transition:all .2s;">Create Account</button>
+      </div>
+      <!-- Email -->
+      <div style="margin-bottom:10px;">
+        <input type="email" id="email-input" placeholder="Email address" autocomplete="email"
           style="width:100%;box-sizing:border-box;padding:12px 16px;border:2px solid rgba(255,255,255,.25);border-radius:12px;background:rgba(255,255,255,.15);color:#fff;font-size:.95rem;font-family:var(--font);outline:none;"
           onkeydown="if(event.key==='Enter')doLogin()" />
       </div>
+      <!-- Password -->
+      <div style="margin-bottom:6px;">
+        <input type="password" id="password-input" placeholder="Password" autocomplete="current-password"
+          style="width:100%;box-sizing:border-box;padding:12px 16px;border:2px solid rgba(255,255,255,.25);border-radius:12px;background:rgba(255,255,255,.15);color:#fff;font-size:.95rem;font-family:var(--font);outline:none;"
+          onkeydown="if(event.key==='Enter')doLogin()" />
+      </div>
+      <!-- Forgot password -->
+      <div id="login-forgot-wrap" style="text-align:right;margin-bottom:10px;">
+        <a href="#" onclick="event.preventDefault();_doForgotPassword()" style="color:rgba(255,255,255,.55);font-size:.75rem;text-decoration:underline;">Forgot password?</a>
+      </div>
       <div class="login-error" id="login-error"></div>
       <button id="login-submit-btn" class="login-btn" type="button" onclick="doLogin()">
-        <i class="fa-solid fa-unlock-keyhole"></i> Let's Go!
+        <i class="fa-solid fa-arrow-right"></i> Continue
       </button>
-
-      <!-- New user / external account toggle -->
-      <div style="text-align:center;margin-top:14px;">
-        <a href="#" id="login-ext-toggle" onclick="event.preventDefault();_toggleEmailLogin()" style="color:rgba(255,255,255,.55);font-size:.75rem;text-decoration:none;border-bottom:1px solid rgba(255,255,255,.25);">New user? Sign in with email →</a>
-      </div>
-
-      <!-- Email auth section (hidden by default) -->
-      <div id="login-email-section" style="display:none;margin-top:16px;border-top:1px solid rgba(255,255,255,.2);padding-top:16px;">
-        <!-- Auth mode toggle -->
-        <div id="login-mode-tabs" style="display:flex;gap:0;background:rgba(255,255,255,.12);border-radius:10px;padding:3px;margin-bottom:12px;">
-          <button id="login-tab-in"  onclick="_setLoginMode('signin')"  style="flex:1;background:rgba(255,255,255,.9);color:#2C5F8A;border:none;border-radius:7px;padding:7px 0;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);transition:all .2s;">Sign In</button>
-          <button id="login-tab-up"  onclick="_setLoginMode('signup')"  style="flex:1;background:none;color:rgba(255,255,255,.75);border:none;border-radius:7px;padding:7px 0;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);transition:all .2s;">Create Account</button>
-        </div>
-        <div style="margin-bottom:10px;">
-          <input type="email" id="email-input" placeholder="Email address" autocomplete="email"
-            style="width:100%;box-sizing:border-box;padding:12px 16px;border:2px solid rgba(255,255,255,.25);border-radius:12px;background:rgba(255,255,255,.15);color:#fff;font-size:.95rem;font-family:var(--font);outline:none;"
-            onkeydown="if(event.key==='Enter')doLogin()" />
-        </div>
-        <!-- Forgot password link -->
-        <div id="login-forgot-wrap" style="text-align:right;margin-bottom:4px;display:none;">
-          <a href="#" onclick="event.preventDefault();_doForgotPassword()" style="color:rgba(255,255,255,.65);font-size:.77rem;text-decoration:underline;">Forgot password?</a>
-        </div>
-      </div>
     </div>
 
     <!-- Test Mode trigger — flask icon, top-right of card -->
@@ -2162,6 +2117,76 @@
     </button>
   </div>
 </div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  PROFILE PICKER OVERLAY (shown after email auth)                -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="profile-picker-overlay" style="display:none;position:fixed;inset:0;z-index:9500;background:linear-gradient(135deg,#1a3a5c 0%,#2C5F8A 60%,#1a3a5c 100%);align-items:center;justify-content:center;">
+  <div style="background:rgba(255,255,255,.1);backdrop-filter:blur(16px);border-radius:24px;padding:36px 28px;width:min(460px,92vw);box-shadow:0 24px 64px rgba(0,0,0,.5);border:1px solid rgba(255,255,255,.2);">
+    <div style="text-align:center;margin-bottom:28px;">
+      <div style="font-size:2.2rem;margin-bottom:10px;">👋</div>
+      <div style="color:#fff;font-size:1.35rem;font-weight:900;margin-bottom:6px;">Who's joining the adventure?</div>
+      <div style="color:rgba(255,255,255,.6);font-size:.85rem;">Pick your profile to continue</div>
+    </div>
+
+    <!-- Family profiles -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:24px;" id="ppo-family-grid">
+      <div onclick="_pickProfile('Paul','#2C5F8A','P')" style="cursor:pointer;text-align:center;padding:8px 4px;border-radius:14px;transition:background .15s;" class="ppo-item">
+        <div class="ppo-avatar" id="ppo-av-Paul" style="background:#2C5F8A;">P</div>
+        <div class="ppo-name">Paul</div>
+      </div>
+      <div onclick="_pickProfile('Melissa','#3A8A5C','M')" style="cursor:pointer;text-align:center;padding:8px 4px;border-radius:14px;transition:background .15s;" class="ppo-item">
+        <div class="ppo-avatar" id="ppo-av-Melissa" style="background:#3A8A5C;">M</div>
+        <div class="ppo-name">Melissa</div>
+      </div>
+      <div onclick="_pickProfile('Leila','#E8813A','L')" style="cursor:pointer;text-align:center;padding:8px 4px;border-radius:14px;transition:background .15s;" class="ppo-item">
+        <div class="ppo-avatar" id="ppo-av-Leila" style="background:#E8813A;">L</div>
+        <div class="ppo-name">Leila, 9</div>
+      </div>
+      <div onclick="_pickProfile('Luna','#7B5EA7','L')" style="cursor:pointer;text-align:center;padding:8px 4px;border-radius:14px;transition:background .15s;" class="ppo-item">
+        <div class="ppo-avatar" id="ppo-av-Luna" style="background:#7B5EA7;">L</div>
+        <div class="ppo-name">Luna, 4</div>
+      </div>
+      <div onclick="_pickProfile('Eli','#D4A017','E')" style="cursor:pointer;text-align:center;padding:8px 4px;border-radius:14px;transition:background .15s;" class="ppo-item">
+        <div class="ppo-avatar" id="ppo-av-Eli" style="background:#D4A017;">E</div>
+        <div class="ppo-name">Eli, 2</div>
+      </div>
+    </div>
+
+    <!-- Divider -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+      <div style="flex:1;height:1px;background:rgba(255,255,255,.2);"></div>
+      <div style="color:rgba(255,255,255,.4);font-size:.75rem;font-weight:700;">OR</div>
+      <div style="flex:1;height:1px;background:rgba(255,255,255,.2);"></div>
+    </div>
+
+    <!-- Custom profile for new/external users -->
+    <div>
+      <div style="color:rgba(255,255,255,.65);font-size:.8rem;font-weight:700;margin-bottom:10px;text-align:center;">Create your own profile</div>
+      <div style="display:flex;gap:8px;margin-bottom:14px;">
+        <!-- Color swatches -->
+        <div style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
+          <div id="ppo-swatch-1" onclick="_pickSwatch('#2C5F8A')" style="width:28px;height:28px;border-radius:50%;background:#2C5F8A;cursor:pointer;border:3px solid rgba(255,255,255,.5);transition:transform .15s;"></div>
+          <div id="ppo-swatch-2" onclick="_pickSwatch('#D94F3D')" style="width:28px;height:28px;border-radius:50%;background:#D94F3D;cursor:pointer;border:3px solid transparent;transition:transform .15s;"></div>
+          <div id="ppo-swatch-3" onclick="_pickSwatch('#3A8A5C')" style="width:28px;height:28px;border-radius:50%;background:#3A8A5C;cursor:pointer;border:3px solid transparent;transition:transform .15s;"></div>
+          <div id="ppo-swatch-4" onclick="_pickSwatch('#7B5EA7')" style="width:28px;height:28px;border-radius:50%;background:#7B5EA7;cursor:pointer;border:3px solid transparent;transition:transform .15s;"></div>
+        </div>
+        <input id="ppo-custom-name" type="text" placeholder="Your name" maxlength="20"
+          style="flex:1;padding:10px 14px;border:2px solid rgba(255,255,255,.25);border-radius:10px;background:rgba(255,255,255,.15);color:#fff;font-size:.9rem;font-family:var(--font);outline:none;"
+          oninput="_previewCustomProfile()" onkeydown="if(event.key==='Enter')_confirmCustomProfile()" />
+      </div>
+      <button onclick="_confirmCustomProfile()" style="width:100%;padding:12px;background:rgba(255,255,255,.2);border:1.5px solid rgba(255,255,255,.35);border-radius:12px;color:#fff;font-size:.9rem;font-weight:800;cursor:pointer;font-family:var(--font);transition:all .2s;">
+        <i class="fa-solid fa-check"></i> Use This Profile
+      </button>
+    </div>
+  </div>
+</div>
+<style>
+  .ppo-avatar { width:52px;height:52px;border-radius:50%;color:#fff;font-size:1.3rem;font-weight:900;display:flex;align-items:center;justify-content:center;margin:0 auto 6px;border:3px solid transparent;transition:all .2s; }
+  .ppo-name   { color:rgba(255,255,255,.8);font-size:.72rem;font-weight:700;line-height:1.2; }
+  .ppo-item:hover .ppo-avatar { transform:scale(1.1);box-shadow:0 0 0 4px rgba(255,255,255,.25); }
+  .ppo-item.active .ppo-avatar { border-color:#fff;box-shadow:0 0 0 4px rgba(255,255,255,.3); }
+</style>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!--  APP SHELL                                                       -->
@@ -3788,14 +3813,73 @@ function _updateHeaderProfile() {
 
 var _loginMode = 'signin'; // 'signin' | 'signup'
 
-function _toggleEmailLogin() {
-  var sec = document.getElementById('login-email-section');
-  var lnk = document.getElementById('login-ext-toggle');
-  if (!sec) return;
-  var showing = sec.style.display !== 'none';
-  sec.style.display = showing ? 'none' : 'block';
-  if (lnk) lnk.textContent = showing ? 'New user? Sign in with email →' : '← Back to family login';
-  if (!showing) { var e = document.getElementById('email-input'); if (e) e.focus(); }
+var _ppoColor = '#2C5F8A'; // currently selected swatch color
+
+function _showProfilePicker() {
+  // Check localStorage for a saved profile for this Supabase user
+  var savedProfile = null;
+  try {
+    var _sp = localStorage.getItem('rv_profile_' + (_sbUser && _sbUser.id || 'guest'));
+    if (_sp) savedProfile = JSON.parse(_sp);
+  } catch(e) {}
+
+  if (savedProfile && savedProfile.name) {
+    // Auto-select saved profile, skip picker
+    _applyProfile(savedProfile.name, savedProfile.color || '#2C5F8A');
+    return;
+  }
+
+  // Show the picker overlay
+  var ov = document.getElementById('profile-picker-overlay');
+  if (ov) { ov.style.display = 'flex'; }
+}
+
+function _pickProfile(name, color, initial) {
+  // Highlight selection
+  document.querySelectorAll('.ppo-item').forEach(function(el) { el.classList.remove('active'); });
+  var av = document.getElementById('ppo-av-' + name);
+  if (av) av.closest('.ppo-item').classList.add('active');
+  // Short delay then proceed
+  setTimeout(function() { _applyProfile(name, color); }, 280);
+}
+
+function _pickSwatch(color) {
+  _ppoColor = color;
+  ['ppo-swatch-1','ppo-swatch-2','ppo-swatch-3','ppo-swatch-4'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.borderColor = (el.style.background === color || el.style.backgroundColor === color) ? '#fff' : 'transparent';
+  });
+  _previewCustomProfile();
+}
+
+function _previewCustomProfile() {
+  // Nothing yet — could animate initials
+}
+
+function _confirmCustomProfile() {
+  var nameEl = document.getElementById('ppo-custom-name');
+  var name = nameEl ? nameEl.value.trim() : '';
+  if (!name) { nameEl && (nameEl.style.borderColor = 'rgba(232,79,61,.8)'); nameEl && nameEl.focus(); return; }
+  _applyProfile(name, _ppoColor);
+}
+
+function _applyProfile(name, color) {
+  // Save profile linked to this Supabase user
+  try {
+    localStorage.setItem('rv_profile_' + (_sbUser && _sbUser.id || 'guest'), JSON.stringify({ name: name, color: color }));
+  } catch(e) {}
+
+  // Hide picker
+  var ov = document.getElementById('profile-picker-overlay');
+  if (ov) ov.style.display = 'none';
+
+  // Set globals used by the rest of the app
+  _userName = name;
+  window._loginProfile = name;
+  _saveSession('family', name);
+
+  // Enter app
+  _showMyTrips();
 }
 
 function _setLoginMode(mode) {
@@ -3810,7 +3894,7 @@ function _setLoginMode(mode) {
     inBtn.style.cssText = mode === 'signin' ? activeS : inactiveS;
     upBtn.style.cssText = mode === 'signup' ? activeS : inactiveS;
   }
-  if (forgot) forgot.style.display = mode === 'signin' ? 'block' : 'none';
+  if (forgot) forgot.style.display = mode === 'signup' ? 'none' : 'block';
 }
 
 async function _doForgotPassword() {
@@ -3860,9 +3944,8 @@ async function doLogin() {
       _setLoginMode('signin');
       return;
     }
-    // Persist session in rv_session for next visit
-    _saveSession('family', emailVal.split('@')[0] || 'Traveler');
-    _showMyTrips();
+    // Show profile picker before entering app
+    _showProfilePicker();
     return;
   }
 
