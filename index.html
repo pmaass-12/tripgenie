@@ -21050,6 +21050,8 @@ function _smRenderAll() {
   window.goToScreen  = typeof goToScreen  === 'function' ? goToScreen  : window.goToScreen;
   window.handleTopAction = typeof handleTopAction === 'function' ? handleTopAction : function(){};
   window._smToast    = typeof _smToast    === 'function' ? _smToast    : function(){};
+  window._dmArrived  = typeof _dmArrived  === 'function' ? _dmArrived  : function(){};
+  window._dmDeparted = typeof _dmDeparted === 'function' ? _dmDeparted : function(){};
 
   // SM init — called when switching to simple mode; re-renders on every activation
   window._smActivate = function() {
