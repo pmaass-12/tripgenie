@@ -2931,7 +2931,8 @@
       <div style="font-weight:900;font-size:1.05rem;letter-spacing:-.01em;">TripGenie</div>
       <div style="font-size:.72rem;opacity:.8;">Your AI road-trip assistant — ask anything!</div>
     </div>
-    <button id="tg-voice-toggle" onclick="_tgToggleVoiceMode()" title="Toggle voice readback mode" style="background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:6px 12px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);">🔇 Voice</button>
+    <button id="tg-voice-toggle" onclick="_tgToggleVoiceMode()" title="Toggle voice readback (reads Genie's responses aloud)" style="background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:6px 12px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);">🔇 Voice</button>
+    <button id="tg-hf-btn" onclick="_tgToggleHandsFree()" title="Hands-free: speak → Genie replies → auto-listens" style="background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.25);color:#fff;border-radius:100px;padding:6px 11px;font-size:.88rem;font-weight:700;cursor:pointer;font-family:var(--font);">🎙️</button>
     <button onclick="clearTripGenieHistory()" title="Clear conversation memory" style="background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.25);color:rgba(255,255,255,.8);border-radius:100px;padding:6px 10px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);">🗑️</button>
     <button onclick="closeTripGenie()" style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:100px;padding:6px 14px;font-size:.85rem;font-weight:800;cursor:pointer;font-family:var(--font);">&#215; Close</button>
   </div>
@@ -6931,8 +6932,8 @@ function printTripPlan() {
   .map-page svg { border-radius: 10px; border: 1px solid #c0d4e8; display: block; }
   .map-legend { margin-top: 10px; }
   .map-legend-title { font-size: 8pt; font-weight: 800; color: #555; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 7px; }
-  .legend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px 14px; }
-  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-grid { columns: 3; column-gap: 16px; column-fill: balance; }
+  .legend-item { display: flex; align-items: center; gap: 6px; break-inside: avoid; margin-bottom: 5px; }
   .legend-num { width: 18px; height: 18px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 7pt; flex-shrink: 0; }
   .legend-name { font-size: 8pt; color: #333; line-height: 1.3; }
 
@@ -15627,6 +15628,29 @@ function renderTripSettings() {
   html += '<div style="font-size:.75rem;color:var(--text-3);margin-top:4px;">AI will prioritize this chain when suggesting hotels.</div>';
   html += '</div>';
 
+  // ElevenLabs Voice Settings
+  var _tsElKey   = (appState.tripSettings && appState.tripSettings.elApiKey)  || '';
+  var _tsElVoice = (appState.tripSettings && appState.tripSettings.elVoiceId) || 'EXAVITQu4vr4xnSDxMaL';
+  html += '<div style="background:linear-gradient(135deg,#f5f0ff 0%,#ede5ff 100%);border:1.5px solid #c9b3f5;border-radius:var(--radius-s);padding:14px 16px;">';
+  html += '<div style="font-size:.8rem;font-weight:800;color:#5b21b6;margin-bottom:10px;display:flex;align-items:center;gap:7px;"><span style="font-size:1rem;">🎙️</span> ElevenLabs Voice (Optional)</div>';
+  html += '<div style="font-size:.78rem;color:#6b21a8;margin-bottom:10px;line-height:1.45;">Add your ElevenLabs API key to unlock natural AI voices in TripGenie\'s voice mode and hands-free loop. Without a key, the browser\'s built-in voice is used. <a href="https://elevenlabs.io" target="_blank" style="color:#7c3aed;font-weight:700;">Get a free key at elevenlabs.io →</a></div>';
+  html += '<label style="font-size:.72rem;font-weight:700;color:#5b21b6;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;">API Key</label>';
+  html += '<div style="display:flex;gap:7px;margin-bottom:10px;">';
+  html += '<input id="ts-el-key" type="password" value="' + _tsElKey.replace(/"/g,'&quot;') + '" placeholder="sk-proj-..." style="flex:1;padding:9px 12px;border:1.5px solid #c9b3f5;border-radius:var(--radius-s);font-size:.9rem;font-family:var(--font);background:#fff;color:var(--text);outline:none;" />';
+  html += '<button onclick="var i=document.getElementById(\'ts-el-key\');i.type=i.type===\'password\'?\'text\':\'password\'" style="background:#ede5ff;border:1.5px solid #c9b3f5;color:#5b21b6;border-radius:var(--radius-s);padding:0 12px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;">Show</button>';
+  html += '</div>';
+  html += '<label style="font-size:.72rem;font-weight:700;color:#5b21b6;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;">Voice</label>';
+  html += '<select id="ts-el-voice" style="width:100%;padding:9px 12px;border:1.5px solid #c9b3f5;border-radius:var(--radius-s);font-size:.9rem;font-family:var(--font);background:#fff;color:var(--text);outline:none;margin-bottom:10px;">';
+  html += '<option value="EXAVITQu4vr4xnSDxMaL"' + (_tsElVoice==='EXAVITQu4vr4xnSDxMaL'?' selected':'') + '>Sarah (warm, friendly — recommended)</option>';
+  html += '<option value="21m00Tcm4TlvDq8ikWAM"' + (_tsElVoice==='21m00Tcm4TlvDq8ikWAM'?' selected':'') + '>Rachel (calm, professional)</option>';
+  html += '<option value="AZnzlk1XvdvUeBnXmlld"' + (_tsElVoice==='AZnzlk1XvdvUeBnXmlld'?' selected':'') + '>Domi (young, energetic)</option>';
+  html += '<option value="MF3mGyEYCl7XYWbV9V6O"' + (_tsElVoice==='MF3mGyEYCl7XYWbV9V6O'?' selected':'') + '>Elli (expressive female)</option>';
+  html += '<option value="TxGEqnHWrfWFTfGW9XjX"' + (_tsElVoice==='TxGEqnHWrfWFTfGW9XjX'?' selected':'') + '>Josh (deep male)</option>';
+  html += '<option value="VR6AewLTigWG4xSOukaG"' + (_tsElVoice==='VR6AewLTigWG4xSOukaG'?' selected':'') + '>Arnold (confident male)</option>';
+  html += '</select>';
+  html += '<button onclick="_tsTestElVoice()" style="background:#7c3aed;border:none;color:#fff;border-radius:100px;padding:7px 16px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);">▶ Test Voice</button>';
+  html += '</div>';
+
   // Time Format
   var _tsFmt = (appState.tripSettings && appState.tripSettings.timeFormat) ? appState.tripSettings.timeFormat : '12h';
   html += '<div>';
@@ -16992,7 +17016,9 @@ function saveTripSettings() {
   var _saveLateArr   = ((document.getElementById('ts-latearrival') || {}).value) || '20:00';
   var _saveMaxDays   = Math.max(1, parseInt(((document.getElementById('ts-max-days') || {}).value) || '5') || 5);
   var _saveHotelChain = ((document.getElementById('ts-hotel-chain') || {}).value || '').trim();
-  appState.tripSettings = { startDate: newStart, endDate: newEnd, tripName: newName, totalDays: newDays, rvAmps: _saveAmps, timeFormat: _saveTimeFmt, departureTime: _saveDepTime, latestArrival: _saveLateArr, maxDaysPerStop: _saveMaxDays, hotelChain: _saveHotelChain };
+  var _saveElKey      = ((document.getElementById('ts-el-key')      || {}).value || '').trim();
+  var _saveElVoice    = ((document.getElementById('ts-el-voice')    || {}).value || '') || 'EXAVITQu4vr4xnSDxMaL';
+  appState.tripSettings = { startDate: newStart, endDate: newEnd, tripName: newName, totalDays: newDays, rvAmps: _saveAmps, timeFormat: _saveTimeFmt, departureTime: _saveDepTime, latestArrival: _saveLateArr, maxDaysPerStop: _saveMaxDays, hotelChain: _saveHotelChain, elApiKey: _saveElKey, elVoiceId: _saveElVoice };
   /* Keep customTripData.tripName in sync so all references agree */
   if (appState.customTripData && newName) appState.customTripData.tripName = newName;
   saveState(appState);
@@ -18299,36 +18325,162 @@ var _tgBusy       = false;
 var _TG_MAX_SAVED = 60;   // max messages to keep in persistent memory
 
 /* ── TRIPGENIE VOICE MODE ────────────────────────────────────────
-   Uses Web Speech API for input (SpeechRecognition) and output
-   (SpeechSynthesis). Works on iOS Safari, Chrome Android.
+   Primary TTS: ElevenLabs (natural voice, requires API key in Trip Settings).
+   Fallback TTS: Web Speech Synthesis (built-in, robotic but zero-config).
+   Voice input: Web Speech Recognition (unchanged).
+   Hands-free loop: after Genie speaks, auto-activates mic → user speaks
+     → auto-sends → Genie replies → speaks → loops. Tap 🎙️ again to stop.
+   Interruption: tapping mic while Genie is speaking pauses audio immediately.
    ──────────────────────────────────────────────────────────────── */
-var _tgVoiceMode    = false;   /* whether to read responses aloud */
-var _tgRecognition  = null;    /* active SpeechRecognition instance */
-var _tgSpeaking     = false;   /* guard for SpeechSynthesis */
+var _tgVoiceMode   = false;   /* read responses aloud */
+var _tgHandsFree   = false;   /* full hands-free auto-listen loop */
+var _tgRecognition = null;    /* active SpeechRecognition instance */
+var _tgAudioEl     = null;    /* <audio> element for ElevenLabs playback */
+var _tgPlayingEL   = false;   /* EL audio currently playing */
 
+/* ── ElevenLabs config from Trip Settings ── */
+function _elKey()   { return (appState && appState.tripSettings && appState.tripSettings.elApiKey)  || ''; }
+function _elVoice() { return (appState && appState.tripSettings && appState.tripSettings.elVoiceId) || 'EXAVITQu4vr4xnSDxMaL'; }
+
+/* ── voice readback toggle ── */
 function _tgToggleVoiceMode() {
   _tgVoiceMode = !_tgVoiceMode;
-  var btn = document.getElementById('tg-voice-toggle');
-  if (btn) {
-    btn.innerHTML    = _tgVoiceMode ? '🔊 Voice' : '🔇 Voice';
-    btn.style.background = _tgVoiceMode ? 'rgba(255,255,255,.35)' : 'rgba(255,255,255,.15)';
-    btn.style.borderColor = _tgVoiceMode ? 'rgba(255,255,255,.7)' : 'rgba(255,255,255,.3)';
-  }
-  if (_tgVoiceMode) {
-    /* Pre-load voices on first toggle */
-    if (window.speechSynthesis) window.speechSynthesis.getVoices();
-    showToast('🔊 Voice mode ON — Genie will read responses aloud', 2500);
+  if (!_tgVoiceMode) {
+    _tgHandsFree = false;
+    _tgInterruptSpeak();
+    if (_tgRecognition) { try { _tgRecognition.stop(); } catch(e) {} _tgRecognition = null; }
   } else {
-    if (window.speechSynthesis) window.speechSynthesis.cancel();
-    showToast('🔇 Voice mode off', 1800);
+    if (window.speechSynthesis) window.speechSynthesis.getVoices(); /* pre-load voices */
+  }
+  _tgUpdateVoiceUI();
+  showToast(_tgVoiceMode ? ('🔊 Voice ON' + (_elKey() ? ' · ElevenLabs' : ' · system voice')) : '🔇 Voice off', 2000);
+}
+
+/* ── hands-free toggle ── */
+function _tgToggleHandsFree() {
+  _tgHandsFree = !_tgHandsFree;
+  if (_tgHandsFree) {
+    _tgVoiceMode = true; /* hands-free implies readback */
+    _tgUpdateVoiceUI();
+    showToast('🎙️ Hands-free ON — speak after TripGenie finishes!', 2600);
+    if (!_tgBusy && !_tgPlayingEL) _tgStartVoice(); /* start listening immediately */
+  } else {
+    _tgInterruptSpeak();
+    if (_tgRecognition) { try { _tgRecognition.stop(); } catch(e) {} _tgRecognition = null; }
+    _tgUpdateVoiceUI();
+    showToast('🎙️ Hands-free off', 1600);
   }
 }
 
+/* ── sync header button visuals ── */
+function _tgUpdateVoiceUI() {
+  var voiceBtn = document.getElementById('tg-voice-toggle');
+  var hfBtn    = document.getElementById('tg-hf-btn');
+  if (voiceBtn) {
+    var on = _tgVoiceMode || _tgHandsFree;
+    voiceBtn.innerHTML         = on ? '🔊 Voice' : '🔇 Voice';
+    voiceBtn.style.background  = on ? 'rgba(255,255,255,.35)' : 'rgba(255,255,255,.15)';
+    voiceBtn.style.borderColor = on ? 'rgba(255,255,255,.7)'  : 'rgba(255,255,255,.3)';
+  }
+  if (hfBtn) {
+    hfBtn.innerHTML         = _tgHandsFree ? '🔴 Live' : '🎙️';
+    hfBtn.style.background  = _tgHandsFree ? 'rgba(231,76,60,.45)' : 'rgba(255,255,255,.1)';
+    hfBtn.style.borderColor = _tgHandsFree ? '#e74c3c' : 'rgba(255,255,255,.25)';
+    hfBtn.title = _tgHandsFree ? 'Hands-free active — tap to stop' : 'Hands-free: speak → Genie replies → auto-listens';
+  }
+}
+
+/* ── stop any playing audio ── */
+function _tgInterruptSpeak() {
+  if (_tgAudioEl && !_tgAudioEl.paused) {
+    _tgAudioEl.pause();
+    _tgAudioEl.currentTime = 0;
+  }
+  _tgPlayingEL = false;
+  if (window.speechSynthesis) window.speechSynthesis.cancel();
+}
+
+/* ── called when speech finishes → trigger next listen in hands-free ── */
+function _tgAfterSpeak() {
+  _tgPlayingEL = false;
+  if (_tgHandsFree && _tgVoiceMode && !_tgBusy) {
+    setTimeout(function() { if (_tgHandsFree) _tgStartVoice(); }, 650);
+  }
+}
+
+/* ── ElevenLabs TTS (primary, natural voice) ── */
+async function _tgSpeakEL(text) {
+  var key = _elKey();
+  if (!key) { _tgSpeakWebSpeech(text); return; }
+  _tgPlayingEL = true;
+  var clean = text.replace(/<[^>]+>/g, ' ').replace(/[•*_#`]/g, '').replace(/\s+/g, ' ').trim();
+  if (!clean) { _tgPlayingEL = false; _tgAfterSpeak(); return; }
+  try {
+    var resp = await fetch(
+      'https://api.elevenlabs.io/v1/text-to-speech/' + _elVoice() + '?output_format=mp3_44100_128',
+      {
+        method: 'POST',
+        headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: clean,
+          model_id: 'eleven_turbo_v2_5',
+          voice_settings: { stability: 0.45, similarity_boost: 0.75, style: 0.05, use_speaker_boost: true }
+        })
+      }
+    );
+    if (!resp.ok) throw new Error('EL ' + resp.status);
+    var blob = await resp.blob();
+    var url  = URL.createObjectURL(blob);
+    if (!_tgAudioEl) { _tgAudioEl = document.createElement('audio'); document.body.appendChild(_tgAudioEl); }
+    _tgAudioEl.src     = url;
+    _tgAudioEl.onended = function() { URL.revokeObjectURL(url); _tgAfterSpeak(); };
+    _tgAudioEl.onerror = function() { URL.revokeObjectURL(url); _tgAfterSpeak(); };
+    _tgAudioEl.play().catch(function(e) {
+      console.warn('EL autoplay blocked:', e);
+      _tgPlayingEL = false;
+      _tgSpeakWebSpeech(text); /* fallback if autoplay blocked */
+    });
+  } catch(e) {
+    console.warn('ElevenLabs TTS error:', e);
+    _tgPlayingEL = false;
+    _tgSpeakWebSpeech(text); /* graceful fallback */
+  }
+}
+
+/* ── Web Speech fallback TTS ── */
+function _tgSpeakWebSpeech(text) {
+  if (!window.speechSynthesis) { _tgAfterSpeak(); return; }
+  var clean = text.replace(/<[^>]+>/g, ' ').replace(/[•*_#`]/g, '').replace(/\s+/g, ' ').trim();
+  if (!clean) { _tgAfterSpeak(); return; }
+  window.speechSynthesis.cancel();
+  var utt   = new SpeechSynthesisUtterance(clean);
+  utt.lang  = 'en-US'; utt.rate = 0.92; utt.pitch = 1.05;
+  utt.onend = function() { _tgAfterSpeak(); };
+  function _doSpeak() {
+    var voices = window.speechSynthesis.getVoices();
+    var pref = voices.find(function(v) { return /Samantha|Karen|Siri|Ava/i.test(v.name); })
+            || voices.find(function(v) { return v.lang === 'en-US' && v.localService; })
+            || voices[0];
+    if (pref) utt.voice = pref;
+    window.speechSynthesis.speak(utt);
+  }
+  if (window.speechSynthesis.getVoices().length) _doSpeak();
+  else window.speechSynthesis.onvoiceschanged = function() { _doSpeak(); };
+}
+
+/* ── main speak entry point ── */
+function _tgSpeak(text) {
+  if (!_tgVoiceMode && !_tgHandsFree) return;
+  if (_elKey()) _tgSpeakEL(text);
+  else _tgSpeakWebSpeech(text);
+}
+
+/* ── mic button / voice input ── */
 function _tgStartVoice() {
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { showToast('Voice input not supported on this browser.\nTry Chrome or Safari.', 3000); return; }
 
-  /* If already recognising, stop it */
+  /* Already recognising — user taps to cancel */
   if (_tgRecognition) {
     try { _tgRecognition.stop(); } catch(e) {}
     _tgRecognition = null;
@@ -18336,14 +18488,16 @@ function _tgStartVoice() {
     return;
   }
 
+  /* Interrupt any ongoing speech so user can speak immediately */
+  _tgInterruptSpeak();
   _tgSetMicState(true);
   _tgRecognition = new SR();
-  _tgRecognition.continuous  = false;
+  _tgRecognition.continuous     = false;
   _tgRecognition.interimResults = false;
-  _tgRecognition.lang        = 'en-US';
+  _tgRecognition.lang           = 'en-US';
 
   _tgRecognition.onresult = function(e) {
-    var transcript = e.results[0][0].transcript;
+    var transcript = e.results[0][0].transcript.trim();
     var inp = document.getElementById('tg-input');
     if (inp) {
       inp.value = transcript;
@@ -18352,69 +18506,77 @@ function _tgStartVoice() {
     }
     _tgRecognition = null;
     _tgSetMicState(false);
-    /* Auto-send after brief delay so user can see what was heard */
     setTimeout(function() { askTripGenie(); }, 400);
   };
 
   _tgRecognition.onerror = function(e) {
     _tgRecognition = null;
     _tgSetMicState(false);
-    var msg = e.error === 'not-allowed' ? 'Microphone access denied — check browser settings' : 'Voice input error — tap mic and try again';
+    var msg = e.error === 'not-allowed'
+      ? 'Microphone access denied — check browser settings'
+      : 'Voice input error — tap mic and try again';
     showToast('🎤 ' + msg, 3000);
+    /* In hands-free mode, retry after a pause (unless permission denied) */
+    if (_tgHandsFree && e.error !== 'not-allowed') {
+      setTimeout(function() { if (_tgHandsFree) _tgStartVoice(); }, 1800);
+    }
   };
 
   _tgRecognition.onend = function() {
-    if (_tgRecognition) { _tgRecognition = null; }
+    if (_tgRecognition) _tgRecognition = null;
     _tgSetMicState(false);
   };
 
-  _tgRecognition.start();
+  try { _tgRecognition.start(); } catch(e) { _tgRecognition = null; _tgSetMicState(false); }
 }
 
 function _tgSetMicState(listening) {
   var btn = document.getElementById('tg-mic-btn');
   if (!btn) return;
   if (listening) {
-    btn.innerHTML = '🔴';
-    btn.style.background = 'rgba(231,76,60,.35)';
+    btn.innerHTML         = '🔴';
+    btn.style.background  = 'rgba(231,76,60,.35)';
     btn.style.borderColor = '#e74c3c';
-    btn.title = 'Listening… tap to cancel';
+    btn.title = _tgHandsFree ? 'Listening (hands-free) — tap to cancel' : 'Listening… tap to cancel';
   } else {
-    btn.innerHTML = '🎤';
-    btn.style.background = '';
+    btn.innerHTML         = '🎤';
+    btn.style.background  = '';
     btn.style.borderColor = '';
     btn.title = 'Voice input — tap to speak';
   }
 }
 
-function _tgSpeak(text) {
-  if (!_tgVoiceMode || !window.speechSynthesis) return;
-  /* Strip HTML tags and markdown */
-  var clean = text
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/[•*_#]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!clean) return;
-  window.speechSynthesis.cancel();
-  var utt = new SpeechSynthesisUtterance(clean);
-  utt.lang  = 'en-US';
-  utt.rate  = 0.92;
-  utt.pitch = 1.05;
-  /* Prefer a natural voice */
-  function _speak() {
-    var voices = window.speechSynthesis.getVoices();
-    var pref = voices.find(function(v) { return /Samantha|Karen|Siri|Ava/i.test(v.name); })
-            || voices.find(function(v) { return v.lang === 'en-US' && v.localService; })
-            || voices[0];
-    if (pref) utt.voice = pref;
-    window.speechSynthesis.speak(utt);
-  }
-  /* Voices may not be loaded yet on first use */
-  if (window.speechSynthesis.getVoices().length) {
-    _speak();
-  } else {
-    window.speechSynthesis.onvoiceschanged = function() { _speak(); };
+/* ── Test ElevenLabs voice from Trip Settings ── */
+async function _tsTestElVoice() {
+  var keyEl   = document.getElementById('ts-el-key');
+  var voiceEl = document.getElementById('ts-el-voice');
+  var key   = (keyEl   ? keyEl.value.trim()   : '') || _elKey();
+  var voice = (voiceEl ? voiceEl.value.trim() : '') || _elVoice();
+  if (!key) { showToast('Enter your ElevenLabs API key first', 2400); return; }
+  showToast('🎙️ Testing voice…', 1500);
+  try {
+    var resp = await fetch(
+      'https://api.elevenlabs.io/v1/text-to-speech/' + voice + '?output_format=mp3_44100_128',
+      {
+        method: 'POST',
+        headers: { 'xi-api-key': key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: "Hi! I'm TripGenie, your AI road-trip assistant. Ready to make this trip amazing!",
+          model_id: 'eleven_turbo_v2_5',
+          voice_settings: { stability: 0.45, similarity_boost: 0.75, style: 0.05 }
+        })
+      }
+    );
+    if (!resp.ok) { showToast('ElevenLabs error ' + resp.status + ' — check your API key', 3000); return; }
+    var blob = await resp.blob();
+    var url  = URL.createObjectURL(blob);
+    if (!_tgAudioEl) { _tgAudioEl = document.createElement('audio'); document.body.appendChild(_tgAudioEl); }
+    _tgAudioEl.src = url;
+    _tgAudioEl.onended = function() { URL.revokeObjectURL(url); };
+    _tgAudioEl.play().catch(function() { showToast('Autoplay blocked — try clicking the test button again', 2500); });
+    showToast('✅ ElevenLabs voice working!', 2000);
+  } catch(e) {
+    showToast('Could not reach ElevenLabs — check connection', 2500);
   }
 }
 

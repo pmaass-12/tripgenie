@@ -269,6 +269,22 @@ tripgenie/
   - **`_refreshAll()` function**: New one-stop sync function calls `renderSchedule()` + `renderStopNavigator()` + `renderDashboard()` + `_clearAndRebuildMapMarkers()`. Shows "Views refreshed ↻" toast unless called silently. `addPhaseDay()` and `removePhaseDay()` now call `_refreshAll()` instead of manually calling render functions — ensures dashboard and map stay in sync after day changes.
   - **↻ Refresh button in header**: New `#refresh-btn` added to `header-right` (before dark-mode toggle). Calls `_refreshAll()`. Font Awesome `fa-rotate-right` icon. Provides one-tap sync of all views without navigating to Tools → Health Check.
 
+- Session 18 continued (2026-03-01, second context):
+  - **_refreshAll() + ↻ header button**: New `_refreshAll()` function syncs schedule, stop navigator, dashboard, and map markers in one call. `addPhaseDay()` / `removePhaseDay()` call it instead of manual render calls. ↻ button added to header right (before 🌙).
+  - **ElevenLabs TTS + hands-free voice mode**: Complete voice system rewrite.
+    - `_tgSpeakEL(text)` — async EL TTS using `eleven_turbo_v2_5` model; Sarah voice default. Creates singleton `<audio>` element, plays MP3 blob.
+    - `_tgSpeakWebSpeech(text)` — Web Speech fallback (unchanged logic but now standalone).
+    - `_tgSpeak(text)` — entry point: routes to EL if key set, else Web Speech.
+    - `_tgAfterSpeak()` — called on audio end; if hands-free active, auto-starts mic after 650ms.
+    - `_tgInterruptSpeak()` — pauses audio and cancels Web Speech; called when mic activates.
+    - `_tgHandsFree` bool + `_tgToggleHandsFree()` — new hands-free loop. After Genie speaks → auto-listens → user speaks → auto-sends → loops. Retry on transient mic errors.
+    - `_tgUpdateVoiceUI()` — syncs both header buttons (🔊 Voice + 🎙️ / 🔴 Live).
+    - 🎙️ hands-free button added to TripGenie drawer header (between Voice toggle and 🗑️).
+    - ElevenLabs section in Trip Settings: API key (password input + show toggle), voice selector (6 voices), ▶ Test Voice button. Saved as `appState.tripSettings.elApiKey` + `elVoiceId`.
+    - `_tsTestElVoice()` — plays "Hi! I'm TripGenie…" via EL with the saved key/voice.
+    - `saveTripSettings()` updated to persist `elApiKey` + `elVoiceId`.
+  - **Print route legend vertical ordering**: Changed `.legend-grid` from CSS grid (fills left-to-right, row by row) to CSS `columns: 3` (fills top-to-bottom per column). Stop 1–N now read vertically: col 1 = stops 1–10, col 2 = stops 11–20, etc. Used `break-inside: avoid` on each item.
+
 ## Suggested Next Steps
 - **0-day waypoint stops**: User wants stops with 0 nights for driving waypoints (fuel, Walmart overnight, route planning) — not yet built
 - Push to GitHub (git push) when network is available — commits pending from sessions 8+
