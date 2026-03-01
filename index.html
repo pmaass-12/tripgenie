@@ -21961,7 +21961,7 @@ function _smRenderToday() {
   var _ctaLabel = day.driveDay ? (toName + toState) : ((stop.name || 'camp') + toState);
   var _ctaLabelSafe = _ctaLabel.replace(/'/g, "\\'");
   var _ctaSub = day.driveDay ? ('Check in at ' + toName) : ('Check in at ' + (stop.name || 'camp'));
-  var _leftSub = day.driveDay ? ('En route to ' + toName) : ('Heading out from ' + (stop.name || 'camp'));
+  var _leftSub = day.driveDay ? ('On our way to ' + toName) : ('On our way to our next stop');
   var ctaRow = '<div class="dm-cta-row">'
     + '<button class="dm-cta-btn dm-cta-arrived" onclick="_dmArrived(' + (idx + 1) + ',\'' + _ctaLabelSafe + '\')">'
     + '<span class="dm-cta-icon">🎉</span>'
