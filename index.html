@@ -275,6 +275,7 @@
       flex-shrink: 0;
       box-shadow: 0 2px 12px rgba(0,0,0,.2);
       z-index: 100;
+      position: relative; /* needed for ham-menu absolute positioning */
     }
     .header-left { display: flex; align-items: center; gap: 12px; }
     .header-logo { font-size: 1.5rem; }
@@ -581,14 +582,109 @@
       .card-body { padding: 16px; }
     }
 
-    /* ── RESPONSIVE — iPad/tablet (641–1024px): compact nav ─────── */
+    /* ── HAMBURGER BUTTON + MENU (tablet-only, hidden elsewhere) ───── */
+    #ham-btn {
+      display: none; /* shown only in 641-1024px breakpoint */
+      background: rgba(255,255,255,.15);
+      border: 1px solid rgba(255,255,255,.28);
+      color: #fff;
+      border-radius: 100px;
+      padding: 6px 13px;
+      font-size: 1.05rem;
+      cursor: pointer;
+      align-items: center;
+      line-height: 1;
+      flex-shrink: 0;
+      transition: background .15s;
+    }
+    #ham-btn:hover { background: rgba(255,255,255,.28); }
+    #ham-btn.active { background: rgba(255,255,255,.25); }
+
+    #ham-menu {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: linear-gradient(135deg, #1a3a5c 0%, #1e4a72 100%);
+      z-index: 200;
+      padding: 10px 16px 14px;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 8px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.28);
+      border-top: 1px solid rgba(255,255,255,.12);
+    }
+    #ham-menu.open { display: flex; }
+    .ham-menu-btn {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: rgba(255,255,255,.15);
+      border: 1px solid rgba(255,255,255,.28);
+      color: #fff;
+      border-radius: 100px;
+      padding: 7px 14px;
+      font-size: .78rem;
+      font-weight: 800;
+      cursor: pointer;
+      font-family: var(--font);
+      white-space: nowrap;
+      transition: background .15s;
+    }
+    .ham-menu-btn:hover { background: rgba(255,255,255,.28); }
+    .ham-menu-btn.ham-ai { background: var(--orange); border-color: var(--orange); }
+    .ham-menu-btn.ham-ai:hover { background: #d97328; }
+
+    /* ── RESPONSIVE — iPad/tablet (641–1024px): hamburger + compact ── */
     @media (min-width: 641px) and (max-width: 1024px) {
-      /* Icon-only nav: text hidden so all tabs fit without overflow */
+      /* Icon-only nav tabs */
       .nav-tab { padding: 10px 12px; font-size: 0; gap: 0; }
       .nav-tab i { font-size: 1.1rem; }
       .nav-tab.active { border-bottom-color: var(--orange); }
-      /* Tablet: wider tab panels */
+      /* Tab panels: wider */
       .tab-panel { padding: 24px 28px !important; }
+
+      /* ── Hamburger: show trigger, hide the 3 left action buttons ── */
+      #ham-btn { display: flex !important; }
+      #plan-trip-btn, #tg-btn, #change-plan-btn { display: none !important; }
+
+      /* Right-side: hide debug + sync, tighten gaps */
+      #sync-status { display: none !important; }
+      #debug-console-btn { display: none !important; }
+      .header-right { gap: 8px; }
+
+      /* Trip selector: narrower */
+      #trip-selector-wrap { max-width: 150px; min-width: 70px; }
+
+      /* Mode toggle: icon only */
+      .hdr-mode-label { display: none !important; }
+
+      /* Help button: icon only */
+      .hdr-help-label { display: none !important; }
+
+      /* Header padding */
+      #app-header { padding: 0 14px; min-height: 52px; }
+    }
+
+    /* ── RESPONSIVE — iPad mini portrait (641–767px): extra compact ── */
+    @media (min-width: 641px) and (max-width: 767px) {
+      /* Trip selector shrinks further, tighter padding */
+      #trip-selector-wrap { max-width: 110px; }
+      #app-header { padding: 0 10px; }
+      .header-right { gap: 6px; }
+      /* Map tab: hide legend text, icon-only buttons */
+      .map-legend-item { display: none !important; }
+      .map-btn-label   { display: none !important; }
+    }
+
+    /* ── RESPONSIVE — iPad mini landscape (768–1024px): semi-compact ─ */
+    @media (min-width: 768px) and (max-width: 1024px) {
+      /* Map legend + button labels: hide text labels to save space */
+      .map-legend-item { display: none !important; }
+      .map-btn-label   { display: none !important; }
+      /* Tab panels: normal padding for landscape */
+      .tab-panel { padding: 20px 24px !important; }
     }
 
     /* ── RESPONSIVE — Desktop / Laptop (≥1025px): sidebar nav ────── */
@@ -2371,6 +2467,10 @@
                transition:background .15s;">
         <i class="fa-solid fa-arrows-spin"></i><span class="change-plan-label"> Change the plan</span>
       </button>
+      <!-- Hamburger menu trigger — visible only on tablet (641–1024px) -->
+      <button id="ham-btn" onclick="_hamToggle()" title="Menu" aria-label="Menu" aria-expanded="false">
+        <i class="fa-solid fa-bars"></i>
+      </button>
     </div>
     <div class="header-right">
       <!-- Trip selector dropdown -->
@@ -2389,14 +2489,29 @@
       <span id="hdr-progress-pct" style="display:none;"></span>
       <span id="sync-status" style="font-size:.7rem;color:rgba(255,255,255,.45);white-space:nowrap;display:flex;align-items:center;gap:4px;" title="Cloud sync status"></span>
       <div title="Switch view" style="display:flex;align-items:center;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);border-radius:12px;padding:3px;gap:2px;flex-shrink:0;">
-        <span style="background:rgba(255,255,255,.18);color:#fff;border-radius:100px;padding:4px 11px;font-size:.72rem;font-weight:800;cursor:pointer;white-space:nowrap;font-family:var(--font);" onclick="_showSimpleMode()"><i class="fa-solid fa-mobile-screen-button"></i> Driving</span>
-        <span style="background:var(--orange);color:#fff;border-radius:100px;padding:4px 11px;font-size:.72rem;font-weight:800;white-space:nowrap;font-family:var(--font);"><i class="fa-solid fa-sliders"></i> Planning</span>
+        <span style="background:rgba(255,255,255,.18);color:#fff;border-radius:100px;padding:4px 11px;font-size:.72rem;font-weight:800;cursor:pointer;white-space:nowrap;font-family:var(--font);" onclick="_showSimpleMode()"><i class="fa-solid fa-mobile-screen-button"></i><span class="hdr-mode-label"> Driving</span></span>
+        <span style="background:var(--orange);color:#fff;border-radius:100px;padding:4px 11px;font-size:.72rem;font-weight:800;white-space:nowrap;font-family:var(--font);"><i class="fa-solid fa-sliders"></i><span class="hdr-mode-label"> Planning</span></span>
       </div>
-      <button onclick="openHelpSearch()" title="Search the app — ask anything" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:100px;padding:5px 11px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-magnifying-glass"></i> Help</button>
+      <button onclick="openHelpSearch()" title="Search the app — ask anything" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:100px;padding:5px 11px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-magnifying-glass"></i><span class="hdr-help-label"> Help</span></button>
       <button id="dark-mode-btn" onclick="toggleDarkMode()" title="Toggle dark/light mode" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:1rem;cursor:pointer;line-height:1;display:flex;align-items:center;">🌙</button>
       <button id="debug-console-btn" onclick="_dbgOpen()" title="Debug console" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:.85rem;cursor:pointer;line-height:1;display:flex;align-items:center;position:relative;"><i class="fa-solid fa-terminal"></i><span id="debug-err-badge" style="display:none;position:absolute;top:-3px;right:-3px;background:#e53e3e;color:#fff;border-radius:50%;width:14px;height:14px;font-size:.6rem;font-weight:900;align-items:center;justify-content:center;line-height:1;"></span></button>
       <button class="logout-btn" id="logout-btn" title="Logout">
         <i class="fa-solid fa-right-from-bracket"></i>
+      </button>
+    </div>
+    <!-- Hamburger dropdown — tablet only, slides down from header -->
+    <div id="ham-menu" onclick="event.stopPropagation()">
+      <button class="ham-menu-btn" onclick="_hamAct(openTripBuilder)">
+        <i class="fa-solid fa-map"></i> Plan a New Trip
+      </button>
+      <button class="ham-menu-btn ham-ai" onclick="_hamAct(openTripGenie)">
+        <span style="font-size:.85rem;line-height:1;">✨</span> Ask TripGenie
+      </button>
+      <button class="ham-menu-btn" onclick="_hamAct(openChangePlanModal)">
+        <i class="fa-solid fa-arrows-spin"></i> Change the Plan
+      </button>
+      <button class="ham-menu-btn" onclick="_hamAct(openHelpSearch)">
+        <i class="fa-solid fa-magnifying-glass"></i> Help
       </button>
     </div>
   </header>
@@ -2600,13 +2715,13 @@
       <div style="display:flex;flex-direction:column;height:calc(100vh - 130px);gap:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-shrink:0;flex-wrap:wrap;gap:8px;">
           <h2 class="section-title" style="margin:0"><i class="fa-solid fa-map"></i> Full Route Map</h2>
-          <div style="display:flex;gap:10px;font-size:.78rem;color:var(--text-2);align-items:center;flex-wrap:wrap;">
-            <span style="display:flex;align-items:center;gap:5px;"><span style="width:22px;height:22px;background:var(--orange);border-radius:50%;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2);display:inline-flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:900;color:white;">1</span> Stops</span>
-            <span style="display:flex;align-items:center;gap:5px;"><span style="width:20px;height:3px;background:var(--blue);display:inline-block;border-radius:2px"></span> Outbound</span>
-            <span style="display:flex;align-items:center;gap:5px;"><span style="width:20px;height:0;border-top:3px dashed #a855f7;display:inline-block;border-radius:2px"></span> Return</span>
-            <button onclick="forceRefreshMap(this)" style="display:flex;align-items:center;gap:5px;background:var(--blue-l);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:var(--blue);cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-rotate"></i> Refresh</button>
-            <button onclick="printTripPlan()" style="display:flex;align-items:center;gap:5px;background:var(--orange-l);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:var(--orange);cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-print"></i> Print PDF</button>
-            <button onclick="_copyShareLink()" style="display:flex;align-items:center;gap:5px;background:#f3edff;border:1px solid #c9a8f5;border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:#7B5EA7;cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-share-nodes"></i> Share Route</button>
+          <div style="display:flex;gap:8px;font-size:.78rem;color:var(--text-2);align-items:center;flex-wrap:wrap;">
+            <span class="map-legend-item" style="display:flex;align-items:center;gap:5px;"><span style="width:22px;height:22px;background:var(--orange);border-radius:50%;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2);display:inline-flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:900;color:white;">1</span> Stops</span>
+            <span class="map-legend-item" style="display:flex;align-items:center;gap:5px;"><span style="width:20px;height:3px;background:var(--blue);display:inline-block;border-radius:2px"></span> Outbound</span>
+            <span class="map-legend-item" style="display:flex;align-items:center;gap:5px;"><span style="width:20px;height:0;border-top:3px dashed #a855f7;display:inline-block;border-radius:2px"></span> Return</span>
+            <button onclick="forceRefreshMap(this)" title="Refresh map" style="display:flex;align-items:center;gap:5px;background:var(--blue-l);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:var(--blue);cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-rotate"></i><span class="map-btn-label"> Refresh</span></button>
+            <button onclick="printTripPlan()" title="Print PDF" style="display:flex;align-items:center;gap:5px;background:var(--orange-l);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:var(--orange);cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-print"></i><span class="map-btn-label"> Print PDF</span></button>
+            <button onclick="_copyShareLink()" title="Share route with friends" style="display:flex;align-items:center;gap:5px;background:#f3edff;border:1px solid #c9a8f5;border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:#7B5EA7;cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-share-nodes"></i><span class="map-btn-label"> Share Route</span></button>
           </div>
         </div>
         <!-- Nav + Map row -->
@@ -11150,6 +11265,39 @@ function _updateTripSelector() {
 }
 
 function _truncate(str, n) { return str && str.length > n ? str.slice(0, n) + '…' : (str || ''); }
+
+/* ── Hamburger menu (tablet header) ─────────────────────────────── */
+function _hamToggle() {
+  var menu = document.getElementById('ham-menu');
+  var btn  = document.getElementById('ham-btn');
+  if (!menu) return;
+  var isOpen = menu.classList.toggle('open');
+  if (btn) {
+    btn.classList.toggle('active', isOpen);
+    btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+    btn.innerHTML = isOpen ? '<i class="fa-solid fa-xmark"></i>' : '<i class="fa-solid fa-bars"></i>';
+  }
+}
+function _hamClose() {
+  var menu = document.getElementById('ham-menu');
+  var btn  = document.getElementById('ham-btn');
+  if (menu) menu.classList.remove('open');
+  if (btn) {
+    btn.classList.remove('active');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.innerHTML = '<i class="fa-solid fa-bars"></i>';
+  }
+}
+function _hamAct(fn) {
+  _hamClose();
+  if (typeof fn === 'function') fn();
+}
+/* Close hamburger on outside click */
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#ham-btn') && !e.target.closest('#ham-menu')) {
+    _hamClose();
+  }
+});
 
 function toggleTripSelectorMenu() {
   var menu = document.getElementById('trip-selector-menu');
