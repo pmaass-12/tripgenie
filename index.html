@@ -8316,7 +8316,6 @@ function renderStops() {
     // Links
     var mUrl = 'https://www.google.com/maps/search/?api=1&query=' + stop.weatherLat + ',' + stop.weatherLng;
     html += '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;">';
-    html += '<button onclick="closePlaceInfo();showStopForecastModal(' + stop.id + ')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:var(--blue-l);border:1px solid #b0ccde;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:var(--blue);cursor:pointer;font-family:var(--font);"><i class="fa-solid fa-cloud-sun"></i> Weather Forecast</button>';
     html += '<a href="' + mUrl + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:var(--green-l);border:1px solid #a8d5b8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:var(--green);text-decoration:none;"><i class="fa-solid fa-map-location-dot"></i> Google Maps</a>';
     html += '<button id="stop-events-btn-' + stop.id + '" onclick="event.stopPropagation();toggleStopEvents(' + stop.id + ')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:var(--purple-l);border:1px solid #c9b8e8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:var(--purple);cursor:pointer;font-family:var(--font);"><i class="fa-solid fa-calendar-star"></i> Events Near Here</button>';
     html += '</div>';
