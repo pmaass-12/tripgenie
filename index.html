@@ -354,8 +354,10 @@
     .tab-panel {
       position: absolute; inset: 0;
       overflow-y: auto;
+      overflow-x: hidden;   /* prevent horizontal card bleed */
       padding: var(--sp-6);  /* 24px — on the 8pt grid */
       display: none;
+      box-sizing: border-box;
     }
     .tab-panel.active { display: block; }
 
@@ -603,37 +605,38 @@
     #ham-menu {
       display: none;
       position: absolute;
-      top: 100%;
-      left: 0;
-      right: 0;
-      background: linear-gradient(135deg, #1a3a5c 0%, #1e4a72 100%);
-      z-index: 200;
-      padding: 10px 16px 14px;
-      flex-direction: row;
-      flex-wrap: wrap;
-      gap: 8px;
-      box-shadow: 0 8px 24px rgba(0,0,0,.28);
-      border-top: 1px solid rgba(255,255,255,.12);
+      top: calc(100% + 6px);  /* sits just below the header */
+      left: 14px;             /* aligns under the ham-btn */
+      width: 230px;
+      background: #1a3a5c;
+      z-index: 500;
+      padding: 8px;
+      flex-direction: column;
+      gap: 3px;
+      box-shadow: 0 10px 32px rgba(0,0,0,.38);
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.15);
     }
     #ham-menu.open { display: flex; }
     .ham-menu-btn {
       display: flex;
       align-items: center;
-      gap: 7px;
-      background: rgba(255,255,255,.15);
-      border: 1px solid rgba(255,255,255,.28);
+      gap: 10px;
+      background: rgba(255,255,255,.07);
+      border: none;
       color: #fff;
-      border-radius: 100px;
-      padding: 7px 14px;
-      font-size: .78rem;
-      font-weight: 800;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: .83rem;
+      font-weight: 700;
       cursor: pointer;
       font-family: var(--font);
-      white-space: nowrap;
+      text-align: left;
+      width: 100%;
       transition: background .15s;
     }
-    .ham-menu-btn:hover { background: rgba(255,255,255,.28); }
-    .ham-menu-btn.ham-ai { background: var(--orange); border-color: var(--orange); }
+    .ham-menu-btn:hover { background: rgba(255,255,255,.18); }
+    .ham-menu-btn.ham-ai { background: var(--orange); }
     .ham-menu-btn.ham-ai:hover { background: #d97328; }
 
     /* ── RESPONSIVE — iPad/tablet (641–1024px): hamburger + compact ── */
@@ -645,9 +648,12 @@
       /* Tab panels: wider */
       .tab-panel { padding: 24px 28px !important; }
 
-      /* ── Hamburger: show trigger, hide the 3 left action buttons ── */
+      /* ── Hamburger: show trigger, hide Plan + Change (TripGenie stays) ── */
       #ham-btn { display: flex !important; }
-      #plan-trip-btn, #tg-btn, #change-plan-btn { display: none !important; }
+      #plan-trip-btn, #change-plan-btn { display: none !important; }
+      /* TripGenie: always visible but icon-only (hide text label) */
+      #tg-btn .tg-btn-label { display: none !important; }
+      #tg-btn { padding: 6px 11px; }
 
       /* Right-side: hide debug + sync, tighten gaps */
       #sync-status { display: none !important; }
@@ -685,6 +691,26 @@
       .map-btn-label   { display: none !important; }
       /* Tab panels: normal padding for landscape */
       .tab-panel { padding: 20px 24px !important; }
+    }
+
+    /* ── RESPONSIVE — iPad mini landscape / narrow desktop (1025–1199px) ─
+       These viewports get the desktop grid layout but the header is too
+       cramped to show all 3 left action buttons. Show hamburger + tg-btn. */
+    @media (min-width: 1025px) and (max-width: 1199px) {
+      /* Keep hamburger visible, hide Plan + Change plan buttons */
+      #ham-btn { display: flex !important; }
+      #plan-trip-btn, #change-plan-btn { display: none !important; }
+      /* TripGenie: icon-only */
+      #tg-btn .tg-btn-label { display: none !important; }
+      #tg-btn { padding: 6px 11px; }
+      /* Right-side: hide debug + sync, tighten */
+      #sync-status { display: none !important; }
+      #debug-console-btn { display: none !important; }
+      .hdr-mode-label { display: none !important; }
+      .hdr-help-label { display: none !important; }
+      .header-right { gap: 8px; }
+      #trip-selector-wrap { max-width: 140px; min-width: 70px; }
+      #app-header { padding: 0 16px; }
     }
 
     /* ── RESPONSIVE — Desktop / Laptop (≥1025px): sidebar nav ────── */
@@ -2503,9 +2529,6 @@
     <div id="ham-menu" onclick="event.stopPropagation()">
       <button class="ham-menu-btn" onclick="_hamAct(openTripBuilder)">
         <i class="fa-solid fa-map"></i> Plan a New Trip
-      </button>
-      <button class="ham-menu-btn ham-ai" onclick="_hamAct(openTripGenie)">
-        <span style="font-size:.85rem;line-height:1;">✨</span> Ask TripGenie
       </button>
       <button class="ham-menu-btn" onclick="_hamAct(openChangePlanModal)">
         <i class="fa-solid fa-arrows-spin"></i> Change the Plan
@@ -9640,23 +9663,30 @@ function _guestToast(msg, dur) {
 
 /* ── 8. Copy share link ──────────────────────────────────────────── */
 function _copyShareLink() {
-  if (!_currentTripId) {
-    showToast('Log in and sync your trip first, then share the link', 3500);
-    return;
+  var link;
+  var msg;
+  if (_currentTripId) {
+    /* Supabase path: guest link — no login needed for recipient */
+    link = window.location.origin + window.location.pathname + '?guest=' + encodeURIComponent(_currentTripId);
+    msg  = '🔗 Guest link copied! Recipients can view the route — no login needed.';
+  } else {
+    /* Legacy / family-password path: share the app URL.
+       Recipient will need the viewer password (default: "viewer") to see the trip. */
+    link = window.location.origin + window.location.pathname;
+    msg  = '🔗 App link copied! Viewers need the viewer password to open the trip.';
   }
-  var link = window.location.origin + window.location.pathname + '?guest=' + encodeURIComponent(_currentTripId);
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(link).then(function() {
-      showToast('🔗 Share link copied! Send it to friends & family — no login needed', 3500);
-    }).catch(function() { _fallbackCopy(link); });
-  } else { _fallbackCopy(link); }
+      showToast(msg, 4000);
+    }).catch(function() { _fallbackCopy(link, msg); });
+  } else { _fallbackCopy(link, msg); }
 }
-function _fallbackCopy(link) {
+function _fallbackCopy(link, msg) {
   var inp = document.createElement('input');
   inp.value = link; inp.style.cssText = 'position:fixed;top:-999px;';
   document.body.appendChild(inp); inp.select(); document.execCommand('copy');
   document.body.removeChild(inp);
-  showToast('🔗 Share link copied!', 3000);
+  showToast(msg || '🔗 Share link copied!', 3000);
 }
 
 /* ── 9. Family: load + render all suggestions from Supabase ─────── */
