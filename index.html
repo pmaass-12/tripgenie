@@ -13651,18 +13651,40 @@ function answerTrivia(qi, oi) {
   renderTrivia();
 }
 
+/* ── HEALTH CHECK TAB ───────────────────────────────────────────── */
+function renderHealthCheckTab() {
+  var el = document.getElementById('tools-sub-content');
+  if (!el) return;
+  var html = '<div style="padding:4px 0 16px;">';
+  html += '<h2 class="section-title"><i class="fa-solid fa-stethoscope"></i> Trip Health Check</h2>';
+  html += '<div class="card"><div class="card-body">';
+  html += '<div style="font-size:.83rem;color:var(--text-2);line-height:1.6;margin-bottom:14px;">'
+    + 'Scans your trip for issues and auto-fixes what it can: drive day departure order, missing day fields, date sequencing, stale data, long drives, activity timing, weather coverage, and more. A verification step confirms fixes applied correctly.</div>';
+  html += '<div style="font-size:.79rem;color:var(--text-3);line-height:1.55;margin-bottom:16px;background:var(--bg);border-radius:var(--radius-s);padding:10px 12px;border:1px solid var(--border);">'
+    + '<strong style="display:block;margin-bottom:6px;color:var(--text-2);">Checks run:</strong>'
+    + '✓ Day numbering &amp; dates &nbsp;·&nbsp; ✓ Drive A→B→C departure order &nbsp;·&nbsp; ✓ Missing day fields<br>'
+    + '✓ Orphaned stop references &nbsp;·&nbsp; ✓ Map coordinates &nbsp;·&nbsp; ✓ Long drives (&gt;500 mi)<br>'
+    + '✓ Activity time order &nbsp;·&nbsp; ✓ Start date sync &nbsp;·&nbsp; ✓ Restaurant preferences &nbsp;·&nbsp; ✓ Weather &amp; AI cache'
+    + '</div>';
+  html += '<button onclick="refreshTripPlan()" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:var(--radius-s);padding:14px;font-size:.95rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:8px;"><i class="fa-solid fa-stethoscope"></i> Run Health Check &amp; Fix Issues</button>';
+  html += '</div></div>';
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 /* ── TOOLS TAB SHELL ────────────────────────────────────────────── */
 var _toolsTab = 'expenses';
 function renderTools() {
   var el = document.getElementById('tools-content');
   if (!el) return;
   var tabs = [
-    { id:'expenses', icon:'💰', label:'Expenses'     },
-    { id:'rvlog',    icon:'🚐', label:'RV Log'       },
-    { id:'membook',  icon:'📖', label:'Memory Book'  },
-    { id:'profiles', icon:'👤', label:'Profiles'     },
-    { id:'auditlog', icon:'📋', label:'Audit Log'    },
-    { id:'settings', icon:'⚙️', label:'Settings'      }
+    { id:'expenses', icon:'💰', label:'Expenses'      },
+    { id:'rvlog',    icon:'🚐', label:'RV Log'        },
+    { id:'membook',  icon:'📖', label:'Memory Book'   },
+    { id:'profiles', icon:'👤', label:'Profiles'      },
+    { id:'auditlog', icon:'📋', label:'Audit Log'     },
+    { id:'health',   icon:'🩺', label:'Health Check'  },
+    { id:'settings', icon:'⚙️', label:'Settings'       }
   ];
   var effectiveTab = _toolsTab;
   var bar = '<div class="section-sub-bar">';
@@ -13682,6 +13704,7 @@ function _renderToolsSub() {
   if (_toolsTab === 'membook')  renderMemoryBook();
   if (_toolsTab === 'profiles') renderProfiles();
   if (_toolsTab === 'auditlog') renderAuditLog();
+  if (_toolsTab === 'health')   renderHealthCheckTab();
   if (_toolsTab === 'settings') renderTripSettings();
 }
 
@@ -14567,20 +14590,6 @@ function renderTripSettings() {
   html += '  if (ei) ei.addEventListener("change", upd);';
   html += '})();';
   html += '<\/script>';
-
-  /* ── Trip Health Check ────────────────────────────────────────── */
-  html += '<h2 class="section-title" style="margin-top:28px;"><i class="fa-solid fa-stethoscope"></i> Trip Health Check</h2>';
-  html += '<div class="card"><div class="card-body">';
-  html += '<div style="font-size:.83rem;color:var(--text-2);line-height:1.6;margin-bottom:14px;">'
-    + 'Scans your trip for issues and auto-fixes what it can: drive day departure order, missing day fields, date sequencing, stale data, long drives, activity timing, weather coverage, and more. A verification step confirms fixes applied correctly.</div>';
-  html += '<div style="font-size:.79rem;color:var(--text-3);line-height:1.55;margin-bottom:14px;background:var(--bg);border-radius:var(--radius-s);padding:10px 12px;border:1px solid var(--border);">'
-    + '<strong style="display:block;margin-bottom:6px;color:var(--text-2);">Checks run:</strong>'
-    + '✓ Day numbering &amp; dates &nbsp;·&nbsp; ✓ Drive A→B→C departure order &nbsp;·&nbsp; ✓ Missing day fields<br>'
-    + '✓ Orphaned stop references &nbsp;·&nbsp; ✓ Map coordinates &nbsp;·&nbsp; ✓ Long drives (&gt;500 mi)<br>'
-    + '✓ Activity time order &nbsp;·&nbsp; ✓ Start date sync &nbsp;·&nbsp; ✓ Restaurant preferences &nbsp;·&nbsp; ✓ Weather &amp; AI cache'
-    + '</div>';
-  html += '<button onclick="refreshTripPlan()" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:var(--radius-s);padding:13px;font-size:.92rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:8px;"><i class="fa-solid fa-stethoscope"></i> Run Health Check &amp; Fix Issues</button>';
-  html += '</div></div>';
 
   /* ── Duplicate Trip ───────────────────────────────────────────── */
   html += '<h2 class="section-title" style="margin-top:28px;"><i class="fa-solid fa-copy"></i> Duplicate Trip</h2>';
