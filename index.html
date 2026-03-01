@@ -7717,13 +7717,30 @@ function renderSchedule() {
       } else if (_isLongDrive) {
         html += '<span style="background:var(--orange);color:#fff;font-size:.66rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;cursor:pointer;" onclick="openDayDetail(' + d.day + ')"><i class="fa-solid fa-triangle-exclamation"></i> Long Drive — tap to split</span>';
       }
-    } else if (!d.driveDay) {
+    } else if (!d.driveDay && d.sleepType !== 'home') {
+      /* Tappable toggle pill — clearly shows current mode, tap to flip */
       if (_isTransit) {
-        html += '<span style="font-size:.75rem;color:#64748b;font-weight:600;"><i class="fa-solid fa-car-side"></i> Transit Day</span>';
-        html += '<span style="background:#64748b;color:#fff;font-size:.65rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;">Drive &amp; Sleep</span>';
+        html += '<button onclick="event.stopPropagation();_toggleTransitDay(' + d.day + ')"'
+          + ' title="Tap to switch back to Explore day"'
+          + ' style="display:inline-flex;align-items:center;gap:5px;background:#e2e8f0;border:1.5px solid #94a3b8;'
+          + 'border-radius:100px;padding:3px 10px;font-size:.73rem;font-weight:700;color:#475569;'
+          + 'cursor:pointer;font-family:var(--font);white-space:nowrap;">'
+          + '<i class="fa-solid fa-car-side"></i> Transit Day'
+          + '<span style="font-size:.65rem;opacity:.65;margin-left:1px;">⇄ Explore</span>'
+          + '</button>';
       } else {
-        html += '<span style="font-size:.75rem;color:var(--green);font-weight:600;"><i class="fa-solid fa-campground"></i> Explore day</span>';
+        html += '<button onclick="event.stopPropagation();_toggleTransitDay(' + d.day + ')"'
+          + ' title="Tap to mark as Transit / Drive-through day"'
+          + ' style="display:inline-flex;align-items:center;gap:5px;background:#f0fdf4;border:1.5px solid #86efac;'
+          + 'border-radius:100px;padding:3px 10px;font-size:.73rem;font-weight:700;color:#16a34a;'
+          + 'cursor:pointer;font-family:var(--font);white-space:nowrap;">'
+          + '<i class="fa-solid fa-campground"></i> Explore Day'
+          + '<span style="font-size:.65rem;opacity:.6;margin-left:1px;">⇄ Transit</span>'
+          + '</button>';
       }
+    } else if (!d.driveDay) {
+      /* home days — not toggleable */
+      html += '<span style="font-size:.75rem;color:var(--green);font-weight:600;"><i class="fa-solid fa-campground"></i> Explore day</span>';
     }
     // City display (shows city/town name if override set, or stop name+state)
     if (stop && d.sleepType !== 'home') {
@@ -7742,15 +7759,6 @@ function renderSchedule() {
     html += '<div style="display:flex;gap:4px;">';
     if (stop && stop.id !== 15) {
       html += '<button onclick="showStopForecastModal(' + stop.id + ')" title="Forecast" style="background:var(--blue-l);border:1px solid var(--border);border-radius:100px;padding:4px 8px;font-size:.72rem;cursor:pointer;color:var(--blue);font-family:var(--font);">&#127780;&#65039;</button>';
-      /* Transit toggle — only for non-drive explore days */
-      if (!d.driveDay && d.sleepType !== 'home') {
-        var _transBg = _isTransit
-          ? 'background:#dbeafe;border:1px solid #93c5fd;color:#1d4ed8;'
-          : 'background:#f0fdf4;border:1px solid #86efac;color:#16a34a;';
-        var _transTitle = _isTransit ? 'Switch back to Explore day' : 'Mark as Transit / Drive-through day';
-        var _transIcon  = _isTransit ? '<i class="fa-solid fa-campground"></i>' : '<i class="fa-solid fa-car-side"></i>';
-        html += '<button onclick="event.stopPropagation();_toggleTransitDay(' + d.day + ')" title="' + _transTitle + '" style="' + _transBg + 'border-radius:100px;padding:4px 8px;font-size:.72rem;cursor:pointer;font-family:var(--font);">' + _transIcon + '</button>';
-      }
       /* Day-row action button — opens action sheet (remove 1 day / remove whole stop) */
       var _safeRowPhase = (d.phase || '').replace(/'/g, "\\'");
       html += '<button onclick="event.stopPropagation();_dayRowAction(' + d.stopId + ',\'' + _safeRowPhase + '\')" title="Adjust days at this stop" style="background:#fff0ef;border:1px solid #fca5a5;border-radius:100px;padding:4px 8px;font-size:.7rem;cursor:pointer;color:#dc2626;font-family:var(--font);display:flex;align-items:center;gap:3px;" onmouseenter="this.style.background=\'#fee2e2\'" onmouseleave="this.style.background=\'#fff0ef\'"><i class="fa-solid fa-trash-can"></i></button>';
