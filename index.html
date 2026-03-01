@@ -2136,12 +2136,16 @@
   .nav-stop-item.nav-drag-over { border-color:var(--orange) !important; background:var(--orange-l) !important; box-shadow:0 0 0 2px rgba(232,129,58,.18); }
   .nav-stop-item.nav-dragging { opacity:.4; }
   #map-nav-resizer:hover { background:var(--border) !important; }
-  @media (max-width:480px) {
+  @media (max-width:720px) {
+    /* Stack map sidebar above map on iPad mini and smaller — prevents horizontal overflow */
     .map-nav-wrap { flex-direction:column !important; }
     #map-stop-nav { width:100% !important; max-height:110px; border-right:none; border-bottom:1px solid var(--border); }
     #map-nav-list { flex-direction:row !important; overflow-x:auto; overflow-y:hidden; padding:5px 6px; gap:5px; }
     .nav-stop-item { flex-shrink:0; min-width:110px; }
+    #map-nav-resizer { display:none; }
   }
+  /* Prevent map section from overflowing viewport horizontally on narrow screens */
+  #tab-map { overflow-x:hidden; }
 
   </style>
 </head>
@@ -2818,9 +2822,9 @@
 
       <!-- Row 2: AI quick-access (horizontal scroll, no wrap) -->
       <div id="ddm-tg-row" style="display:flex;gap:6px;margin-top:12px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch;">
-        <button onclick="openTripGenieAboutStop('Why do people visit here? What makes it special?')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">✨ Why go here?</button>
-        <button onclick="openTripGenieAboutStop('What are the best things to do here, especially for families with kids?')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">🎯 Things to do</button>
-        <button onclick="openTripGenieAboutStop('What are the best local restaurants or food spots here?')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">🍽️ Best eats</button>
+        <button onclick="if(window._ddmCurrentStop){openAreaInfo((window._ddmCurrentStop.name||'')+(window._ddmCurrentStop.state?', '+window._ddmCurrentStop.state:''),window._ddmCurrentStop.id);}" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">🗺️ Area Guide</button>
+        <button onclick="if(window._ddmCurrentStop){_openActivitiesNearHere(window._ddmCurrentStop);}" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">🎯 Activities Near Here</button>
+        <button onclick="if(window._ddmCurrentStop){_openRestaurantsNearHere(window._ddmCurrentStop);}" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">🍽️ Restaurants Near Here</button>
         <button onclick="openTripGenieAboutStop('What should we know before arriving here? Any tips or heads-up?')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">💡 Pro tips</button>
       </div>
 
@@ -5485,9 +5489,10 @@ function renderDashboard() {
       + '</div>'
     : (function() {
         /* Pre-trip: show first stop info with real weather if loaded */
-        var _fs      = TRIP_STOPS.find(function(s){return s.id===1;}) || TRIP_STOPS[0];
-        var _fsId    = _fs ? _fs.id : 1;
-        var _fsDay1  = TRIP_DAYS[0]; // Day 1 date
+        var _fsDay1  = TRIP_DAYS[0]; // Day 1
+        /* Use the actual first day's stopId — not hardcoded id=1 */
+        var _fsId    = _fsDay1 ? _fsDay1.stopId : (TRIP_STOPS[0] ? TRIP_STOPS[0].id : 1);
+        var _fs      = TRIP_STOPS.find(function(s){return s.id===_fsId;}) || TRIP_STOPS[0];
         /* Prefer live/forecast weather from appState, fall back to static STOP_WEATHER */
         var _fsWxLive = (appState.weather && appState.weather[_fsId] && _fsDay1)
           ? appState.weather[_fsId][_fsDay1.date] : null;
@@ -7114,9 +7119,9 @@ function addPhaseDay(stopId) {
 function removePhaseDay(stopId) {
   if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
   var phaseDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
-  var minAllowed = -(phaseDays.length - 1); // always keep at least 1 day
+  var minAllowed = -(phaseDays.length); // allow 0-day waypoint stops
   var cur = appState.phaseExtraDays[stopId] || 0;
-  if (cur <= minAllowed) { showToast('Need at least 1 day at each stop!', 1800); return; }
+  if (cur <= minAllowed) { showToast('Stop is already a 0-day waypoint!', 1800); return; }
   appState.phaseExtraDays[stopId] = cur - 1;
   saveState(appState); renderSchedule(); renderStopNavigator();
   var newVal = appState.phaseExtraDays[stopId];
@@ -12945,6 +12950,78 @@ function openAreaInfo(phase, stopId) {
   fetchAimPhotos(searchTerm);
   fetchAreaInfo(phase, searchTerm);
 }
+
+/* ── ACTIVITIES & RESTAURANTS NEAR HERE ───────────────────────────── */
+/* Opens #ai-info-modal with a focused AI fetch — same UX as Area Info  */
+function _openActivitiesNearHere(stop) {
+  if (!stop) return;
+  var loc = stop.name + (stop.state ? ', ' + stop.state : '');
+  document.getElementById('aim-title').textContent = 'Activities Near ' + stop.name;
+  document.getElementById('aim-sub').textContent   = '📍 ' + loc;
+  ['aim-address-link','aim-phone','aim-official-link','aim-price-badge','aim-plan-btn','aim-rating-row','aim-reservation-row','aim-weather-row','aim-hotels-btn'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  _aimResetPhotoStrip && _aimResetPhotoStrip();
+  document.getElementById('aim-body').innerHTML = '<div style="text-align:center;padding:36px 20px;color:var(--text-2);font-size:.9rem;">🔍 Finding top spots near ' + stop.name + '…</div>';
+  document.getElementById('ai-info-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  fetchAimPhotos(loc + ' tourist attractions');
+  /* Focused activities prompt */
+  var prompt = 'You are a family travel expert. List the BEST tourist spots and activities near ' + loc + ' for a family road trip with kids.\n\n'
+    + '**Must-See Attractions** (top 4-5 with 1-2 sentence description each)\n'
+    + '**Hidden Gems** (2-3 lesser-known spots worth the detour)\n'
+    + '**Kid Favorites** (what children specifically love here)\n'
+    + '**Quick Day Trips** (nearby spots within 1 hour drive)\n'
+    + '**Practical Tips** (hours, reservations needed, best time of day)\n'
+    + 'Be specific with real place names. Friendly family tone. No generic advice.'
+    + (typeof getRestaurantPrefContext === 'function' ? '' : '')
+    + (typeof getRVContext === 'function' ? ' ' + getRVContext() : '');
+  var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:700,temperature:0.7} });
+  fetch(GEMINI_URL, {method:'POST',headers:{'Content-Type':'application/json'},body:body})
+  .then(function(r){return r.json();})
+  .then(function(data){
+    var text = ''; try { text = data.candidates[0].content.parts[0].text || ''; } catch(e) {}
+    document.getElementById('aim-body').innerHTML = text
+      ? '<div style="padding:16px 20px;font-size:.88rem;line-height:1.7;color:var(--text);">' + text.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>') + '</div>'
+      : '<div style="padding:16px;color:var(--text-3);">Couldn\'t load activities. Try again.</div>';
+  }).catch(function(){ document.getElementById('aim-body').innerHTML = '<div style="padding:16px;color:var(--text-3);">Network error — check connection.</div>'; });
+}
+
+function _openRestaurantsNearHere(stop) {
+  if (!stop) return;
+  var loc = stop.name + (stop.state ? ', ' + stop.state : '');
+  var rcCtx = (typeof getRestaurantPrefContext === 'function') ? getRestaurantPrefContext() : '';
+  document.getElementById('aim-title').textContent = 'Restaurants Near ' + stop.name;
+  document.getElementById('aim-sub').textContent   = '🍽️ ' + loc;
+  ['aim-address-link','aim-phone','aim-official-link','aim-price-badge','aim-plan-btn','aim-rating-row','aim-reservation-row','aim-weather-row','aim-hotels-btn'].forEach(function(id){
+    var el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  _aimResetPhotoStrip && _aimResetPhotoStrip();
+  document.getElementById('aim-body').innerHTML = '<div style="text-align:center;padding:36px 20px;color:var(--text-2);font-size:.9rem;">🍽️ Finding great eats near ' + stop.name + '…</div>';
+  document.getElementById('ai-info-modal').classList.remove('hidden');
+  document.body.style.overflow = 'hidden';
+  fetchAimPhotos(loc + ' best restaurants food');
+  /* Focused restaurants prompt */
+  var prompt = 'You are a food-loving travel writer. Recommend the BEST restaurants and food spots near ' + loc + ' for a family on a road trip.\n\n'
+    + '**Local Favorites** (top 3-4 spots the locals love, with 1-2 sentence description and what to order)\n'
+    + '**Best for Families** (kid-friendly spots with good atmosphere)\n'
+    + '**Quick & Easy** (great fast casual or food trucks for busy travel days)\n'
+    + '**Local Specialties** (regional dishes or foods you must try here)\n'
+    + '**Avoid** (1-2 honest tips: tourist traps or common mistakes)\n'
+    + 'Use real restaurant names when possible. Friendly and practical tone.'
+    + (rcCtx ? ' Family dining preferences: ' + rcCtx : '')
+    + (typeof getRVContext === 'function' ? ' ' + getRVContext() : '');
+  var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:700,temperature:0.7} });
+  fetch(GEMINI_URL, {method:'POST',headers:{'Content-Type':'application/json'},body:body})
+  .then(function(r){return r.json();})
+  .then(function(data){
+    var text = ''; try { text = data.candidates[0].content.parts[0].text || ''; } catch(e) {}
+    document.getElementById('aim-body').innerHTML = text
+      ? '<div style="padding:16px 20px;font-size:.88rem;line-height:1.7;color:var(--text);">' + text.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>').replace(/\n/g,'<br>') + '</div>'
+      : '<div style="padding:16px;color:var(--text-3);">Couldn\'t load restaurants. Try again.</div>';
+  }).catch(function(){ document.getElementById('aim-body').innerHTML = '<div style="padding:16px;color:var(--text-3);">Network error — check connection.</div>'; });
+}
+
 function fetchAreaInfo(phase, location) {
   var prompt = 'You are an engaging travel writer. Give me a fun, interesting overview of ' + location + ' for a family road trip.\n\n'
     + 'Use EXACT bold headers (no JSON needed, just sections):\n'
@@ -20892,8 +20969,16 @@ function _smRenderToday() {
     + '<div class="row-icon" style="background:var(--green-l);color:var(--green);"><i class="fa-solid fa-book-open"></i></div>'
     + '<div class="row-body"><div class="row-title">School for today</div><div class="row-sub">' + (day.driveDay ? 'Drive day — 2h formal + audiobooks' : 'Explore day — enrichment curriculum') + '</div></div>'
     + '<i class="fa-solid fa-chevron-right row-caret"></i></div>'
+    + '<div class="list-row" onclick="_dmNearbyActivities()">'
+    + '<div class="row-icon" style="background:var(--green-l);color:var(--green);"><i class="fa-solid fa-map-location-dot"></i></div>'
+    + '<div class="row-body"><div class="row-title">Activities Near Here</div><div class="row-sub">Top spots & local attractions</div></div>'
+    + '<i class="fa-solid fa-chevron-right row-caret"></i></div>'
+    + '<div class="list-row" onclick="_dmNearbyRestaurants()">'
+    + '<div class="row-icon" style="background:var(--orange-l);color:var(--orange-d);"><i class="fa-solid fa-utensils"></i></div>'
+    + '<div class="row-body"><div class="row-title">Restaurants Near Here</div><div class="row-sub">Best local eats for the family</div></div>'
+    + '<i class="fa-solid fa-chevron-right row-caret"></i></div>'
     + '<div class="list-row" onclick="showGenieDemoToast()">'
-    + '<div class="row-icon" style="background:var(--orange-l);color:var(--orange-d);"><i class="fa-solid fa-arrows-spin"></i></div>'
+    + '<div class="row-icon" style="background:var(--blue-l);color:var(--blue);"><i class="fa-solid fa-arrows-spin"></i></div>'
     + '<div class="row-body"><div class="row-title">Change the plan</div><div class="row-sub">Tell TripGenie what needs adjusting</div></div>'
     + '<i class="fa-solid fa-chevron-right row-caret"></i></div>'
     + '</div>';
@@ -20918,6 +21003,28 @@ function _dmDeparted(toLabel) {
   /* Show departure toast */
   var label = toLabel || 'the next stop';
   _smToast('🚐 Safe travels to ' + label + '!', 3000);
+}
+
+function _dmNearbyActivities() {
+  /* Get current stop and open Activities Near Here modal */
+  var days  = typeof TRIP_DAYS  !== 'undefined' ? TRIP_DAYS  : [];
+  var stops = typeof TRIP_STOPS !== 'undefined' ? TRIP_STOPS : [];
+  var idx   = _smTodayIdx();
+  var day   = days[idx];
+  var stop  = day ? stops.find(function(s){ return s.id === day.stopId; }) : null;
+  if (!stop) { _smToast('No stop data found', 1800); return; }
+  _openActivitiesNearHere(stop);
+}
+
+function _dmNearbyRestaurants() {
+  /* Get current stop and open Restaurants Near Here modal */
+  var days  = typeof TRIP_DAYS  !== 'undefined' ? TRIP_DAYS  : [];
+  var stops = typeof TRIP_STOPS !== 'undefined' ? TRIP_STOPS : [];
+  var idx   = _smTodayIdx();
+  var day   = days[idx];
+  var stop  = day ? stops.find(function(s){ return s.id === day.stopId; }) : null;
+  if (!stop) { _smToast('No stop data found', 1800); return; }
+  _openRestaurantsNearHere(stop);
 }
 
 function _smRenderSchedule() {
@@ -21049,9 +21156,11 @@ function _smRenderAll() {
   window.goBack      = typeof goBack      === 'function' ? goBack      : window.goBack;
   window.goToScreen  = typeof goToScreen  === 'function' ? goToScreen  : window.goToScreen;
   window.handleTopAction = typeof handleTopAction === 'function' ? handleTopAction : function(){};
-  window._smToast    = typeof _smToast    === 'function' ? _smToast    : function(){};
-  window._dmArrived  = typeof _dmArrived  === 'function' ? _dmArrived  : function(){};
-  window._dmDeparted = typeof _dmDeparted === 'function' ? _dmDeparted : function(){};
+  window._smToast          = typeof _smToast          === 'function' ? _smToast          : function(){};
+  window._dmArrived        = typeof _dmArrived        === 'function' ? _dmArrived        : function(){};
+  window._dmDeparted       = typeof _dmDeparted       === 'function' ? _dmDeparted       : function(){};
+  window._dmNearbyActivities   = typeof _dmNearbyActivities   === 'function' ? _dmNearbyActivities   : function(){};
+  window._dmNearbyRestaurants  = typeof _dmNearbyRestaurants  === 'function' ? _dmNearbyRestaurants  : function(){};
 
   // SM init — called when switching to simple mode; re-renders on every activation
   window._smActivate = function() {
