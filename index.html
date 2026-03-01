@@ -11819,16 +11819,34 @@ function renderDayTimeBlocks(d, stop) {
   /* Pull per-day overrides (custom times, custom places, notes) */
   var _overrides = (appState.dayOverrides && appState.dayOverrides[d.day]) ? appState.dayOverrides[d.day] : {};
 
+  /* Strip AI markdown bold/italic and trailing "WHY: ..." / "WHAT: ..." explanations
+     that can bleed into customPlace values when AI suggestions are saved verbatim.   */
+  function _cleanTitle(s) {
+    if (!s) return s;
+    s = s.replace(/\*\*([^*]+)\*\*/g, '$1'); // **bold** → bold
+    s = s.replace(/\*([^*]+)\*/g, '$1');      // *italic* → italic
+    s = s.replace(/\*+/g, '');                // stray asterisks
+    s = s.replace(/\s*WHY\s*:.*$/i, '');      // strip "WHY: explanation"
+    s = s.replace(/\s*WHAT\s*:.*$/i, '');     // strip "WHAT: explanation"
+    s = s.replace(/\s*NOTE\s*:.*$/i, '');     // strip "NOTE: ..."
+    return s.trim();
+  }
+
   /* helper: apply override time or use default */
   function ovTime(key, def) {
     return (_overrides[key] && _overrides[key].time) ? _overrides[key].time : def;
   }
   function ovTitle(key, def) {
-    return (_overrides[key] && _overrides[key].customPlace) ? _overrides[key].customPlace : def;
+    var raw = (_overrides[key] && _overrides[key].customPlace) ? _overrides[key].customPlace : def;
+    return _cleanTitle(raw);
   }
   function ovSub(key, def) {
     var note = (_overrides[key] && _overrides[key].notes) ? ' · ' + _overrides[key].notes : '';
     return ((_overrides[key] && _overrides[key].customSub) ? _overrides[key].customSub : def) + note;
+  }
+  /* True when the user has manually overridden this slot's restaurant/place */
+  function hasCustomPlace(key) {
+    return !!(  _overrides[key] && _overrides[key].customPlace);
   }
 
   /* tbbRow — tap = AI info modal, ✏️ button = edit modal, drag handle = reorder */
@@ -12025,7 +12043,12 @@ function renderDayTimeBlocks(d, stop) {
   } else {
     /* ── EXPLORE DAY ──────────────────────────────────────────────── */
     var bTime = ovTime('breakfast', _fmtHour(7));
-    var bSub  = bRest ? ovSub('breakfast', (bRest.item.hours || '') + (bRest.item.address ? ' &middot; ' + bRest.item.address : '')) : 'Make breakfast in the RV';
+    var _bHasOverride = hasCustomPlace('breakfast');
+    var bSub  = _bHasOverride
+      ? ovSub('breakfast', 'Local breakfast spot')           /* overridden title — don't say "in the RV" */
+      : bRest
+        ? ovSub('breakfast', (bRest.item.hours || '') + (bRest.item.address ? ' &middot; ' + bRest.item.address : ''))
+        : ovSub('breakfast', 'Make breakfast in the RV');
     var bBtn  = (bRest && stop) ? tbbAiBtn('r', stop.id, bRest.idx) : '';
     var bSkip = (bRest && stop && rests.length > 1) ? 'skipMeal(' + d.day + ',\'breakfast\')' : '';
     _items.push({ key:'breakfast', html: tbbRow(bTime,'&#127749;',
@@ -15117,6 +15140,30 @@ function refreshTripPlan() {
     fixCount++;
   } else {
     issues.push({ type:'info', msg: 'Day fields ✓ All days have required phase, sleep, title, and driver fields' });
+  }
+
+  /* ── 3b. Day 1 must be a drive day (you leave home on Day 1) ─────────────── */
+  var _homeStop = (typeof _tripHomeStop === 'function') ? _tripHomeStop() : null;
+  var _homeId   = _homeStop ? _homeStop.id : null;
+  var _d1 = days[0];
+  if (_d1 && !_d1.driveDay && _d1.stopId !== _homeId) {
+    /* Day 1 is an explore day at a non-home stop — that means the app thinks you
+       magically arrived there without driving. Fix: mark it as a drive day.       */
+    var _d1Stop = stopMap[_d1.stopId];
+    var _d1Name = _d1Stop ? (_d1Stop.name + (_d1Stop.state ? ', ' + _d1Stop.state : '')) : 'first stop';
+    var _d1Miles = _d1.miles || 0;
+    var _d1Hours = _d1.driveHours || (_d1Miles > 0 ? Math.round(_d1Miles / 55 * 10) / 10 : 0);
+    days[0] = Object.assign({}, _d1, {
+      driveDay:   true,
+      miles:      _d1Miles > 0 ? _d1Miles : 0,
+      driveHours: _d1Hours > 0 ? _d1Hours : 0,
+      title:      'Depart Warwick \u2192 ' + _d1Name,
+      driver:     _d1.driver || 'Paul'
+    });
+    issues.push({ type:'fix', msg: 'Day 1 was an explore day at ' + _d1Name + ' — fixed to drive day (you leave home on Day 1). Update miles/hours in the day detail if needed.' });
+    fixCount++;
+  } else if (_d1 && _d1.driveDay) {
+    issues.push({ type:'info', msg: 'Day 1 ✓ Correctly marked as a drive day (departing from home)' });
   }
 
   /* ── 4. Orphaned days (stopId not in TRIP_STOPS) ─────────────────────── */
