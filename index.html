@@ -7715,6 +7715,13 @@ function renderSchedule() {
    Spring break Mar 30–Apr 3. Road-school geography bonus every day.
    ══════════════════════════════════════════════════════════════════ */
 
+/* ── School-day helper ───────────────────────────────────────────── */
+function _isWeekendDay(dateStr) {
+  /* Returns true for Saturday (6) and Sunday (0) */
+  var dow = new Date(dateStr + 'T12:00:00').getDay();
+  return dow === 0 || dow === 6;
+}
+
 /* ── SUBJECT DATA ─────────────────────────────────────────────────── */
 var LEILA_SUBJECTS = [
   { id: 'math',    label: 'Math',           icon: '➕', color: '#2C5F8A', desc: '4th grade: fractions, multiplication, geometry' },
@@ -7790,11 +7797,14 @@ function renderSchool() {
   // ── Header stats row ────────────────────────────────────────────
   var schoolDays = 0;
   var schoolDone = 0;
+  var weekendDays = 0;
   for (var si = 0; si < TRIP_DAYS.length; si++) {
-    if (!TRIP_DAYS[si].springBreak && TRIP_DAYS[si].stopId !== 15) {
-      schoolDays++;
-      if (TRIP_DAYS[si].day < todayNum) schoolDone++;
-    }
+    var _sd = TRIP_DAYS[si];
+    if (_sd.stopId === 15) continue;          // home — skip
+    if (_sd.springBreak) continue;            // spring break — skip
+    if (_isWeekendDay(_sd.date)) { weekendDays++; continue; } // weekend — skip
+    schoolDays++;
+    if (_sd.day < todayNum) schoolDone++;
   }
   var springBreakDays = TRIP_DAYS.filter(function(d) { return d.springBreak; }).length;
 
@@ -7804,10 +7814,10 @@ function renderSchool() {
 
   // Stats cards
   html += '<div class="grid-4" style="margin-bottom:20px;">'
-    + '<div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-book-open"></i></div><div class="stat-label">School Days</div><div class="stat-value">' + schoolDays + '</div><div class="stat-sub">total on this trip</div></div>'
+    + '<div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-book-open"></i></div><div class="stat-label">School Days</div><div class="stat-value">' + schoolDays + '</div><div class="stat-sub">weekdays on this trip</div></div>'
     + '<div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-circle-check"></i></div><div class="stat-label">Days Done</div><div class="stat-value">' + schoolDone + '</div><div class="stat-sub">lessons completed</div></div>'
     + '<div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-star"></i></div><div class="stat-label">Spring Break</div><div class="stat-value">' + springBreakDays + '</div><div class="stat-sub">days off (Mar 30–Apr 3)</div></div>'
-    + '<div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-earth-americas"></i></div><div class="stat-label">Geo Lessons</div><div class="stat-value">15</div><div class="stat-sub">one per destination</div></div>'
+    + '<div class="stat-card"><div class="stat-icon"><i class="fa-solid fa-umbrella-beach"></i></div><div class="stat-label">Weekends Off</div><div class="stat-value">' + weekendDays + '</div><div class="stat-sub">Sat &amp; Sun, no school</div></div>'
     + '</div>';
 
   // ── Kids legend ──────────────────────────────────────────────────
@@ -7838,17 +7848,22 @@ function renderSchool() {
     // Skip home days
     if (isHome) continue;
 
+    var isWeekend = _isWeekendDay(d.date);
+
     // Card border/bg
-    var cardBorder = isToday      ? 'border:2px solid var(--orange);background:var(--orange-l);'
-                   : d.springBreak ? 'border:1px solid var(--purple);background:var(--purple-l);'
-                   : isBefore     ? 'border:1px solid var(--border);background:#fafaf8;opacity:.8;'
+    var cardBorder = isToday        ? 'border:2px solid var(--orange);background:var(--orange-l);'
+                   : d.springBreak  ? 'border:1px solid var(--purple);background:var(--purple-l);'
+                   : isWeekend      ? 'border:1px solid #d0d0d0;background:#f5f5f5;'
+                   : isBefore       ? 'border:1px solid var(--border);background:#fafaf8;opacity:.8;'
                    : 'border:1px solid var(--border);background:var(--card);';
-    var dayBg = isToday ? 'var(--orange)' : d.springBreak ? 'var(--purple)' : isBefore ? '#aaa' : 'var(--blue)';
+    var dayBg = isToday ? 'var(--orange)' : d.springBreak ? 'var(--purple)' : isWeekend ? '#888' : isBefore ? '#aaa' : 'var(--blue)';
 
     html += '<div style="' + cardBorder + 'border-radius:var(--radius-s);overflow:hidden;">';
 
     // ── Collapsed header row (always visible) ──────────────────────
-    html += '<div onclick="toggleSchoolDay(' + d.day + ')" style="display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:0;cursor:pointer;">';
+    // Weekends have no expandable content — no onclick/chevron needed
+    var _hdrClick = (!isWeekend && !d.springBreak) ? ' onclick="toggleSchoolDay(' + d.day + ')" style="cursor:pointer;"' : ' style="cursor:default;"';
+    html += '<div' + _hdrClick + ' style="display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:0;">';
 
     // Day number
     html += '<div style="background:' + dayBg + ';color:#fff;font-weight:800;font-size:.85rem;display:flex;align-items:center;justify-content:center;align-self:stretch;min-height:54px;">' + d.day + '</div>';
@@ -7861,7 +7876,9 @@ function renderSchool() {
     if (isToday) html += '<span style="background:var(--orange);color:#fff;font-size:.65rem;font-weight:800;padding:1px 6px;border-radius:100px;">Today</span>';
     html += '</div>';
 
-    if (d.springBreak) {
+    if (isWeekend) {
+      html += '<div style="font-size:.78rem;color:#888;font-weight:700;">🏖️ Weekend — no school today!</div>';
+    } else if (d.springBreak) {
       html += '<div style="font-size:.78rem;color:var(--purple);font-weight:700;"><i class="fa-solid fa-star"></i> Spring Break — No school today!</div>';
     } else {
       var dayType = d.driveDay ? ('<i class="fa-solid fa-car-side"></i> Drive day · 4h school + 2h free · Teacher: ' + teacher) : ('<i class="fa-solid fa-campground"></i> Explore day · 4h school · Teacher: ' + teacher);
@@ -7870,8 +7887,19 @@ function renderSchool() {
     html += '</div>'; // title
 
     // Expand chevron
-    html += '<div id="chevron-' + d.day + '" style="padding:0 14px;font-size:.75rem;color:var(--text-3);">▼</div>';
+    // Chevron only on expandable (school) days
+    if (!isWeekend && !d.springBreak) {
+      html += '<div id="chevron-' + d.day + '" style="padding:0 14px;font-size:.75rem;color:var(--text-3);">▼</div>';
+    } else {
+      html += '<div style="padding:0 14px;font-size:.75rem;color:transparent;">▼</div>'; // spacer to keep grid aligned
+    }
     html += '</div>'; // header row
+
+    // Weekends: no expandable panel at all
+    if (isWeekend) {
+      html += '</div>'; // card
+      continue;
+    }
 
     // ── Expandable detail panel ────────────────────────────────────
     html += '<div id="school-day-' + d.day + '" class="hidden" style="border-top:1px solid var(--border);">';
