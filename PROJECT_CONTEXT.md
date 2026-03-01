@@ -292,6 +292,21 @@ tripgenie/
   - **ElevenLabs test — 2-step validation**: `_tsTestElVoice()` now first validates the API key via `/v1/user` endpoint (lightweight, no characters consumed). Clear 401 error message: "❌ Invalid key — go to elevenlabs.io → Profile → API Keys and copy a fresh key". Checks remaining character quota — if < 100 chars left, warns instead of attempting TTS. Key length sanity check (< 20 chars rejects immediately). Step 2 is the actual TTS POST with specific 401 message for that layer too.
   - **Health check 12d — schedule date gaps**: New check in `refreshTripPlan()` computes which days are visible (mirrors renderSchedule's skipDayNums logic, with drive-day protection). Walks visible days in date order checking for calendar holes. If any gap > 1 day is found, warns with dates and gap count. Passes with "✓ All N visible days are consecutive" when clean.
 
+- Session 18 continued (2026-03-01, eighth context):
+  - **Booking Confirmations feature**: Upload a PDF or photo of any reservation and Gemini extracts all key details automatically.
+    - `appState.bookingConfirmations = { [stopId]: [...] }` — stored per-stop, array of booking objects
+    - `openBookingModal(stopId)` — bottom-sheet modal with upload area + list of saved confirmations
+    - `_bcHandleFile(event)` — reads file as base64 DataURL, kicks off Gemini extraction
+    - `_bcExtract(b64, mimeType, fileName)` — POSTs to Gemini proxy with `inline_data` for PDF/image; structured prompt extracts 12 fields: propertyName, address, phone, confirmationNumber, checkIn/checkOut date+time, totalCost, type, siteOrRoom, hookups, notes
+    - `_bcShowExtracted(data)` — renders editable form pre-filled with extracted values so user can review/correct before saving
+    - `_bcSave()` — reads form values, auto-detects type (campground/hotel/cabin/airbnb) from property name, saves to appState
+    - `_bcDelete(bcId, stopId)` — removes a saved booking
+    - `renderBookings()` — new Tools sub-tab showing all confirmations grouped by stop, with "add" buttons for each stop
+    - `_bcCardHtml(bc)` — renders a booking card with check-in/out grid, phone link, confirmation # chip, notes
+  - **🎫 button in phase headers**: Each stop's blue phase header now has a "🎫" button (turns gold with count badge when confirmations exist). Tapping opens `openBookingModal(stopId)` directly from the schedule.
+  - **Tools tab "Bookings" sub-tab**: Added between Expenses and RV Log in the Tools tab bar.
+  - **Weather accuracy fix**: `_loadStopWeatherSilent` (called when tapping weather pill) now fetches both historical archive AND live 16-day forecast in parallel. Historical data cannot overwrite `type:'forecast'` entries. Stops within forecast window now correctly show "Live" forecast instead of "Historical/Typical".
+
 - Session 18 continued (2026-03-01, seventh context):
   - **Drive separator single-line pill**: Reverted from 2-row to 1-row `flex-wrap:wrap` pill per user feedback. `border-radius:100px` (full pill), `align-items:center;flex-wrap:wrap;gap:6px`. All chips wrap naturally on narrow screens.
   - **`_getDriveDayTitle` no truck-stop destination**: `destName` now always uses the stop name / phase (`destStop ? _sn(destStop) : d.phase`), never the sleep location. Removes "Wytheville → Truck Stop" style titles.
