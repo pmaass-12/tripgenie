@@ -2485,7 +2485,7 @@
                color:#fff;border-radius:100px;padding:6px 13px;font-size:.78rem;font-weight:800;
                cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;
                transition:background .15s;">
-        <i class="fa-solid fa-map"></i><span class="plan-trip-label"> Plan a New Trip</span>
+        <i class="fa-solid fa-map-location-dot"></i>
       </button>
       <button id="tg-btn" onclick="openTripGenie()" title="Ask TripGenie anything">
         <span style="font-size:.78rem;line-height:1;">✨</span><span class="tg-btn-label"> Ask TripGenie</span>
@@ -2972,7 +2972,6 @@
       <input type="file" id="tg-file-input" accept="image/*,application/pdf" style="display:none" onchange="handleTripGeniePhoto(event)" />
       <button class="tg-icon-btn" id="tg-photo-btn" onclick="document.getElementById('tg-file-input').click()" title="Attach a photo or PDF"><i class="fa-solid fa-arrow-up-from-bracket"></i></button>
       <button class="tg-icon-btn" id="tg-hf-btn" onclick="_tgToggleHandsFree()" title="Hands-free: speak → Genie replies → auto-listens"><svg id="tg-hf-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 18" width="18" height="14" fill="currentColor"><rect x="0" y="6" width="3" height="6" rx="1.5"/><rect x="4.75" y="2.5" width="3" height="13" rx="1.5"/><rect x="9.5" y="0" width="3" height="18" rx="1.5"/><rect x="14.25" y="3" width="3" height="12" rx="1.5"/><rect x="19" y="6" width="3" height="6" rx="1.5"/></svg></button>
-      <button class="tg-icon-btn" id="tg-mic-btn" onclick="_tgStartVoice()" title="Voice input — tap to speak">🎤</button>
       <button class="tg-icon-btn" id="tg-send-btn" onclick="askTripGenie()" title="Send">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
@@ -4876,11 +4875,13 @@ function _initVersionCheck() {
   /* ── Guest mode: ?guest=TRIP_ID bypasses login entirely ─────────── */
   _detectGuestMode();
   if (_guestTripId) {
-    // Hide login screen, show guest overlay immediately
+    // Hide login screen synchronously (it's already in DOM above this script tag)
     var _ls = document.getElementById('login-screen');
     if (_ls) _ls.classList.add('hidden');
-    // Kick off async guest load (shows overlay + fetches stops)
-    _initGuestMode(_guestTripId);
+    // guest-overlay div lives AFTER this script block in the HTML, so defer until DOM is fully parsed
+    document.addEventListener('DOMContentLoaded', function() {
+      _initGuestMode(_guestTripId);
+    });
     return; // skip normal auto-login flow
   }
 
@@ -5751,7 +5752,7 @@ function renderDashboard() {
   if (dayData) {
     todayCard = '<div class="card" style="margin-bottom:16px;">'
       + '<div class="card-header" style="background:linear-gradient(135deg,var(--blue) 0%,#1a3a5c 100%);color:#fff;border:none;display:flex;align-items:center;flex-wrap:wrap;gap:8px;">'
-      + '<div class="card-title" style="color:#fff;margin:0;"><i class="fa-solid fa-calendar-day" style="color:var(--orange)"></i> Day ' + dayNum + ' of ' + TRIP_DAYS.length + ' — ' + formatDate(dayData.date) + '</div>'
+      + '<div class="card-title" style="color:#fff;margin:0;"><i class="fa-solid fa-calendar-day" style="color:var(--orange)"></i> Day ' + dayNum + ' of ' + (_gVisibleDayCount || TRIP_DAYS.length) + ' — ' + formatDate(dayData.date) + '</div>'
       + springBadge + '</div>'
       + '<div class="card-body">'
       + '<div style="font-size:1.2rem;font-weight:700;margin-bottom:16px;color:var(--text);">' + dayData.title + '</div>'
@@ -7689,11 +7690,61 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
   var dMDay = effectiveDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   var _title = _getDriveDayTitle(d);
 
+  /* Departure time from override, or trip settings default, or 8 AM */
+  var _departTime = (appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].departTime)
+    || (appState.drivingPrefs && appState.drivingPrefs.departureTime)
+    || '08:00';
+  var _departH = parseInt(_departTime.split(':')[0], 10);
+  var _departM = parseInt(_departTime.split(':')[1] || '0', 10);
+  var _departDisp = (function() {
+    var h = _departH, m = _departM, ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return h + (m ? ':' + String(m).padStart(2,'0') : '') + ' ' + ampm;
+  })();
+
+  /* Stop-break time */
+  var _sbEvery = (appState.drivingPrefs && appState.drivingPrefs.stopBreakEvery) || 0;
+  var _sbMins  = (appState.drivingPrefs && appState.drivingPrefs.stopBreakMins)  || 30;
+  var _driveH  = _splitResolved ? _splitHours : (d.driveHours || 0);
+  var _sbStops = (_sbEvery > 0 && _driveH > 0) ? Math.floor(_driveH / _sbEvery) : 0;
+  var _sbTotalH = _sbStops > 0 ? Math.round((_sbStops * _sbMins) / 60 * 10) / 10 : 0;
+
+  /* Arrival estimate */
+  var _arrivalH = _departH + Math.floor(_departM / 60) + _driveH + _sbTotalH;
+  var _arrivalLow  = Math.floor(_arrivalH);
+  var _arrivalHigh = _arrivalLow + 1;
+  var _fmtH = function(h) { h = h % 24; var ampm = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return h + ' ' + ampm; };
+  var _arrivalStr = '~' + _fmtH(_arrivalLow) + '–' + _fmtH(_arrivalHigh);
+
+  /* Meta line */
   var metaParts = ['Day\u00a0' + displayNum, dWday + '\u00a0' + dMDay];
   if (d.miles > 0) metaParts.push(d.miles + '\u00a0mi');
-  if (d.driveHours > 0) metaParts.push('~' + (_splitResolved ? _splitHours + 'h\u00a0ea' : d.driveHours + 'h'));
+  var _driveLabel = _splitResolved ? (_splitHours + 'h\u00a0ea') : (d.driveHours + 'h\u00a0drive');
+  if (_sbTotalH > 0) _driveLabel += '\u00a0+\u00a0' + _sbTotalH + 'h\u00a0stops';
+  if (d.driveHours > 0) metaParts.push(_driveLabel);
 
-  /* Badges inside pill */
+  /* Depart chip */
+  var _chipBg = _isBefore ? 'rgba(0,0,0,.15)' : 'rgba(255,255,255,.2)';
+  var _departChip = '<button onclick="event.stopPropagation();openDriveTimeModal(' + d.day + ')" '
+    + 'title="Tap to change departure time" '
+    + 'style="display:inline-flex;align-items:center;gap:4px;background:' + _chipBg + ';border:1px solid rgba(255,255,255,.35);'
+    + 'color:#fff;border-radius:100px;padding:2px 9px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;white-space:nowrap;">'
+    + '<i class="fa-regular fa-clock" style="font-size:.65rem;"></i>\u00a0Depart\u00a0' + _departDisp
+    + '</button>';
+
+  /* Arrival chip */
+  var _arrivalChip = '<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.2);'
+    + 'color:rgba(255,255,255,.9);border-radius:100px;padding:2px 9px;font-size:.68rem;font-weight:600;white-space:nowrap;flex-shrink:0;">'
+    + '\u2192\u00a0Arrive\u00a0' + _arrivalStr + '</span>';
+
+  /* Delete chip */
+  var _deleteChip = '<button onclick="event.stopPropagation();_deleteDriveBar(' + d.day + ')" '
+    + 'title="Remove this drive day" '
+    + 'style="display:inline-flex;align-items:center;gap:3px;background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.2);'
+    + 'color:rgba(255,255,255,.75);border-radius:100px;padding:2px 8px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;white-space:nowrap;">'
+    + '<i class="fa-solid fa-xmark"></i></button>';
+
+  /* Badges */
   var badges = '';
   if (_splitResolved) {
     badges += '<span style="background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.4);border-radius:100px;padding:2px 8px;font-size:.65rem;font-weight:800;flex-shrink:0;white-space:nowrap;">&#10003;\u00a0Split</span>';
@@ -7709,16 +7760,85 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
   var _clr     = _isBefore ? '#bbb' : 'var(--orange)';
   var _line    = 'flex:1;height:2px;background:repeating-linear-gradient(90deg,' + _clr + ' 0,' + _clr + ' 8px,transparent 8px,transparent 16px);min-width:8px;flex-shrink:1;';
 
-  return '<div style="display:flex;align-items:center;gap:0;position:relative;margin:5px 0 5px;cursor:pointer;" onclick="openDayDetail(' + d.day + ')" title="' + _title.replace(/'/g, "&#39;") + ' — tap for detail">'
+  /* Two-row pill: row 1 = route title + meta; row 2 = depart chip + arrive chip + badges + delete */
+  return '<div style="display:flex;align-items:center;gap:0;position:relative;margin:5px 0 5px;" onclick="openDayDetail(' + d.day + ')" title="' + _title.replace(/'/g, "&#39;") + ' — tap for detail" style="cursor:pointer;">'
     + '<div style="' + _line + '"></div>'
-    + '<div style="flex-shrink:0;background:' + _pillBg + ';color:#fff;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;display:flex;align-items:center;gap:7px;box-shadow:' + _shadow + ';max-width:88%;overflow:hidden;">'
+    + '<div style="flex-shrink:0;background:' + _pillBg + ';color:#fff;border-radius:14px;padding:7px 14px;font-size:.78rem;font-weight:800;display:flex;flex-direction:column;gap:5px;box-shadow:' + _shadow + ';max-width:88%;">'
+    + '<div style="display:flex;align-items:center;gap:7px;overflow:hidden;">'
     + '<i class="fa-solid fa-rv" style="flex-shrink:0;font-size:.85rem;"></i>'
     + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">' + _title + '</span>'
     + '<span style="font-weight:500;opacity:.82;font-size:.7rem;flex-shrink:0;white-space:nowrap;">' + metaParts.join(' &middot; ') + '</span>'
-    + badges
+    + '</div>'
+    + '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">'
+    + _departChip + _arrivalChip + badges + _deleteChip
+    + '</div>'
     + '</div>'
     + '<div style="' + _line + '"></div>'
     + '</div>';
+}
+
+
+function openDriveTimeModal(dayNum) {
+  var d = getDay(dayNum);
+  if (!d) return;
+  /* Get current depart time */
+  var _cur = (appState.dayOverrides && appState.dayOverrides[dayNum] && appState.dayOverrides[dayNum].departTime)
+    || (appState.drivingPrefs && appState.drivingPrefs.departureTime)
+    || '08:00';
+  var _title = _getDriveDayTitle(d);
+  /* Build time options 5 AM – 11 PM in 30-min increments */
+  var opts = '';
+  for (var hh = 5; hh <= 23; hh++) {
+    for (var mm = 0; mm < 60; mm += 30) {
+      var val = String(hh).padStart(2,'0') + ':' + String(mm).padStart(2,'0');
+      var ampm = hh >= 12 ? 'PM' : 'AM';
+      var h12  = hh % 12 || 12;
+      var lbl  = h12 + (mm ? ':' + String(mm).padStart(2,'0') : '') + ' ' + ampm;
+      opts += '<option value="' + val + '"' + (val === _cur ? ' selected' : '') + '>' + lbl + '</option>';
+    }
+  }
+  var html = '<div id="drive-time-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this)this.remove();">'
+    + '<div style="background:#fff;border-radius:18px;padding:24px;max-width:340px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.25);">'
+    + '<div style="font-size:1rem;font-weight:800;color:var(--text);margin-bottom:4px;">🚐 Departure Time</div>'
+    + '<div style="font-size:.8rem;color:var(--text-2);margin-bottom:16px;">' + _title + '</div>'
+    + '<select id="drive-time-sel" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);font-size:1rem;font-family:var(--font);color:var(--text);background:#fff;margin-bottom:16px;">' + opts + '</select>'
+    + '<div style="display:flex;gap:8px;">'
+    + '<button onclick="document.getElementById(\'drive-time-modal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);border-radius:100px;font-size:.9rem;font-weight:700;cursor:pointer;font-family:var(--font);background:#fff;color:var(--text-2);">Cancel</button>'
+    + '<button onclick="_saveDriveTime(' + dayNum + ')" style="flex:2;padding:11px;background:var(--orange);border:none;border-radius:100px;font-size:.9rem;font-weight:800;cursor:pointer;font-family:var(--font);color:#fff;">Save</button>'
+    + '</div>'
+    + '</div></div>';
+  var el = document.createElement('div');
+  el.innerHTML = html;
+  document.body.appendChild(el.firstChild);
+}
+
+function _saveDriveTime(dayNum) {
+  var sel = document.getElementById('drive-time-sel');
+  if (!sel) return;
+  var val = sel.value;
+  if (!appState.dayOverrides) appState.dayOverrides = {};
+  if (!appState.dayOverrides[dayNum]) appState.dayOverrides[dayNum] = {};
+  appState.dayOverrides[dayNum].departTime = val;
+  saveState(appState);
+  var h = parseInt(val.split(':')[0],10), m = parseInt(val.split(':')[1]||'0',10);
+  var ampm = h >= 12 ? 'PM' : 'AM'; h = h%12||12;
+  var disp = h + (m ? ':'+String(m).padStart(2,'0') : '') + ' ' + ampm;
+  showToast('🕐 Departure set to ' + disp, 2000);
+  document.getElementById('drive-time-modal').remove();
+  renderSchedule();
+}
+
+function _deleteDriveBar(dayNum) {
+  if (!confirm('Remove this drive day from the schedule? The day will be converted to an explore day.')) return;
+  if (!appState.dayOverrides) appState.dayOverrides = {};
+  if (!appState.dayOverrides[dayNum]) appState.dayOverrides[dayNum] = {};
+  appState.dayOverrides[dayNum].deletedDriveBar = true;
+  /* Find the TRIP_DAYS entry and flip driveDay off */
+  var d = TRIP_DAYS.find(function(td){ return td.day === dayNum; });
+  if (d) { d.driveDay = false; d.miles = 0; d.driveHours = 0; }
+  saveState(appState);
+  showToast('Drive day removed', 2000);
+  renderSchedule();
 }
 
 function renderSchedule() {
@@ -7772,6 +7892,7 @@ function renderSchedule() {
 
   // Header row — count only actual trip days (exclude post-arrival home days)
   var _tripDayCount = _dispCounter; // equals total visible days
+  _gVisibleDayCount = _dispCounter; // expose to dashboard
   html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">'
     + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-calendar-days"></i> ' + _tripDayCount + '-Day Schedule</h2>'
     + '<button onclick="openAddDest()" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:7px 14px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px;">&#128205; Add Destination</button>'
@@ -7892,7 +8013,7 @@ function renderSchedule() {
     html += '<div style="padding:10px 14px;cursor:pointer;" onclick="openDayDetail(' + d.day + ')" title="View day schedule">';
     html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">';
     if (stop && stop.emoji) html += '<span style="font-size:.95rem">' + stop.emoji + '</span>';
-    html += '<span style="font-weight:700;font-size:1rem;color:var(--text);line-height:1.3;">' + (d.driveDay ? _getDriveDayTitle(d) : (d.title || d.name || 'Explore ' + (d.phase || 'day'))) + '</span>';
+    html += '<span style="font-weight:700;font-size:1rem;color:var(--text);line-height:1.3;">' + (d.driveDay ? _getDriveDayTitle(d) : (_isTransit ? ('Morning in ' + (stop ? stop.name : (d.phase || 'town'))) : (d.title || d.name || 'Explore ' + (d.phase || 'day')))) + '</span>';
     if (isToday) html += '<span style="background:var(--orange);color:#fff;font-size:.68rem;font-weight:800;padding:2px 8px;border-radius:100px;text-transform:uppercase;">Today</span>';
     if (_isOverflow && d.sleepType !== 'home') html += '<span style="background:#c62828;color:#fff;font-size:.65rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;">🔺 Over Schedule</span>';
     html += '</div>';
@@ -18560,6 +18681,7 @@ var _tgHandsFree   = false;   /* full hands-free auto-listen loop */
 var _tgRecognition = null;    /* active SpeechRecognition instance */
 var _tgAudioEl     = null;    /* <audio> element for ElevenLabs playback */
 var _tgPlayingEL   = false;   /* EL audio currently playing */
+var _gVisibleDayCount = 0;   /* exposed to dashboard, set in renderSchedule */
 var _elDisabled    = false;   /* set true after a 401 to stop retrying bad key */
 
 /* ── ElevenLabs config from Trip Settings ── */
@@ -19044,6 +19166,7 @@ function askTripGenie() {
   });
   var _tgItinerary = _tgStopList.join(' → ');
 
+  var _tgIsVoice = _tgHandsFree || _tgVoiceMode;
   var context  = 'You are TripGenie, a friendly and knowledgeable AI assistant for this family\'s RV trip. '
     + 'They are on a ' + _tgTripName + ' from ' + _tripStartCity()
     + (_tripIsRoundTrip() ? ' (round trip)' : ' to ' + _tripEndCity())
@@ -19055,7 +19178,8 @@ function askTripGenie() {
     + 'Give practical, friendly, helpful answers. '
     + 'For RV maintenance questions, be specific and safety-conscious. '
     + 'For local attraction questions, focus on family-friendly options. '
-    + 'Keep responses concise but thorough. Use bullet points for steps.'
+    + 'CRITICAL — BE CONCISE: Answer only what was asked. Do NOT recite the full itinerary, trip dates, or background context unprompted. For simple factual questions (where are we, what day is it, what\'s nearby) give a 1–2 sentence answer. The user can always ask for more detail. '
+    + (_tgIsVoice ? 'This response will be READ ALOUD. Be especially brief — 1 sentence for factual questions, 2–3 short sentences max for anything else. No bullet points for voice responses. ' : 'Use bullet points only for multi-step instructions. ')
     + _getPersonalizationContext();
 
   /* Build multi-turn conversation contents for Gemini — include last 6 turns of history */
@@ -22447,7 +22571,17 @@ function _smRenderToday() {
   var _ctaLabel = day.driveDay ? (toName + toState) : ((stop.name || 'camp') + toState);
   var _ctaLabelSafe = _ctaLabel.replace(/'/g, "\\'");
   var _ctaSub = day.driveDay ? ('Check in at ' + toName) : ('Check in at ' + (stop.name || 'camp'));
-  var _leftSub = day.driveDay ? ('On our way to ' + toName) : ('On our way to our next stop');
+  /* Find the NEXT different stop for "We've Left" label */
+  var _nextDiffStop = null;
+  for (var _ndi = idx + 1; _ndi < days.length; _ndi++) {
+    if (days[_ndi].stopId !== day.stopId) {
+      _nextDiffStop = stops.find(function(s){ return s.id === days[_ndi].stopId; });
+      if (_nextDiffStop) break;
+    }
+  }
+  var _leftDest = _nextDiffStop ? (_nextDiffStop.name + (_nextDiffStop.state ? ', ' + _nextDiffStop.state : '')) : 'our next stop';
+  var _leftSub = 'On our way to ' + _leftDest;
+
   var ctaRow = '<div class="dm-cta-row">'
     + '<button class="dm-cta-btn dm-cta-arrived" onclick="_dmArrived(' + (idx + 1) + ',\'' + _ctaLabelSafe + '\')">'
     + '<span class="dm-cta-icon">🎉</span>'
