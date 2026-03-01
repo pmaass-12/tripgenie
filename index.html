@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="theme-color" content="#1a3a5c" />
   <title>🚐 Maass Family RV Adventure 2026</title>
@@ -7668,6 +7669,56 @@ function _renderPauseScheduleBlock(pd, nights) {
 }
 
 /* ── RENDER SCHEDULE ─────────────────────────────────────────────── */
+/* ── Option A drive-day separator ────────────────────────────────────────────
+   Renders a compact orange road-ribbon strip instead of a full card.
+   Shows: 🚐  City A → City B  |  Day X · Day Date · Miles · Hours
+   Tappable → opens day detail modal. No driver shown (user preference).
+───────────────────────────────────────────────────────────────────────────── */
+function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
+  var _maxDriveH    = (appState.drivingPrefs && appState.drivingPrefs.maxHours) || 4;
+  var _splitResolved = !!(appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].splitResolved);
+  var _splitHours   = _splitResolved ? (appState.dayOverrides[d.day].splitHours || Math.round(d.driveHours / 2 * 10) / 10) : 0;
+  var _isLongDrive  = !_splitResolved && d.driveHours > _maxDriveH;
+  var _live = tripIsLive();
+  var _isToday  = _live && d.day === tripDay();
+  var _isBefore = _live && d.day < tripDay();
+
+  var dWday = effectiveDate.toLocaleDateString('en-US', { weekday: 'short' });
+  var dMDay = effectiveDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  var _title = _getDriveDayTitle(d);
+
+  var metaParts = ['Day\u00a0' + displayNum, dWday + '\u00a0' + dMDay];
+  if (d.miles > 0) metaParts.push(d.miles + '\u00a0mi');
+  if (d.driveHours > 0) metaParts.push('~' + (_splitResolved ? _splitHours + 'h\u00a0ea' : d.driveHours + 'h'));
+
+  /* Badges inside pill */
+  var badges = '';
+  if (_splitResolved) {
+    badges += '<span style="background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.4);border-radius:100px;padding:2px 8px;font-size:.65rem;font-weight:800;flex-shrink:0;white-space:nowrap;">&#10003;\u00a0Split</span>';
+  } else if (_isLongDrive) {
+    badges += '<button onclick="event.stopPropagation();openDayDetail(' + d.day + ')" style="background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:2px 8px;font-size:.65rem;font-weight:800;cursor:pointer;white-space:nowrap;font-family:var(--font);flex-shrink:0;">&#9888;\u00a0Split</button>';
+  }
+  if (isOverflow && d.sleepType !== 'home') {
+    badges += '<span style="background:#c62828;color:#fff;font-size:.63rem;font-weight:800;padding:2px 7px;border-radius:100px;white-space:nowrap;flex-shrink:0;">&#128314;\u00a0Over</span>';
+  }
+
+  var _pillBg  = _isBefore ? '#999' : _isToday ? '#c96820' : 'var(--orange)';
+  var _shadow  = _isBefore ? 'none' : '0 2px 8px rgba(232,129,58,.28)';
+  var _clr     = _isBefore ? '#bbb' : 'var(--orange)';
+  var _line    = 'flex:1;height:2px;background:repeating-linear-gradient(90deg,' + _clr + ' 0,' + _clr + ' 8px,transparent 8px,transparent 16px);min-width:8px;flex-shrink:1;';
+
+  return '<div style="display:flex;align-items:center;gap:0;position:relative;margin:5px 0 5px;cursor:pointer;" onclick="openDayDetail(' + d.day + ')" title="' + _title.replace(/'/g, "&#39;") + ' — tap for detail">'
+    + '<div style="' + _line + '"></div>'
+    + '<div style="flex-shrink:0;background:' + _pillBg + ';color:#fff;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;display:flex;align-items:center;gap:7px;box-shadow:' + _shadow + ';max-width:88%;overflow:hidden;">'
+    + '<i class="fa-solid fa-rv" style="flex-shrink:0;font-size:.85rem;"></i>'
+    + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">' + _title + '</span>'
+    + '<span style="font-weight:500;opacity:.82;font-size:.7rem;flex-shrink:0;white-space:nowrap;">' + metaParts.join(' &middot; ') + '</span>'
+    + badges
+    + '</div>'
+    + '<div style="' + _line + '"></div>'
+    + '</div>';
+}
+
 function renderSchedule() {
   var el = document.getElementById('schedule-content');
   if (!el) return;
@@ -7774,19 +7825,36 @@ function renderSchedule() {
 
     // Phase header when phase OR stop changes — each stop gets its own blue bar
     // (handles generic region phases like "Southwest" containing White Sands + Albuquerque)
-    if (d.phase !== lastPhase || d.stopId !== lastStopId) {
-      /* Don't repeat the green "Home" banner if we're still in home territory */
+    var _phaseJustChanged = (d.phase !== lastPhase || d.stopId !== lastStopId);
+    if (_phaseJustChanged) {
       var _dIsHome = d.sleepType === 'home';
-      if (!removedStopIds[d.stopId] && !(_dIsHome && _lastHeaderWasHome)) {
+      /* Drive days get their phase header rendered AFTER the separator (see below).
+         Non-drive days render it here, before the card — normal behavior.          */
+      if (!d.driveDay && !removedStopIds[d.stopId] && !(_dIsHome && _lastHeaderWasHome)) {
         html += phaseHeaderHtml(d.phase, d);
+        _lastHeaderWasHome = _dIsHome;
       }
-      _lastHeaderWasHome = _dIsHome;
       lastPhase = d.phase;
       lastStopId = d.stopId;
     }
 
     // Skip this day if it was hidden by the - button or full stop removal
     if (skipDayNums[d.day]) continue;
+
+    // ── Drive day → Option A road-ribbon separator ───────────────────────────
+    if (d.driveDay) {
+      var _dispNum = _dayDisplayNum[d.day] || d.day;
+      html += _renderDriveSepA(d, stop, _effectiveDate, _dispNum, _isOverflow);
+      /* Now render destination phase header AFTER the separator */
+      if (_phaseJustChanged && stop && !removedStopIds[d.stopId]) {
+        var _sepDestIsHome = (d.sleepType === 'home');
+        if (!(_sepDestIsHome && _lastHeaderWasHome)) {
+          html += phaseHeaderHtml(d.phase, d);
+          _lastHeaderWasHome = _sepDestIsHome;
+        }
+      }
+      continue; // skip the full card for drive days
+    }
 
     // Transit mode — explore day toggled to drive-through/transit day
     var _isTransit = !d.driveDay && d.sleepType !== 'home'
@@ -9922,6 +9990,13 @@ function _initGuestMapInst(stops, arrivals, departures) {
   });
 
   if (latLngs.length > 1) L.polyline(latLngs, { color:'#7B5EA7', weight:2.5, opacity:.6, dashArray:'6,5' }).addTo(_guestMapInst);
+  /* invalidateSize ensures Leaflet recalculates container dimensions after display:none→flex */
+  setTimeout(function() {
+    if (_guestMapInst) {
+      _guestMapInst.invalidateSize();
+      if (bounds.length) _guestMapInst.fitBounds(bounds, { padding:[30,30] });
+    }
+  }, 120);
   if (bounds.length) _guestMapInst.fitBounds(bounds, { padding:[30,30] });
 }
 
