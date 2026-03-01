@@ -9495,10 +9495,13 @@ var _guestMapInst = null;   // Leaflet instance for guest map
 var _guestStops   = [];     // stops loaded from Supabase for this guest session
 
 /* ── 1. Detect guest mode from URL ──────────────────────────────── */
+/* Supports two entry points:
+   ?guest=TRIP_ID  — Supabase trip (existing)
+   ?friends=1      — open local trip, no login, no Supabase needed   */
 function _detectGuestMode() {
   try {
     var p = new URLSearchParams(window.location.search);
-    _guestTripId = p.get('guest') || null;
+    _guestTripId = p.get('guest') || (p.get('friends') ? 'local' : null);
   } catch(e) {}
 }
 
@@ -9508,22 +9511,24 @@ async function _initGuestMode(tripId) {
   if (!overlay) return;
   overlay.style.display = 'flex';
 
-  // Fetch trip from Supabase (anon key — needs public SELECT policy on trips)
   var stops = null;
-  var tripName = 'Our RV Adventure 2026';
-  try {
-    var resp = await fetch(SUPA_URL + '/rest/v1/trips?id=eq.' + encodeURIComponent(tripId) + '&select=name,trip_data&limit=1', {
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
-    });
-    var rows = await resp.json();
-    if (Array.isArray(rows) && rows[0]) {
-      if (rows[0].name) tripName = rows[0].name;
-      var td = rows[0].trip_data || {};
-      if (td.customTripData && td.customTripData.stops) stops = td.customTripData.stops;
-    }
-  } catch(e) {}
+  var tripName = (CONFIG && CONFIG.tripName) || 'Maass Family RV Adventure 2026';
 
-  // Fallback: use built-in stops if Supabase read fails (e.g. RLS not yet set up)
+  if (tripId && tripId !== 'local') {
+    // Supabase path — fetch trip data by ID
+    try {
+      var resp = await fetch(SUPA_URL + '/rest/v1/trips?id=eq.' + encodeURIComponent(tripId) + '&select=name,trip_data&limit=1', {
+        headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+      });
+      var rows = await resp.json();
+      if (Array.isArray(rows) && rows[0]) {
+        if (rows[0].name) tripName = rows[0].name;
+        var td = rows[0].trip_data || {};
+        if (td.customTripData && td.customTripData.stops) stops = td.customTripData.stops;
+      }
+    } catch(e) {}
+  }
+  // Local / fallback path — use hardcoded trip stops directly
   if (!stops && typeof _BUILTIN_TRIP !== 'undefined') stops = _BUILTIN_TRIP.stops.slice();
   if (!stops) stops = (TRIP_STOPS || []).slice();
 
@@ -9599,7 +9604,7 @@ function _guestVoice(stopId) {
   r.start();
 }
 
-/* ── 5. Submit suggestion to Supabase ────────────────────────────── */
+/* ── 5. Submit suggestion — Supabase when available, localStorage fallback ── */
 async function _guestSubmit(stopId, stopName) {
   var fn  = ((document.getElementById('gf-fn-'  + stopId) || {}).value || '').trim();
   var ln  = ((document.getElementById('gf-ln-'  + stopId) || {}).value || '').trim();
@@ -9607,31 +9612,49 @@ async function _guestSubmit(stopId, stopName) {
   if (!fn || !ln) { _guestToast('Please enter your first and last name 👋', 2500); return; }
   if (!txt)       { _guestToast('Don\'t forget to write your recommendation!', 2500); return; }
 
-  try {
-    var resp = await fetch(SUPA_URL + '/rest/v1/trip_suggestions', {
-      method: 'POST',
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
-                 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-      body: JSON.stringify({ trip_id: _guestTripId, stop_id: stopId,
-                             stop_name: stopName, first_name: fn, last_name: ln, suggestion: txt })
-    });
-    if (resp.ok || resp.status === 201) {
-      // Clear form + show success
-      ['gf-fn-','gf-ln-','gf-txt-'].forEach(function(p) {
-        var el = document.getElementById(p + stopId); if (el) el.value = '';
+  var suggestion = {
+    id:         'sugg_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
+    trip_id:    _guestTripId || 'local',
+    stop_id:    stopId,
+    stop_name:  stopName,
+    first_name: fn,
+    last_name:  ln,
+    suggestion: txt,
+    created_at: new Date().toISOString()
+  };
+
+  var saved = false;
+
+  /* Try Supabase first (if a real trip ID is set) */
+  if (_guestTripId && _guestTripId !== 'local' && SUPA_URL && SUPA_KEY) {
+    try {
+      var resp = await fetch(SUPA_URL + '/rest/v1/trip_suggestions', {
+        method: 'POST',
+        headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
+                   'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+        body: JSON.stringify(suggestion)
       });
-      var suc = document.getElementById('gf-success-' + stopId);
-      if (suc) { suc.style.display = 'block'; setTimeout(function() { suc.style.display = 'none'; }, 4000); }
-    } else {
-      var errBody = await resp.text();
-      /* If table doesn't exist yet, show setup hint */
-      if (resp.status === 404 || errBody.indexOf('relation') !== -1) {
-        _guestToast('Setup needed — see Supabase SQL in Friends tab', 4000);
-      } else {
-        _guestToast('Could not send — please try again.', 2500);
-      }
-    }
-  } catch(e) { _guestToast('Network error — check connection.', 2500); }
+      if (resp.ok || resp.status === 201) saved = true;
+    } catch(e) {}
+  }
+
+  /* Always save locally too — so the family can see it even without Supabase */
+  try {
+    var stored = JSON.parse(localStorage.getItem('rv_friend_suggestions') || '[]');
+    stored.unshift(suggestion);
+    localStorage.setItem('rv_friend_suggestions', JSON.stringify(stored));
+    saved = true;
+  } catch(e) {}
+
+  if (saved) {
+    ['gf-fn-','gf-ln-','gf-txt-'].forEach(function(pfx) {
+      var el = document.getElementById(pfx + stopId); if (el) el.value = '';
+    });
+    var suc = document.getElementById('gf-success-' + stopId);
+    if (suc) { suc.style.display = 'block'; setTimeout(function() { suc.style.display = 'none'; }, 4500); }
+  } else {
+    _guestToast('Could not save — please try again.', 2500);
+  }
 }
 
 /* ── 6. Init guest Leaflet map ───────────────────────────────────── */
@@ -9678,10 +9701,10 @@ function _copyShareLink() {
     link = window.location.origin + window.location.pathname + '?guest=' + encodeURIComponent(_currentTripId);
     msg  = '🔗 Guest link copied! Recipients can view the route — no login needed.';
   } else {
-    /* Legacy / family-password path: share the app URL.
-       Recipient will need the viewer password (default: "viewer") to see the trip. */
-    link = window.location.origin + window.location.pathname;
-    msg  = '🔗 App link copied! Viewers need the viewer password to open the trip.';
+    /* Legacy / no-Supabase path: ?friends=1 opens the guest overlay directly,
+       no password, no login — works for anyone with the link. */
+    link = window.location.origin + window.location.pathname + '?friends=1';
+    msg  = '🔗 Friends link copied! Anyone with this link can view the route & leave tips — no password needed.';
   }
   if (navigator.clipboard && navigator.clipboard.writeText) {
     navigator.clipboard.writeText(link).then(function() {
@@ -9731,20 +9754,34 @@ async function _loadFriendSuggestions() {
 
   el.innerHTML = hdrHtml + '<div id="friends-inner"><div style="text-align:center;padding:30px;color:var(--text-3);">Loading…</div></div>';
 
-  if (!_currentTripId) {
-    document.getElementById('friends-inner').innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--text-3);"><div style="font-size:2rem;margin-bottom:10px;">🔒</div><div style="font-weight:700;margin-bottom:6px;">Sign in to see friend suggestions</div><div style="font-size:.82rem;">Suggestions are stored in the cloud — log in to access them.</div></div>';
-    return;
-  }
+  /* Always load local suggestions first (these work without Supabase) */
+  var localRows = [];
   try {
-    var resp = await fetch(SUPA_URL + '/rest/v1/trip_suggestions?trip_id=eq.' + encodeURIComponent(_currentTripId) + '&select=*&order=created_at.asc', {
-      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
-    });
-    var rows = await resp.json();
-    if (!Array.isArray(rows)) throw new Error('bad response');
-    _renderFriendSuggestionsFamily(rows);
-  } catch(e) {
-    document.getElementById('friends-inner').innerHTML = '<div style="color:var(--red);padding:20px;font-size:.85rem;">Could not load suggestions — make sure the Supabase table exists (see setup above).</div>';
+    localRows = JSON.parse(localStorage.getItem('rv_friend_suggestions') || '[]');
+  } catch(e) {}
+
+  /* Also try Supabase if we have a trip ID */
+  var cloudRows = [];
+  if (_currentTripId && _currentTripId !== 'local' && SUPA_URL && SUPA_KEY) {
+    try {
+      var resp = await fetch(SUPA_URL + '/rest/v1/trip_suggestions?trip_id=eq.' + encodeURIComponent(_currentTripId) + '&select=*&order=created_at.asc', {
+        headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+      });
+      var rows = await resp.json();
+      if (Array.isArray(rows)) cloudRows = rows;
+    } catch(e) {}
   }
+
+  /* Merge: dedupe by id, prefer cloud rows */
+  var seen = {};
+  var allRows = [];
+  cloudRows.concat(localRows).forEach(function(r) {
+    if (r.id && seen[r.id]) return;
+    if (r.id) seen[r.id] = true;
+    allRows.push(r);
+  });
+
+  _renderFriendSuggestionsFamily(allRows);
 }
 
 function _renderFriendSuggestionsFamily(rows) {
