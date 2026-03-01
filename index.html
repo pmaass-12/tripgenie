@@ -20832,35 +20832,24 @@ function _smRenderToday() {
       + '</div>';
   }
 
-  /* 3. CTA row — big action buttons */
-  var ctaRow;
-  if (day.driveDay) {
-    ctaRow = '<div class="dm-cta-row">'
-      + '<button class="dm-cta-btn dm-cta-arrived" onclick="_dmArrived(' + (idx + 1) + ',\'' + (toName + toState).replace(/'/g, "\\'") + '\')">'
-      + '<span class="dm-cta-icon">🎉</span>'
-      + '<span class="dm-cta-lbl">We\'ve Arrived!</span>'
-      + '<span class="dm-cta-sub">Check in at ' + toName + '</span>'
-      + '</button>'
-      + '<button class="dm-cta-btn dm-cta-left" onclick="_dmDeparted(\'' + (toName + toState).replace(/'/g, "\\'") + '\')">'
-      + '<span class="dm-cta-icon">🚐</span>'
-      + '<span class="dm-cta-lbl">We\'ve Left</span>'
-      + '<span class="dm-cta-sub">En route to ' + toName + '</span>'
-      + '</button>'
-      + '</div>';
-  } else {
-    ctaRow = '<div class="dm-cta-row">'
-      + '<button class="dm-cta-btn dm-cta-arrived" onclick="openCampInfo(' + (idx + 1) + ')">'
-      + '<span class="dm-cta-icon">🏕</span>'
-      + '<span class="dm-cta-lbl">Camp Info</span>'
-      + '<span class="dm-cta-sub">Site details & checklist</span>'
-      + '</button>'
-      + '<button class="dm-cta-btn dm-cta-left" onclick="goTo(\'s-journal\',\'Journal\',\'Today\',\'today\')">'
-      + '<span class="dm-cta-icon">📓</span>'
-      + '<span class="dm-cta-lbl">Journal</span>'
-      + '<span class="dm-cta-sub">Capture today\'s memories</span>'
-      + '</button>'
-      + '</div>';
-  }
+  /* 3. CTA row — always show Arrived + Left regardless of day type */
+  /* On drive days: destination is toName. On explore/rest days: current stop */
+  var _ctaLabel = day.driveDay ? (toName + toState) : ((stop.name || 'camp') + toState);
+  var _ctaLabelSafe = _ctaLabel.replace(/'/g, "\\'");
+  var _ctaSub = day.driveDay ? ('Check in at ' + toName) : ('Check in at ' + (stop.name || 'camp'));
+  var _leftSub = day.driveDay ? ('En route to ' + toName) : ('Heading out from ' + (stop.name || 'camp'));
+  var ctaRow = '<div class="dm-cta-row">'
+    + '<button class="dm-cta-btn dm-cta-arrived" onclick="_dmArrived(' + (idx + 1) + ',\'' + _ctaLabelSafe + '\')">'
+    + '<span class="dm-cta-icon">🎉</span>'
+    + '<span class="dm-cta-lbl">We\'ve Arrived!</span>'
+    + '<span class="dm-cta-sub">' + _ctaSub + '</span>'
+    + '</button>'
+    + '<button class="dm-cta-btn dm-cta-left" onclick="_dmDeparted(\'' + _ctaLabelSafe + '\')">'
+    + '<span class="dm-cta-icon">🚐</span>'
+    + '<span class="dm-cta-lbl">We\'ve Left</span>'
+    + '<span class="dm-cta-sub">' + _leftSub + '</span>'
+    + '</button>'
+    + '</div>';
 
   /* 4. Big TripGenie button */
   var genieBtn = '<button class="dm-genie-big" onclick="openTripGenie()">'
