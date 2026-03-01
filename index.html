@@ -2242,7 +2242,7 @@
       </div>
       <button onclick="openHelpSearch()" title="Search the app — ask anything" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:100px;padding:5px 11px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-magnifying-glass"></i> Help</button>
       <button id="dark-mode-btn" onclick="toggleDarkMode()" title="Toggle dark/light mode" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:1rem;cursor:pointer;line-height:1;display:flex;align-items:center;">🌙</button>
-      <button id="debug-console-btn" onclick="_dbgOpen()" title="Debug console" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:.85rem;cursor:pointer;line-height:1;display:flex;align-items:center;position:relative;"><i class="fa-solid fa-screwdriver-wrench"></i><span id="debug-err-badge" style="display:none;position:absolute;top:-3px;right:-3px;background:#e53e3e;color:#fff;border-radius:50%;width:14px;height:14px;font-size:.6rem;font-weight:900;align-items:center;justify-content:center;line-height:1;"></span></button>
+      <button id="debug-console-btn" onclick="_dbgOpen()" title="Debug console" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:.85rem;cursor:pointer;line-height:1;display:flex;align-items:center;position:relative;"><i class="fa-solid fa-terminal"></i><span id="debug-err-badge" style="display:none;position:absolute;top:-3px;right:-3px;background:#e53e3e;color:#fff;border-radius:50%;width:14px;height:14px;font-size:.6rem;font-weight:900;align-items:center;justify-content:center;line-height:1;"></span></button>
       <button class="logout-btn" id="logout-btn" title="Logout">
         <i class="fa-solid fa-right-from-bracket"></i>
       </button>
@@ -2726,37 +2726,49 @@
 <div id="day-detail-modal" class="hidden" onclick="if(event.target===this)closeDayDetail()">
   <div class="ddm-card">
     <div class="ddm-header">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-        <div>
-          <div style="font-size:.7rem;opacity:.75;font-weight:700;text-transform:uppercase;letter-spacing:.06em;" id="ddm-phase"></div>
-          <div style="font-size:1.05rem;font-weight:900;margin-top:2px;line-height:1.3;" id="ddm-title"></div>
-          <div style="font-size:.77rem;opacity:.85;margin-top:4px;" id="ddm-meta"></div>
+      <!-- Row 1: Location label + close -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;">
+        <div style="flex:1;min-width:0;">
+          <div id="ddm-phase" style="font-size:.65rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;opacity:.7;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+          <div id="ddm-title" style="font-size:1.15rem;font-weight:900;line-height:1.25;"></div>
+          <div id="ddm-meta" style="font-size:.75rem;opacity:.8;margin-top:3px;font-weight:500;"></div>
         </div>
-        <button onclick="closeDayDetail()" style="background:rgba(255,255,255,.2);border:none;color:#fff;font-size:1.4rem;line-height:1;width:34px;height:34px;border-radius:50%;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;flex-shrink:0;">&#215;</button>
+        <button onclick="closeDayDetail()" style="background:rgba(0,0,0,.2);border:none;color:#fff;font-size:1.1rem;width:32px;height:32px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">&#215;</button>
       </div>
-      <div style="font-size:.68rem;opacity:.7;margin-top:8px;font-weight:600;letter-spacing:.02em;">Hold a row to edit &nbsp;·&nbsp; Drag ⠿ to reorder &nbsp;·&nbsp; <span onclick="resetDaySchedule()" style="cursor:pointer;text-decoration:underline;opacity:1;color:rgba(255,255,255,.9);">↺ Reset order</span></div>
-      <!-- Ask TripGenie quick-access -->
-      <div id="ddm-tg-row" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.2);">
-        <button onclick="openTripGenieAboutStop('Why do people visit here? What makes it special?')" style="background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 11px;font-size:.73rem;font-weight:700;cursor:pointer;font-family:var(--font);">✨ Why go here?</button>
-        <button onclick="openTripGenieAboutStop('What are the best things to do here, especially for families with kids?')" style="background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 11px;font-size:.73rem;font-weight:700;cursor:pointer;font-family:var(--font);">🎯 Things to do</button>
-        <button onclick="openTripGenieAboutStop('What are the best local restaurants or food spots here?')" style="background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 11px;font-size:.73rem;font-weight:700;cursor:pointer;font-family:var(--font);">🍽️ Best eats</button>
-        <button onclick="openTripGenieAboutStop('What should we know before arriving here? Any tips or heads-up?')" style="background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 11px;font-size:.73rem;font-weight:700;cursor:pointer;font-family:var(--font);">💡 Pro tips</button>
+
+      <!-- Row 2: AI quick-access (horizontal scroll, no wrap) -->
+      <div id="ddm-tg-row" style="display:flex;gap:6px;margin-top:12px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch;">
+        <button onclick="openTripGenieAboutStop('Why do people visit here? What makes it special?')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">✨ Why go here?</button>
+        <button onclick="openTripGenieAboutStop('What are the best things to do here, especially for families with kids?')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">🎯 Things to do</button>
+        <button onclick="openTripGenieAboutStop('What are the best local restaurants or food spots here?')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">🍽️ Best eats</button>
+        <button onclick="openTripGenieAboutStop('What should we know before arriving here? Any tips or heads-up?')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">💡 Pro tips</button>
       </div>
-      <div style="display:flex;gap:8px;margin-top:6px;padding-top:8px;border-top:1px solid rgba(255,255,255,.2);flex-wrap:wrap;align-items:center;">
+
+      <!-- Row 3: Action buttons — Arrived / Left / Music -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;">
         <button id="ddm-arrive-btn"
           onclick="recordArrival()"
           onmousedown="startLongPress('arrive')" onmouseup="cancelLongPress()" onmouseleave="cancelLongPress()"
           ontouchstart="startLongPress('arrive')" ontouchend="cancelLongPress()"
-          style="background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 14px;font-size:.78rem;font-weight:800;cursor:pointer;font-family:var(--font);user-select:none;-webkit-user-select:none;">&#129001; We Arrived!</button>
+          style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:12px;padding:9px 6px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);user-select:none;-webkit-user-select:none;display:flex;flex-direction:column;align-items:center;gap:3px;line-height:1.2;text-align:center;">
+          <span style="font-size:1.1rem;">&#129001;</span>We Arrived!
+        </button>
         <button id="ddm-leave-btn"
           onclick="recordDeparture()"
           onmousedown="startLongPress('depart')" onmouseup="cancelLongPress()" onmouseleave="cancelLongPress()"
           ontouchstart="startLongPress('depart')" ontouchend="cancelLongPress()"
-          style="background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);color:#fff;border-radius:100px;padding:5px 14px;font-size:.78rem;font-weight:800;cursor:pointer;font-family:var(--font);user-select:none;-webkit-user-select:none;">&#128666; We Left</button>
+          style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:12px;padding:9px 6px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);user-select:none;-webkit-user-select:none;display:flex;flex-direction:column;align-items:center;gap:3px;line-height:1.2;text-align:center;">
+          <span style="font-size:1.1rem;">&#128666;</span>We Left
+        </button>
         <button id="ddm-music-btn"
           onclick="openLocalMusic()"
-          style="background:rgba(29,185,84,.25);border:1px solid rgba(29,185,84,.6);color:#fff;border-radius:100px;padding:5px 14px;font-size:.78rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:5px;margin-left:auto;">&#127926; Local Music</button>
+          style="background:rgba(29,185,84,.3);border:1.5px solid rgba(29,185,84,.55);color:#fff;border-radius:12px;padding:9px 6px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;flex-direction:column;align-items:center;gap:3px;line-height:1.2;text-align:center;">
+          <span style="font-size:1.1rem;">&#127926;</span>Local Music
+        </button>
       </div>
+
+      <!-- Hint line -->
+      <div style="font-size:.63rem;opacity:.55;margin-top:8px;text-align:center;letter-spacing:.02em;">Hold a row to edit &nbsp;·&nbsp; Drag ⠿ to reorder &nbsp;·&nbsp; <span onclick="resetDaySchedule()" style="cursor:pointer;text-decoration:underline;opacity:1;">↺ Reset</span></div>
     </div>
     <div id="ddm-blocks"></div>
   </div>
@@ -3507,7 +3519,12 @@ var TRIP_DAYS = [
 ];
 
 /* ── HELPERS ─────────────────────────────────────────────────────── */
-function getStop(id) { return TRIP_STOPS.find(s => s.id === id); }
+function getStop(id) {
+  /* Check built-in stops first, then custom stops from the trip wizard */
+  return TRIP_STOPS.find(s => s.id === id)
+    || (appState.customTripData && appState.customTripData.stops && appState.customTripData.stops.find(s => s.id === id))
+    || null;
+}
 function getDay(n)   { return TRIP_DAYS.find(d => d.day === n); }
 function isSpringBreak(dateStr) {
   return dateStr >= '2026-03-30' && dateStr <= '2026-04-03';
@@ -6267,6 +6284,107 @@ function printTripPlan() {
     stopsHtml += '</div>';
   }
 
+  /* ─────────────────────────────────────────────────────────────
+     MAP SECTION — inline SVG route map with numbered stops
+  ───────────────────────────────────────────────────────────── */
+  var _mapStops = [];
+  _orderedStopIds.forEach(function(id, idx) {
+    var s = getStop(id);
+    if (s && s.lat && s.lng) _mapStops.push({ n: idx + 1, name: s.name, state: s.state || '', lat: s.lat, lng: s.lng, isHome: false });
+  });
+  var _hmStop = getStop(_homeId);
+  if (_hmStop && _hmStop.lat && _hmStop.lng) _mapStops.push({ n: 0, name: 'Home', state: _hmStop.state || '', lat: _hmStop.lat, lng: _hmStop.lng, isHome: true });
+
+  var _mLats = _mapStops.map(function(s) { return s.lat; });
+  var _mLngs = _mapStops.map(function(s) { return s.lng; });
+  var _mPad = 2;
+  var _mMinLat = Math.min.apply(null, _mLats) - _mPad, _mMaxLat = Math.max.apply(null, _mLats) + _mPad;
+  var _mMinLng = Math.min.apply(null, _mLngs) - _mPad, _mMaxLng = Math.max.apply(null, _mLngs) + _mPad;
+  var _svgW = 680, _svgH = 340, _svgPad = 22;
+  function _prj(lat, lng) {
+    return {
+      x: Math.round((_svgPad + (lng - _mMinLng) / (_mMaxLng - _mMinLng) * (_svgW - _svgPad * 2)) * 10) / 10,
+      y: Math.round((_svgPad + (_mMaxLat - lat) / (_mMaxLat - _mMinLat) * (_svgH - _svgPad * 2)) * 10) / 10
+    };
+  }
+  var _svgParts = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + _svgW + ' ' + _svgH + '" style="width:100%;height:auto;display:block;">'];
+  _svgParts.push('<rect width="' + _svgW + '" height="' + _svgH + '" fill="#dce9f5"/>');
+  var _gi, _gx, _gy;
+  for (_gi = 0; _gi <= 4; _gi++) { _gy = Math.round(_svgPad + _gi * (_svgH - _svgPad * 2) / 4); _svgParts.push('<line x1="' + _svgPad + '" y1="' + _gy + '" x2="' + (_svgW - _svgPad) + '" y2="' + _gy + '" stroke="#b8d0e8" stroke-width="0.5"/>'); }
+  for (_gi = 0; _gi <= 6; _gi++) { _gx = Math.round(_svgPad + _gi * (_svgW - _svgPad * 2) / 6); _svgParts.push('<line x1="' + _gx + '" y1="' + _svgPad + '" x2="' + _gx + '" y2="' + (_svgH - _svgPad) + '" stroke="#b8d0e8" stroke-width="0.5"/>'); }
+  _svgParts.push('<polyline points="' + _mapStops.map(function(s) { var p = _prj(s.lat, s.lng); return p.x + ',' + p.y; }).join(' ') + '" fill="none" stroke="#E8813A" stroke-width="2.5" stroke-dasharray="7 4" stroke-linecap="round" stroke-linejoin="round"/>');
+  _mapStops.forEach(function(s) {
+    var p = _prj(s.lat, s.lng), fill = s.isHome ? '#4a6741' : '#2C5F8A', lbl = s.isHome ? 'H' : String(s.n), fs = lbl.length > 1 ? '8' : '10';
+    _svgParts.push('<circle cx="' + p.x + '" cy="' + p.y + '" r="12" fill="' + fill + '" stroke="#fff" stroke-width="2.5"/>');
+    _svgParts.push('<text x="' + p.x + '" y="' + (p.y + 4) + '" text-anchor="middle" fill="#fff" font-size="' + fs + '" font-weight="bold" font-family="sans-serif">' + lbl + '</text>');
+  });
+  _svgParts.push('</svg>');
+  var _legHtml = '<div class="legend-grid">';
+  _mapStops.forEach(function(s) {
+    var fill = s.isHome ? '#4a6741' : '#2C5F8A', lbl = s.isHome ? 'H' : String(s.n);
+    _legHtml += '<div class="legend-item"><div class="legend-num" style="background:' + fill + '">' + lbl + '</div><div class="legend-name">' + s.name + (s.state ? ', ' + s.state : '') + '</div></div>';
+  });
+  _legHtml += '</div>';
+  var _mapPageHtml = '<div class="map-page">' + _svgParts.join('') + '<div class="map-legend"><div class="map-legend-title">Route Stops</div>' + _legHtml + '</div></div>';
+
+  /* ─────────────────────────────────────────────────────────────
+     STATS SECTION — replicate renderTripStats logic for print
+  ───────────────────────────────────────────────────────────── */
+  var _psCats = [
+    { label: 'National Parks & NPS Sites',  emoji: '🏔️', items: [] },
+    { label: 'Hikes & Trails',              emoji: '🥾', items: [] },
+    { label: 'Scenic Drives & Viewpoints',  emoji: '🌄', items: [] },
+    { label: 'Water Activities',            emoji: '💧', items: [] },
+    { label: 'Caves & Caverns',             emoji: '🦇', items: [] },
+    { label: 'Museums & Memorials',         emoji: '🏛️', items: [] },
+    { label: 'Wildlife & Nature',           emoji: '🦌', items: [] },
+    { label: 'Attractions & Theme Parks',   emoji: '🎢', items: [] },
+    { label: 'Towns & City Stops',          emoji: '🏙️', items: [] },
+    { label: 'Outdoor Activities',          emoji: '🌲', items: [] }
+  ];
+  function _psClassify(act, sn) {
+    var n = (act.name || '').toLowerCase(), w = (act.website || '').toLowerCase(), e = { name: act.name, stop: sn };
+    if (w.includes('nps.gov') || n.includes('national park') || n.includes('national monument') || n.includes('national memorial') || n.includes('national river') || n.includes('national seashore')) _psCats[0].items.push(e);
+    else if (n.includes('cave') || n.includes('cavern')) _psCats[4].items.push(e);
+    else if (n.includes('museum') || n.includes('memorial') || n.includes('historic')) _psCats[5].items.push(e);
+    else if (n.includes('swim') || n.includes('river float') || n.includes('canoe') || n.includes('kayak') || n.includes('waterfall') || n.includes('falls') || n.includes('aquarium') || n.includes('springs')) _psCats[3].items.push(e);
+    else if (n.includes('wildlife') || n.includes('zoo') || n.includes('elk') || n.includes('bison') || act.type === 'wildlife') _psCats[6].items.push(e);
+    else if (act.type === 'hike' || n.includes('trail') || n.includes('hike') || n.includes('summit') || n.includes('loop')) _psCats[1].items.push(e);
+    else if (act.type === 'scenic' || n.includes('drive') || n.includes('byway') || n.includes('overlook') || n.includes('viewpoint') || n.includes('rim') || n.includes('scenic')) _psCats[2].items.push(e);
+    else if (act.type === 'town' || n.includes('downtown') || n.includes('main street') || n.includes('town') || n.includes('village')) _psCats[8].items.push(e);
+    else if (act.type === 'attraction' || n.includes('dollywood') || n.includes('theme') || n.includes('ripley')) _psCats[7].items.push(e);
+    else _psCats[9].items.push(e);
+  }
+  TRIP_STOPS.filter(function(s) { return s.id !== _homeId && !_removedIds[s.id]; }).forEach(function(stop) {
+    (stop.activities || []).forEach(function(act) { _psClassify(act, stop.name + (stop.state ? ', ' + stop.state : '')); });
+  });
+  var _psStateNorm = { 'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR','California':'CA','Colorado':'CO','Connecticut':'CT','Delaware':'DE','Florida':'FL','Georgia':'GA','Hawaii':'HI','Idaho':'ID','Illinois':'IL','Indiana':'IN','Iowa':'IA','Kansas':'KS','Kentucky':'KY','Louisiana':'LA','Maine':'ME','Maryland':'MD','Massachusetts':'MA','Michigan':'MI','Minnesota':'MN','Mississippi':'MS','Missouri':'MO','Montana':'MT','Nebraska':'NE','Nevada':'NV','New Hampshire':'NH','New Jersey':'NJ','New Mexico':'NM','New York':'NY','North Carolina':'NC','North Dakota':'ND','Ohio':'OH','Oklahoma':'OK','Oregon':'OR','Pennsylvania':'PA','Rhode Island':'RI','South Carolina':'SC','South Dakota':'SD','Tennessee':'TN','Texas':'TX','Utah':'UT','Vermont':'VT','Virginia':'VA','Washington':'WA','West Virginia':'WV','Wisconsin':'WI','Wyoming':'WY' };
+  function _psNormSt(st) { if (!st) return ''; var u = st.trim().toUpperCase(); return u.length === 2 ? u : (_psStateNorm[st.trim()] || u); }
+  var _psStateSet = {};
+  TRIP_STOPS.filter(function(s) { return s.id !== _homeId && !_removedIds[s.id] && s.state; }).forEach(function(s) { _psStateSet[_psNormSt(s.state)] = true; });
+  var _psStates = Object.keys(_psStateSet).filter(Boolean).sort();
+  var _psActiveCats = _psCats.filter(function(c) { return c.items.length > 0; });
+  var _psTotalActs = _psActiveCats.reduce(function(sum, c) { return sum + c.items.length; }, 0);
+  var _statsHtml = '<div class="stats-section"><div class="stats-section-title">&#128202; Trip Stats &amp; Activities</div>';
+  _statsHtml += '<div class="stats-chips">';
+  [{ n: _orderedStopIds.length, label: 'Destinations', emoji: '&#128205;' },
+   { n: _psStates.length,       label: 'States',        emoji: '&#128506;' },
+   { n: _psTotalActs,           label: 'Activities',    emoji: '&#11088;' },
+   { n: Math.round(totalMiles).toLocaleString() + ' mi', label: 'Total Miles', emoji: '&#128739;' },
+   { n: driveDayCount,          label: 'Drive Days',    emoji: '&#128663;' },
+   { n: visibleDays - driveDayCount, label: 'Explore Days', emoji: '&#127957;' }
+  ].forEach(function(c) { _statsHtml += '<div class="stat-chip"><div class="stat-chip-emoji">' + c.emoji + '</div><div class="stat-chip-n">' + c.n + '</div><div class="stat-chip-l">' + c.label + '</div></div>'; });
+  _statsHtml += '</div>';
+  _statsHtml += '<div class="states-bar"><div class="states-bar-title">&#128506; ' + _psStates.length + ' States Visited</div><div>';
+  _psStates.forEach(function(st) { _statsHtml += '<span class="state-tag">' + st + '</span>'; });
+  _statsHtml += '</div></div><div class="act-grid">';
+  _psActiveCats.forEach(function(cat) {
+    _statsHtml += '<div class="act-cat"><div class="act-cat-title">' + cat.emoji + ' ' + cat.label + ' <span class="act-cat-count">(' + cat.items.length + ')</span></div>';
+    cat.items.forEach(function(item) { _statsHtml += '<div class="act-item"><span class="act-name">' + item.name + '</span><span class="act-stop">' + item.stop + '</span></div>'; });
+    _statsHtml += '</div>';
+  });
+  _statsHtml += '</div></div>';
+
   var html = `<!DOCTYPE html>
 <html>
 <head>
@@ -6309,11 +6427,44 @@ function printTripPlan() {
   /* Footer */
   .print-footer { margin-top: 28px; padding-top: 12px; border-top: 1px solid #ddd; font-size: 8pt; color: #aaa; display: flex; justify-content: space-between; }
 
+  /* ── Map page ── */
+  .map-page { margin-bottom: 0; }
+  .map-page svg { border-radius: 10px; border: 1px solid #c0d4e8; display: block; }
+  .map-legend { margin-top: 10px; }
+  .map-legend-title { font-size: 8pt; font-weight: 800; color: #555; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 7px; }
+  .legend-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px 14px; }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-num { width: 18px; height: 18px; border-radius: 50%; color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 7pt; flex-shrink: 0; }
+  .legend-name { font-size: 8pt; color: #333; line-height: 1.3; }
+
+  /* ── Stats page ── */
+  .stats-section { }
+  .stats-section-title { font-size: 18pt; font-weight: 900; color: #E8813A; border-bottom: 3px solid #E8813A; padding-bottom: 8px; margin-bottom: 16px; }
+  .stats-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .stat-chip { background: #2C5F8A; color: #fff; border-radius: 10px; padding: 8px 12px; text-align: center; flex: 1; min-width: 78px; }
+  .stat-chip-emoji { font-size: 13pt; }
+  .stat-chip-n { font-size: 14pt; font-weight: 900; line-height: 1.1; }
+  .stat-chip-l { font-size: 6.5pt; opacity: .85; }
+  .states-bar { background: #e8f5ed; border: 1px solid #a8d5b8; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; }
+  .states-bar-title { font-weight: 800; font-size: 9pt; color: #2d6a4f; margin-bottom: 6px; }
+  .state-tag { background: #fff; border: 1px solid #a8d5b8; border-radius: 100px; padding: 2px 9px; font-size: 7.5pt; font-weight: 700; color: #2d6a4f; display: inline-block; margin: 2px; }
+  .act-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .act-cat { border: 1px solid #e0e0e0; border-radius: 8px; padding: 10px 12px; break-inside: avoid; }
+  .act-cat-title { font-weight: 800; font-size: 8.5pt; color: #1a1a2e; margin-bottom: 6px; }
+  .act-cat-count { font-weight: 400; color: #888; }
+  .act-item { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; padding: 3px 6px; background: #f8f8f8; border-radius: 4px; margin-bottom: 2px; font-size: 7.5pt; }
+  .act-name { font-weight: 600; }
+  .act-stop { color: #777; white-space: nowrap; flex-shrink: 0; }
+
   @media print {
     body { font-size: 10pt; }
     .page { padding: 0; max-width: 100%; }
     .stop-section { break-inside: avoid; }
     .no-print { display: none; }
+    .map-page-wrap { break-after: page; }
+    .trip-itinerary { break-after: page; }
+    .stats-section { break-before: page; }
+    .act-cat { break-inside: avoid; }
     @page { margin: 18mm 15mm; size: letter; }
   }
 </style>
@@ -6325,18 +6476,30 @@ function printTripPlan() {
     <button onclick="window.print()" style="background:#fff;color:#E8813A;border:none;border-radius:6px;padding:6px 14px;font-weight:800;cursor:pointer;">Print / Save PDF</button>
   </div>
 
-  <div class="trip-header">
-    <h1>${tripName}</h1>
-    <div class="dates">${_fmtDate(startDate)} &nbsp;→&nbsp; ${_fmtDate(endDate)}</div>
-    <div class="trip-stats">
-      <div class="stat"><div class="stat-num">${visibleDays}</div><div class="stat-lbl">Total Days</div></div>
-      <div class="stat"><div class="stat-num">${_orderedStopIds.length}</div><div class="stat-lbl">Stops</div></div>
-      <div class="stat"><div class="stat-num">${Math.round(totalMiles).toLocaleString()}</div><div class="stat-lbl">Est. Miles</div></div>
-      <div class="stat"><div class="stat-num">${driveDayCount}</div><div class="stat-lbl">Drive Days</div></div>
-    </div>
+  <!-- Page 1: Route Map -->
+  <div class="map-page-wrap">
+    <div style="font-size:9pt;font-weight:800;color:#E8813A;text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px;">${tripName}</div>
+    <div style="font-size:8pt;color:#777;margin-bottom:10px;">${_fmtDate(startDate)} → ${_fmtDate(endDate)} &nbsp;·&nbsp; ${_orderedStopIds.length} stops &nbsp;·&nbsp; ${Math.round(totalMiles).toLocaleString()} est. miles</div>
+    ${_mapPageHtml}
   </div>
 
-  ${stopsHtml}
+  <!-- Page 2+: Stop-by-stop itinerary -->
+  <div class="trip-itinerary">
+    <div class="trip-header">
+      <h1>${tripName}</h1>
+      <div class="dates">${_fmtDate(startDate)} &nbsp;→&nbsp; ${_fmtDate(endDate)}</div>
+      <div class="trip-stats">
+        <div class="stat"><div class="stat-num">${visibleDays}</div><div class="stat-lbl">Total Days</div></div>
+        <div class="stat"><div class="stat-num">${_orderedStopIds.length}</div><div class="stat-lbl">Stops</div></div>
+        <div class="stat"><div class="stat-num">${Math.round(totalMiles).toLocaleString()}</div><div class="stat-lbl">Est. Miles</div></div>
+        <div class="stat"><div class="stat-num">${driveDayCount}</div><div class="stat-lbl">Drive Days</div></div>
+      </div>
+    </div>
+    ${stopsHtml}
+  </div>
+
+  <!-- Final pages: Trip Stats & Activities -->
+  ${_statsHtml}
 
   <div class="print-footer">
     <span>Generated by TripGenie</span>
@@ -6344,13 +6507,8 @@ function printTripPlan() {
   </div>
 </div>
 <script>
-  // Auto-open print dialog after a short delay so fonts/layout settle
   setTimeout(function() { window.print(); }, 800);
 <\/script>
-
-
-</div>
-
 </body>
 </html>`;
 
@@ -8540,13 +8698,20 @@ function renderTripStats() {
     (stop.activities || []).forEach(function(act) { _classify(act, stop.name + (stop.state ? ', ' + stop.state : '')); });
   });
 
-  // States & destinations
+  // States & destinations — normalize to 2-letter uppercase abbreviation
+  var _stateAbbrMap = { 'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR','California':'CA','Colorado':'CO','Connecticut':'CT','Delaware':'DE','Florida':'FL','Georgia':'GA','Hawaii':'HI','Idaho':'ID','Illinois':'IL','Indiana':'IN','Iowa':'IA','Kansas':'KS','Kentucky':'KY','Louisiana':'LA','Maine':'ME','Maryland':'MD','Massachusetts':'MA','Michigan':'MI','Minnesota':'MN','Mississippi':'MS','Missouri':'MO','Montana':'MT','Nebraska':'NE','Nevada':'NV','New Hampshire':'NH','New Jersey':'NJ','New Mexico':'NM','New York':'NY','North Carolina':'NC','North Dakota':'ND','Ohio':'OH','Oklahoma':'OK','Oregon':'OR','Pennsylvania':'PA','Rhode Island':'RI','South Carolina':'SC','South Dakota':'SD','Tennessee':'TN','Texas':'TX','Utah':'UT','Vermont':'VT','Virginia':'VA','Washington':'WA','West Virginia':'WV','Wisconsin':'WI','Wyoming':'WY' };
+  function _normState(st) {
+    if (!st) return '';
+    var up = st.trim().toUpperCase();
+    if (up.length === 2) return up;  // already an abbreviation
+    return _stateAbbrMap[st.trim()] || up; // map full name → abbr
+  }
   var stateSet = {}, destList = [];
   activeStops.forEach(function(s) {
-    if (s.state) stateSet[s.state] = true;
-    destList.push(s.name + (s.state ? ', ' + s.state : ''));
+    if (s.state) stateSet[_normState(s.state)] = true;
+    destList.push(s.name + (s.state ? ', ' + _normState(s.state) : ''));
   });
-  var states = Object.keys(stateSet).sort();
+  var states = Object.keys(stateSet).filter(Boolean).sort();
 
   // Trip-wide totals
   var totalMiles = 0, totalDriveHours = 0, driveDays = 0, exploreDays = 0;
@@ -10246,8 +10411,11 @@ function _updateTripSelector() {
   if (!label || !list) return;
 
   var activeIsCustom = appState.activeTrip === 'custom';
-  var customName     = (appState.customTripData && appState.customTripData.tripName) || 'Custom Trip';
-  var builtinName    = (appState.tripSettings && appState.tripSettings.tripName) || _BUILTIN_TRIP.tripName || 'Maass Family RV 2026';
+  /* For the custom trip, tripSettings.tripName is what the user edits — always prefer it */
+  var customName = (appState.tripSettings && appState.tripSettings.tripName)
+    || (appState.customTripData && appState.customTripData.tripName)
+    || 'Custom Trip';
+  var builtinName = _BUILTIN_TRIP.tripName || 'Maass Family RV 2026';
 
   label.textContent = activeIsCustom ? customName : builtinName;
 
@@ -15255,6 +15423,8 @@ function saveTripSettings() {
   var _saveLateArr  = ((document.getElementById('ts-latearrival') || {}).value) || '20:00';
   var _saveMaxDays  = Math.max(1, parseInt(((document.getElementById('ts-max-days') || {}).value) || '5') || 5);
   appState.tripSettings = { startDate: newStart, endDate: newEnd, tripName: newName, totalDays: newDays, rvAmps: _saveAmps, timeFormat: _saveTimeFmt, departureTime: _saveDepTime, latestArrival: _saveLateArr, maxDaysPerStop: _saveMaxDays };
+  /* Keep customTripData.tripName in sync so all references agree */
+  if (appState.customTripData && newName) appState.customTripData.tripName = newName;
   saveState(appState);
 
   // Apply to live CONFIG so everything recalculates immediately
