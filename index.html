@@ -16711,59 +16711,107 @@ function saveTripSettings() {
 
 /* ── EXPENSE TRACKER ────────────────────────────────────────────── */
 var EXP_CATS = [
-  { id:'fuel',      icon:'⛽', label:'Fuel',       color:'#E65100', bg:'#FFF3E0' },
-  { id:'campsite',  icon:'🏕️', label:'Campsite',   color:'#2E7D32', bg:'#E8F5E9' },
-  { id:'food',      icon:'🍔', label:'Food',        color:'#AD1457', bg:'#FCE4EC' },
-  { id:'activity',  icon:'🎡', label:'Activity',    color:'#1565C0', bg:'#E3F2FD' },
-  { id:'shopping',  icon:'🛍️', label:'Shopping',   color:'#6A1B9A', bg:'#F3E5F5' },
-  { id:'other',     icon:'💰', label:'Other',       color:'#546E7A', bg:'#ECEFF1' }
+  { id:'fuel',        icon:'⛽',  label:'Fuel',         color:'#E65100', bg:'#FFF3E0' },
+  { id:'lodging',     icon:'🏨',  label:'Lodging',      color:'#2E7D32', bg:'#E8F5E9' },
+  { id:'restaurants', icon:'🍽️', label:'Restaurants',  color:'#AD1457', bg:'#FCE4EC' },
+  { id:'supplies',    icon:'🛒',  label:'Supplies',     color:'#00695C', bg:'#E0F2F1' },
+  { id:'activity',    icon:'🎡',  label:'Activities',   color:'#1565C0', bg:'#E3F2FD' },
+  { id:'shopping',    icon:'🛍️', label:'Shopping',     color:'#6A1B9A', bg:'#F3E5F5' },
+  { id:'other',       icon:'💰',  label:'Other',        color:'#546E7A', bg:'#ECEFF1' }
 ];
+/* Category ID aliases for backward-compat (old expenses used 'campsite'/'food') */
+var _EXP_CAT_ALIAS = { campsite:'lodging', food:'restaurants' };
+/* Default per-category budgets for a 46-day RV trip */
+var DEFAULT_CAT_BUDGETS = {
+  fuel:500, lodging:2500, restaurants:1500, supplies:800,
+  activity:800, shopping:500, other:500
+};
 var _expScanB64  = null;
 var _expScanMime = 'image/jpeg';
-var _expSelCat   = 'food';
+var _expSelCat   = 'restaurants';
 
 function renderExpenses() {
   var el = document.getElementById('tools-sub-content');
   if (!el) return;
-  if (!appState.expenses)    appState.expenses    = [];
-  if (!appState.tripBudget)  appState.tripBudget  = 10000;
-  var total    = appState.expenses.reduce(function(s,e){ return s + (e.amount||0); }, 0);
-  var budget   = appState.tripBudget;
-  var pctUsed  = Math.min(100, Math.round(total / budget * 100));
-  var barColor = pctUsed > 90 ? 'var(--red)' : pctUsed > 70 ? 'var(--orange)' : 'var(--green)';
+  if (!appState.expenses)     appState.expenses    = [];
+  if (!appState.catBudgets)   appState.catBudgets  = Object.assign({}, DEFAULT_CAT_BUDGETS);
+  /* Ensure all categories have a budget entry */
+  EXP_CATS.forEach(function(c) {
+    if (appState.catBudgets[c.id] === undefined)
+      appState.catBudgets[c.id] = DEFAULT_CAT_BUDGETS[c.id] || 0;
+  });
 
-  var html = '<h2 class="section-title"><i class="fa-solid fa-dollar-sign"></i> Trip Expenses</h2>';
+  /* Resolve category aliases so old expenses (campsite/food) map to new ids */
+  appState.expenses.forEach(function(e) {
+    if (_EXP_CAT_ALIAS[e.category]) e.category = _EXP_CAT_ALIAS[e.category];
+  });
 
-  /* Budget bar */
-  html += '<div style="background:var(--card);border:1.5px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:18px;">'
-    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
-    + '<div style="font-weight:800;font-size:1rem;color:var(--text);">$' + total.toFixed(2) + ' <span style="font-size:.8rem;color:var(--text-3);font-weight:500;">spent</span></div>'
-    + '<div style="display:flex;align-items:center;gap:8px;">'
-    + '<span style="font-size:.8rem;color:var(--text-3);">Budget:</span>'
-    + '<input type="number" value="' + budget + '" onchange="setTripBudget(this.value)" style="width:80px;border:1px solid var(--border);border-radius:100px;padding:3px 7px;font-size:.82rem;font-family:var(--font);text-align:right;" />'
-    + '</div>'
-    + '</div>'
-    + '<div style="background:var(--border);border-radius:10px;height:12px;overflow:hidden;margin-bottom:5px;">'
-    + '<div style="background:' + barColor + ';height:100%;border-radius:10px;width:' + pctUsed + '%;transition:width .5s;"></div>'
-    + '</div>'
-    + '<div style="display:flex;justify-content:space-between;font-size:.72rem;color:var(--text-3);">'
-    + '<span>' + pctUsed + '% used</span>'
-    + '<span>$' + Math.max(0, budget - total).toFixed(2) + ' remaining</span>'
-    + '</div></div>';
-
-  /* Category breakdown */
+  /* Totals */
   var catTotals = {};
   EXP_CATS.forEach(function(c){ catTotals[c.id] = 0; });
-  appState.expenses.forEach(function(e){ if(catTotals[e.category]!==undefined) catTotals[e.category] += e.amount||0; });
-  html += '<div style="display:flex;flex-wrap:wrap;gap:7px;margin-bottom:18px;">';
-  EXP_CATS.forEach(function(c) {
-    if (catTotals[c.id] === 0) return;
-    html += '<div style="background:' + c.bg + ';border:1.5px solid ' + c.color + ';border-radius:12px;padding:6px 12px;text-align:center;">'
-      + '<div style="font-size:.68rem;font-weight:800;color:' + c.color + ';">' + c.icon + ' ' + c.label + '</div>'
-      + '<div style="font-size:.9rem;font-weight:900;color:' + c.color + ';">$' + catTotals[c.id].toFixed(0) + '</div>'
-      + '</div>';
+  appState.expenses.forEach(function(e){
+    var cat = _EXP_CAT_ALIAS[e.category] || e.category;
+    if (catTotals[cat] !== undefined) catTotals[cat] += e.amount || 0;
   });
-  html += '</div>';
+  var total       = Object.values(catTotals).reduce(function(s,v){ return s+v; }, 0);
+  var totalBudget = Object.values(appState.catBudgets).reduce(function(s,v){ return s+(v||0); }, 0) || 1;
+  var pctTotal    = Math.min(100, Math.round(total / totalBudget * 100));
+  var barTotal    = pctTotal > 90 ? 'var(--red)' : pctTotal > 70 ? 'var(--orange)' : 'var(--green)';
+
+  var html = '<h2 class="section-title"><i class="fa-solid fa-dollar-sign"></i> Trip Budget</h2>';
+
+  /* ── Overall summary bar ── */
+  html += '<div style="background:var(--card);border:1.5px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:14px;">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'
+    + '<div style="font-weight:800;font-size:1rem;color:var(--text);">$' + total.toFixed(0)
+      + ' <span style="font-size:.8rem;color:var(--text-3);font-weight:500;">spent of</span>'
+      + ' $' + totalBudget.toFixed(0) + ' <span style="font-size:.8rem;color:var(--text-3);font-weight:500;">total budget</span></div>'
+    + '<span style="font-size:.8rem;font-weight:700;color:' + barTotal + ';">'
+      + '$' + Math.max(0, totalBudget - total).toFixed(0) + ' left</span>'
+    + '</div>'
+    + '<div style="background:var(--border);border-radius:10px;height:10px;overflow:hidden;margin-bottom:4px;">'
+    + '<div style="background:' + barTotal + ';height:100%;border-radius:10px;width:' + pctTotal + '%;transition:width .5s;"></div>'
+    + '</div>'
+    + '<div style="font-size:.7rem;color:var(--text-3);">' + pctTotal + '% of total budget used</div>'
+    + '</div>';
+
+  /* ── Per-category budget rows ── */
+  html += '<div style="background:var(--card);border:1.5px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-bottom:18px;">';
+  html += '<div style="padding:12px 16px 8px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">'
+    + '<div style="font-size:.8rem;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;">Category Budgets</div>'
+    + '<div style="font-size:.72rem;color:var(--text-3);">Click $ to edit</div>'
+    + '</div>';
+  EXP_CATS.forEach(function(c, ci) {
+    var spent    = catTotals[c.id] || 0;
+    var budget   = appState.catBudgets[c.id] || 0;
+    var pct      = budget > 0 ? Math.min(100, Math.round(spent / budget * 100)) : 0;
+    var barClr   = pct > 90 ? '#e53e3e' : pct > 70 ? '#E8813A' : c.color;
+    var isLast   = ci === EXP_CATS.length - 1;
+    html += '<div style="padding:12px 16px;' + (isLast ? '' : 'border-bottom:1px solid var(--border);') + 'display:flex;align-items:center;gap:12px;">';
+    /* Icon */
+    html += '<span style="font-size:1.2rem;flex-shrink:0;">' + c.icon + '</span>';
+    /* Label + bar */
+    html += '<div style="flex:1;min-width:0;">'
+      + '<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">'
+      + '<span style="font-size:.82rem;font-weight:700;color:var(--text);">' + c.label + '</span>'
+      + '<span style="font-size:.75rem;color:var(--text-3);margin-left:6px;white-space:nowrap;">$' + spent.toFixed(0)
+        + (budget > 0 ? ' / ' : '') + '</span>'
+      + '</div>'
+      + '<div style="background:var(--border);border-radius:6px;height:7px;overflow:hidden;">'
+      + '<div style="background:' + barClr + ';height:100%;border-radius:6px;width:' + pct + '%;transition:width .4s;"></div>'
+      + '</div>'
+      + '</div>';
+    /* Budget input */
+    html += '<div style="flex-shrink:0;display:flex;align-items:center;gap:3px;">'
+      + '<span style="font-size:.78rem;color:var(--text-3);">$</span>'
+      + '<input type="number" value="' + (budget || 0)
+        + '" min="0" step="50" onchange="_setCatBudget(\'' + c.id + '\',this.value)"'
+        + ' style="width:70px;border:1.5px solid var(--border);border-radius:8px;padding:4px 7px;'
+        + 'font-size:.82rem;font-family:var(--font);text-align:right;color:var(--text);" />'
+      + '</div>';
+    html += '</div>'; /* row */
+  });
+  html += '</div>'; /* category card */
 
   /* Add expense form */
   html += '<div style="background:var(--card);border:1.5px solid var(--border);border-radius:var(--radius);padding:16px 18px;margin-bottom:20px;">';
@@ -16819,7 +16867,8 @@ function renderExpenses() {
       html += '<div style="font-size:.72rem;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px;display:flex;justify-content:space-between;">'
         + '<span>' + dayLabel + '</span><span>$' + dayTotal.toFixed(2) + '</span></div>';
       byDay[dk].forEach(function(e) {
-        var cat = EXP_CATS.find(function(c){ return c.id === e.category; }) || EXP_CATS[5];
+        var _catId = _EXP_CAT_ALIAS[e.category] || e.category;
+        var cat = EXP_CATS.find(function(c){ return c.id === _catId; }) || EXP_CATS[EXP_CATS.length-1];
         html += '<div style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:9px 12px;margin-bottom:5px;">'
           + '<span style="font-size:1.1rem;">' + cat.icon + '</span>'
           + '<div style="flex:1;">'
@@ -16840,6 +16889,15 @@ function renderExpenses() {
 }
 
 function setExpCat(id) { _expSelCat = id; renderExpenses(); }
+/* Per-category budget setter — called by inline number inputs */
+function _setCatBudget(catId, val) {
+  if (!appState.catBudgets) appState.catBudgets = Object.assign({}, DEFAULT_CAT_BUDGETS);
+  appState.catBudgets[catId] = Math.max(0, parseFloat(val) || 0);
+  /* Keep legacy tripBudget in sync with the sum */
+  appState.tripBudget = Object.values(appState.catBudgets).reduce(function(s,v){ return s+(v||0); }, 0);
+  saveState(appState);
+  renderExpenses();
+}
 function setTripBudget(v) {
   appState.tripBudget = parseFloat(v) || 10000;
   saveState(appState);
@@ -16853,10 +16911,11 @@ function scanExpenseReceipt(e) {
   reader.onload = function(ev) {
     var b64 = ev.target.result.split(',')[1];
     showToast('🔍 AI scanning receipt…', 2500);
-    var prompt = 'You are an expense scanner. Look at this receipt image and return ONLY valid JSON with no markdown:\n'
-      + '{"amount": 12.99, "category": "food", "note": "McDonald\'s"}\n'
-      + 'Category must be one of: fuel, campsite, food, activity, shopping, other.\n'
-      + 'amount is a number. note is the merchant or item name. If you cannot read the receipt clearly, make your best guess.';
+    var prompt = 'You are an expense scanner for a family RV road trip. Look at this receipt image and return ONLY valid JSON with no markdown:\n'
+      + '{"amount": 12.99, "category": "restaurants", "note": "McDonald\'s"}\n'
+      + 'Category must be one of: fuel, lodging, restaurants, supplies, activity, shopping, other.\n'
+      + 'Use "lodging" for hotels/campgrounds/cabins. Use "restaurants" for food/dining. Use "supplies" for groceries/gas station items/RV supplies.\n'
+      + 'amount is a number (total on receipt). note is the merchant or item name. Best guess if unclear.';
     var body = JSON.stringify({
       contents:[{ parts:[{ text: prompt },{ inline_data:{ mime_type: mime, data: b64 }}]}],
       generationConfig:{ maxOutputTokens:120, temperature:0.2 }
@@ -16874,6 +16933,10 @@ function scanExpenseReceipt(e) {
       if (parsed.note) {
         var noteEl = document.getElementById('exp-note');
         if (noteEl) noteEl.value = parsed.note;
+      }
+      if (parsed.category) {
+        /* Resolve alias (e.g. AI may return 'food' → 'restaurants') */
+        parsed.category = _EXP_CAT_ALIAS[parsed.category] || parsed.category;
       }
       if (parsed.category && EXP_CATS.find(function(c){ return c.id===parsed.category; })) {
         _expSelCat = parsed.category;
