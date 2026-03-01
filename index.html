@@ -4050,12 +4050,12 @@ function _renderTripCards(trips) {
       + '<div style="font-size:.78rem;color:var(--text-2);">' + dateStr + '</div>'
       + (updStr ? '<div style="font-size:.72rem;color:var(--text-3);">' + updStr + '</div>' : '')
       + '<div style="display:flex;gap:8px;margin-top:4px;">'
-      + '<button onclick="_openTrip('' + t.id + '')" style="flex:1;background:var(--orange);color:#fff;border:none;border-radius:100px;padding:8px 0;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);">Open Trip</button>'
-      + '<button onclick="_deleteTrip('' + t.id + '',this)" style="background:#fff0ef;border:1px solid #fca5a5;color:#dc2626;border-radius:100px;padding:8px 14px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);">Delete</button>'
+      + '<button onclick="_openTrip(\'' + t.id + '\')" style="flex:1;background:var(--orange);color:#fff;border:none;border-radius:100px;padding:8px 0;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);">Open Trip</button>'
+      + '<button onclick="_deleteTrip(\'' + t.id + '\',this)" style="background:#fff0ef;border:1px solid #fca5a5;color:#dc2626;border-radius:100px;padding:8px 14px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);">Delete</button>'
       + '</div>'
       + '</div>';
   });
-  html += '<div onclick="_showNewTripWizard()" style="background:var(--bg);border:2px dashed var(--border);border-radius:14px;padding:24px 18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;min-height:100px;transition:border-color .2s;" onmouseover="this.style.borderColor='var(--orange)'" onmouseout="this.style.borderColor='var(--border)'">'
+  html += '<div onclick="_showNewTripWizard()" style="background:var(--bg);border:2px dashed var(--border);border-radius:14px;padding:24px 18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;min-height:100px;transition:border-color .2s;" onmouseover="this.style.borderColor=\'var(--orange)\'" onmouseout="this.style.borderColor=\'var(--border)\'">'
     + '<div style="font-size:1.8rem;">➕</div>'
     + '<div style="font-weight:800;font-size:.9rem;color:var(--text-2);">New Trip</div>'
     + '</div>';
@@ -4168,7 +4168,7 @@ function _renderNtStep1() {
   + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
   + ['🏕️ US Road Trip|us_road','🚐 RV / Campervan|rv','🌍 International|international','📋 Blank Canvas|blank'].map(function(s) {
       var parts = s.split('|'); var label = parts[0]; var val = parts[1];
-      return '<button onclick="_ntSelectType('' + val + '',this)" data-type="' + val + '" style="padding:12px 8px;border:2px solid var(--border);border-radius:10px;background:var(--card);cursor:pointer;font-size:.82rem;font-weight:700;color:var(--text);font-family:var(--font);text-align:center;transition:all .15s;">' + label + '</button>';
+      return '<button onclick="_ntSelectType(\'' + val + '\',this)" data-type="' + val + '" style="padding:12px 8px;border:2px solid var(--border);border-radius:10px;background:var(--card);cursor:pointer;font-size:.82rem;font-weight:700;color:var(--text);font-family:var(--font);text-align:center;transition:all .15s;">' + label + '</button>';
     }).join('')
   + '</div>'
   + '</div>'
@@ -4213,10 +4213,10 @@ function _renderNtStep2International(meta) {
   _newTripStops = [];
   document.getElementById('nt-wizard-body').innerHTML =
     '<h2 style="font-size:1.1rem;font-weight:900;color:var(--text);margin:0 0 4px;">🌍 Add Your Destinations</h2>'
-  + '<p style="font-size:.8rem;color:var(--text-2);margin:0 0 14px;">Enter each city or region. We'll geocode the locations.</p>'
+  + '<p style="font-size:.8rem;color:var(--text-2);margin:0 0 14px;">Enter each city or region. We\'ll geocode the locations.</p>'
   + '<div id="nt-stops-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px;"></div>'
   + '<div style="display:flex;gap:8px;margin-bottom:18px;">'
-  + '<input id="nt-stop-input" type="text" placeholder="City, Country (e.g. Paris, France)" style="flex:1;padding:10px 14px;border:2px solid var(--border);border-radius:10px;font-size:.88rem;font-family:var(--font);color:var(--text);background:var(--card);outline:none;" onkeydown="if(event.key==='Enter')_ntAddStop()" />'
+  + '<input id="nt-stop-input" type="text" placeholder="City, Country (e.g. Paris, France)" style="flex:1;padding:10px 14px;border:2px solid var(--border);border-radius:10px;font-size:.88rem;font-family:var(--font);color:var(--text);background:var(--card);outline:none;" onkeydown="if(event.key===\'Enter\')_ntAddStop()" />'
   + '<input id="nt-nights-input" type="number" min="1" max="30" value="3" placeholder="Nights" style="width:72px;padding:10px 10px;border:2px solid var(--border);border-radius:10px;font-size:.88rem;font-family:var(--font);color:var(--text);background:var(--card);outline:none;text-align:center;" />'
   + '<button onclick="_ntAddStop()" style="background:var(--orange);color:#fff;border:none;border-radius:10px;padding:10px 14px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);">Add</button>'
   + '</div>'
@@ -15705,11 +15705,7 @@ function generateMemoryBook() {
   }
 
   html += '<div style="text-align:center;padding:60px;color:#888;font-size:.9rem;">♥ The Maass Family RV Adventure 2026 ♥</div>';
-  html += '
-
-</div>
-
-</body></html>';
+  html += '\n\n</div>\n\n</body></html>';
 
   var w = window.open('', '_blank');
   if (!w) { showToast('Allow pop-ups to generate the memory book', 2500); return; }
