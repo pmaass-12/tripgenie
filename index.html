@@ -2047,6 +2047,86 @@
     .screen { padding: 44px 60px 44px; }
   }
 
+  /* ══ DRIVING MODE TODAY — optimised for split-screen iPad mini ══
+     Goal: 3 key elements above the fold in ~375–520px × ~640px viewport:
+     1. Next Stop hero card   2. Arrived / Left CTA buttons   3. Ask TripGenie
+  ══════════════════════════════════════════════════════════════════ */
+  #sm .dm-top-bar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    margin-bottom: 14px;
+  }
+  #sm .dm-day-badge {
+    background: var(--orange); color: #fff; border-radius: 100px;
+    padding: 5px 13px; font-size: .73rem; font-weight: 900; letter-spacing: .03em;
+  }
+  #sm .dm-date-str { font-size: .8rem; font-weight: 700; color: var(--text-2); flex: 1; }
+  #sm .dm-pct-lbl  { font-size: .7rem;  font-weight: 800; color: var(--text-3); white-space: nowrap; }
+
+  /* Next Stop card */
+  #sm .dm-next-card {
+    background: var(--blue); color: #fff; border-radius: 18px;
+    padding: 18px 20px 14px; margin-bottom: 12px; position: relative; overflow: hidden;
+  }
+  #sm .dm-next-card::after {
+    content: ''; position: absolute; right: -24px; top: -24px;
+    width: 110px; height: 110px; background: rgba(255,255,255,.06); border-radius: 50%;
+    pointer-events: none;
+  }
+  #sm .dm-next-eyebrow {
+    font-size: .58rem; font-weight: 900; letter-spacing: .12em; text-transform: uppercase;
+    color: rgba(255,255,255,.5); margin-bottom: 5px;
+  }
+  #sm .dm-next-name {
+    font-size: 1.55rem; font-weight: 900; line-height: 1.1; margin-bottom: 8px;
+  }
+  #sm .dm-next-pills { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 13px; }
+  #sm .dm-next-pill {
+    background: rgba(255,255,255,.14); border: 1px solid rgba(255,255,255,.2);
+    color: #fff; border-radius: 100px; padding: 4px 10px;
+    font-size: .72rem; font-weight: 700; display: flex; align-items: center; gap: 5px;
+  }
+  /* Mini route viz inside blue card */
+  #sm .dm-route-row { display: flex; align-items: center; gap: 0; margin-bottom: 4px; }
+  #sm .dm-rdot       { width: 9px; height: 9px; border-radius: 50%; background: rgba(255,255,255,.38); flex-shrink: 0; }
+  #sm .dm-rdot.end   { background: rgba(255,255,255,.9); }
+  #sm .dm-rline      { flex: 1; height: 2px; background: rgba(255,255,255,.14); position: relative; display: flex; align-items: center; justify-content: center; }
+  #sm .dm-rvan       { background: var(--orange); border-radius: 100px; padding: 4px 10px; font-size: .78rem; color: #fff; }
+  #sm .dm-route-labels { display: flex; justify-content: space-between; font-size: .63rem; font-weight: 700; color: rgba(255,255,255,.42); }
+
+  /* CTA buttons */
+  #sm .dm-cta-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  #sm .dm-cta-btn {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; padding: 20px 10px; border-radius: 18px; border: none;
+    cursor: pointer; font-family: var(--font); text-align: center;
+    transition: transform .12s, box-shadow .12s;
+  }
+  #sm .dm-cta-btn:active { transform: scale(.94); }
+  #sm .dm-cta-icon { font-size: 1.8rem; line-height: 1; }
+  #sm .dm-cta-lbl  { font-size: .93rem; font-weight: 900; line-height: 1.15; }
+  #sm .dm-cta-sub  { font-size: .66rem; font-weight: 600; opacity: .75; line-height: 1.3; }
+  #sm .dm-cta-arrived { background: #2e7d52; color: #fff; box-shadow: 0 4px 18px rgba(46,125,82,.32); }
+  #sm .dm-cta-left    { background: var(--orange); color: #fff; box-shadow: 0 4px 18px rgba(232,129,58,.32); }
+
+  /* Big TripGenie button */
+  #sm .dm-genie-big {
+    display: flex; align-items: center; gap: 14px; width: 100%;
+    background: linear-gradient(135deg, #7B2FBE 0%, #4A90D9 100%);
+    color: #fff; border: none; border-radius: 18px; padding: 20px 22px;
+    font-family: var(--font); cursor: pointer;
+    box-shadow: 0 5px 24px rgba(123,47,190,.38); margin-bottom: 20px;
+    transition: transform .12s; text-align: left;
+  }
+  #sm .dm-genie-big:active { transform: scale(.98); }
+  #sm .dm-genie-emoji { font-size: 2.3rem; line-height: 1; flex-shrink: 0; }
+  #sm .dm-genie-body  { flex: 1; min-width: 0; }
+  #sm .dm-genie-title { font-size: 1.12rem; font-weight: 900; line-height: 1.1; }
+  #sm .dm-genie-hint  { font-size: .77rem; opacity: .82; margin-top: 3px; font-style: italic; }
+  #sm .dm-genie-mic   { font-size: 1.3rem; opacity: .6; flex-shrink: 0; }
+
+  /* Below-fold separator */
+  #sm .dm-divider { height: 1px; background: var(--border); margin: 0 -20px 20px; }
+
   /* ── Map stop navigator: always side-by-side (row) layout ───────── */
   .map-nav-wrap { display:flex; flex-direction:row; flex:1; min-height:0; gap:0; border-radius:var(--radius); overflow:hidden; border:1px solid var(--border); box-shadow:var(--shadow); }
   #map-stop-nav { width:260px; flex-shrink:0; background:var(--card); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden; }
@@ -20703,43 +20783,105 @@ function _smRenderToday() {
   var dLeft = totalDays - idx - 1;
   var dateLabel = _smFmtDate(day.date);
 
-  /* Drive card vs explore card */
-  var driveHtml = '';
+  /* Context for drive day */
+  var prevDay = idx > 0 ? days[idx - 1] : null;
+  var prevStop = prevDay ? (stops.find(function(s){ return s.id === prevDay.stopId; }) || {}) : {};
+  var fromName = prevStop.name || 'Home';
+  var toName = stop.name || 'Next Stop';
+  var toState = stop.state ? ', ' + stop.state : '';
+  var miText = day.miles ? day.miles + ' mi' : '';
+  var hrText = day.driveHours ? day.driveHours + 'h drive' : '';
+  var actCount = (stop.activities || []).length;
+
+  /* ── ABOVE FOLD ─────────────────────────────────────────────── */
+
+  /* 1. Compact top bar */
+  var topBar = '<div class="dm-top-bar">'
+    + '<span class="dm-day-badge">Day ' + day.day + '</span>'
+    + '<span class="dm-date-str">' + dateLabel + '</span>'
+    + '<span class="dm-pct-lbl">' + pct + '% done</span>'
+    + '</div>';
+
+  /* 2. Next Stop card */
+  var nextCard;
   if (day.driveDay) {
-    /* Previous stop = where we're coming from */
-    var prevDay = idx > 0 ? days[idx - 1] : null;
-    var prevStop = prevDay ? (stops.find(function(s){ return s.id === prevDay.stopId; }) || {}) : {};
-    var fromName = prevStop.name || 'Home';
-    var toName = stop.name || 'Next Stop';
-    var miText = day.miles ? day.miles + ' mi' : '';
-    var hrText = day.driveHours ? day.driveHours + 'h' : '';
-    driveHtml = '<div class="today-drive" onclick="switchNav(\'s-schedule\',\'nav-schedule\',\'Schedule\')">'
-      + '<div class="today-drive-head">'
-      + '<div class="today-drive-icon"><i class="fa-solid fa-car-side"></i></div>'
-      + '<div><div style="font-size:.68rem;font-weight:800;color:var(--orange);letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px;">Drive Day</div>'
-      + '<div style="font-size:1rem;font-weight:900;">' + fromName + ' → ' + toName + '</div></div>'
+    nextCard = '<div class="dm-next-card">'
+      + '<div class="dm-next-eyebrow">Heading To</div>'
+      + '<div class="dm-next-name">' + (stop.emoji || '📍') + ' ' + toName + toState + '</div>'
+      + '<div class="dm-next-pills">'
+      + (miText ? '<span class="dm-next-pill"><i class="fa-solid fa-road"></i> ' + miText + '</span>' : '')
+      + (hrText ? '<span class="dm-next-pill"><i class="fa-solid fa-clock"></i> ' + hrText + '</span>' : '')
+      + '<span class="dm-next-pill"><i class="fa-solid fa-van-shuttle"></i> Drive day</span>'
       + '</div>'
-      + '<div class="route-viz"><div class="route-dot"></div><div class="route-line"><span class="route-car"><i class="fa-solid fa-van-shuttle"></i></span></div><div class="route-dot end"></div></div>'
-      + '<div class="route-label"><span>' + fromName + '</span><span>' + toName + '</span></div>'
-      + '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">'
-      + (miText ? '<span class="pill pill-dark"><i class="fa-solid fa-road"></i> ' + miText + '</span>' : '')
-      + (hrText ? '<span class="pill pill-dark"><i class="fa-solid fa-clock"></i> ' + hrText + '</span>' : '')
-      + '<span class="pill pill-green"><i class="fa-solid fa-circle-check"></i> Drive day</span>'
-      + '</div></div>';
+      + '<div class="dm-route-row">'
+      + '<div class="dm-rdot"></div>'
+      + '<div class="dm-rline"><span class="dm-rvan">🚐</span></div>'
+      + '<div class="dm-rdot end"></div>'
+      + '</div>'
+      + '<div class="dm-route-labels"><span>' + fromName + '</span><span>' + toName + '</span></div>'
+      + '</div>';
   } else {
-    var actCount = (stop.activities || []).length;
-    driveHtml = '<div class="today-drive" onclick="switchNav(\'s-schedule\',\'nav-schedule\',\'Schedule\')">'
-      + '<div class="today-drive-head">'
-      + '<div class="today-drive-icon" style="background:var(--green-l);"><i class="fa-solid fa-person-hiking" style="color:var(--green);"></i></div>'
-      + '<div><div style="font-size:.68rem;font-weight:800;color:var(--green);letter-spacing:.06em;text-transform:uppercase;margin-bottom:2px;">Explore Day</div>'
-      + '<div style="font-size:1rem;font-weight:900;">' + (stop.name || 'Rest day') + '</div></div>'
+    nextCard = '<div class="dm-next-card" style="background:var(--green);">'
+      + '<div class="dm-next-eyebrow">Today\'s Stop</div>'
+      + '<div class="dm-next-name">' + (stop.emoji || '🌲') + ' ' + (stop.name || 'Rest day') + toState + '</div>'
+      + '<div class="dm-next-pills">'
+      + '<span class="dm-next-pill"><i class="fa-solid fa-leaf"></i> Explore day</span>'
+      + (actCount ? '<span class="dm-next-pill"><i class="fa-solid fa-star"></i> ' + actCount + ' activities</span>' : '')
       + '</div>'
-      + (day.title ? '<div style="font-size:.82rem;color:var(--text-2);margin-top:10px;line-height:1.5;">' + day.title + '</div>' : '')
-      + '<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap;">'
-      + '<span class="pill pill-green"><i class="fa-solid fa-leaf"></i> No driving</span>'
-      + (actCount ? '<span class="pill pill-dark"><i class="fa-solid fa-star"></i> ' + actCount + ' activities</span>' : '')
-      + '</div></div>';
+      + (day.title ? '<div style="font-size:.82rem;opacity:.88;line-height:1.4;margin-top:8px;">' + day.title + '</div>' : '')
+      + '</div>';
   }
+
+  /* 3. CTA row — big action buttons */
+  var ctaRow;
+  if (day.driveDay) {
+    ctaRow = '<div class="dm-cta-row">'
+      + '<button class="dm-cta-btn dm-cta-arrived" onclick="_dmArrived(' + (idx + 1) + ',\'' + (toName + toState).replace(/'/g, "\\'") + '\')">'
+      + '<span class="dm-cta-icon">🎉</span>'
+      + '<span class="dm-cta-lbl">We\'ve Arrived!</span>'
+      + '<span class="dm-cta-sub">Check in at ' + toName + '</span>'
+      + '</button>'
+      + '<button class="dm-cta-btn dm-cta-left" onclick="_dmDeparted(\'' + (toName + toState).replace(/'/g, "\\'") + '\')">'
+      + '<span class="dm-cta-icon">🚐</span>'
+      + '<span class="dm-cta-lbl">We\'ve Left</span>'
+      + '<span class="dm-cta-sub">En route to ' + toName + '</span>'
+      + '</button>'
+      + '</div>';
+  } else {
+    ctaRow = '<div class="dm-cta-row">'
+      + '<button class="dm-cta-btn dm-cta-arrived" onclick="openCampInfo(' + (idx + 1) + ')">'
+      + '<span class="dm-cta-icon">🏕</span>'
+      + '<span class="dm-cta-lbl">Camp Info</span>'
+      + '<span class="dm-cta-sub">Site details & checklist</span>'
+      + '</button>'
+      + '<button class="dm-cta-btn dm-cta-left" onclick="goTo(\'s-journal\',\'Journal\',\'Today\',\'today\')">'
+      + '<span class="dm-cta-icon">📓</span>'
+      + '<span class="dm-cta-lbl">Journal</span>'
+      + '<span class="dm-cta-sub">Capture today\'s memories</span>'
+      + '</button>'
+      + '</div>';
+  }
+
+  /* 4. Big TripGenie button */
+  var genieBtn = '<button class="dm-genie-big" onclick="openTripGenie()">'
+    + '<span class="dm-genie-emoji">✨</span>'
+    + '<div class="dm-genie-body">'
+    + '<div class="dm-genie-title">Ask TripGenie</div>'
+    + '<div class="dm-genie-hint">"What should we do at ' + (stop.name || 'this stop') + '?"</div>'
+    + '</div>'
+    + '<i class="fa-solid fa-microphone dm-genie-mic"></i>'
+    + '</button>';
+
+  /* ── BELOW FOLD ─────────────────────────────────────────────── */
+
+  var divider = '<div class="dm-divider"></div>';
+
+  /* Stats row */
+  var statsHtml = '<div class="stat-row">'
+    + '<div class="stat-box"><div class="stat-num">' + day.day + '</div><div class="stat-lbl">Day</div></div>'
+    + '<div class="stat-box"><div class="stat-num">' + dLeft + '</div><div class="stat-lbl">Left</div></div>'
+    + '<div class="stat-box"><div class="stat-num" style="color:var(--orange)">' + (day.miles || 0) + '</div><div class="stat-lbl">Miles</div></div>'
+    + '</div>';
 
   /* Tonight's stop hero */
   var heroHtml = '<h2 class="section-head">Tonight</h2>'
@@ -20749,30 +20891,6 @@ function _smRenderToday() {
     + '<div class="hero-title">' + (stop.emoji || '📍') + ' ' + (stop.name || 'Unknown') + (stop.state ? ', ' + stop.state : '') + '</div>'
     + '<div class="hero-sub">' + (day.sleep || stop.name || '') + (day.sleepType ? ' · ' + day.sleepType.replace(/_/g,' ') : '') + '</div>'
     + '</div>';
-
-  /* Stats */
-  var statsHtml = '<div class="stat-row">'
-    + '<div class="stat-box"><div class="stat-num">' + day.day + '</div><div class="stat-lbl">Day</div></div>'
-    + '<div class="stat-box"><div class="stat-num">' + dLeft + '</div><div class="stat-lbl">Left</div></div>'
-    + '<div class="stat-box"><div class="stat-num" style="color:var(--orange)">' + (day.miles || 0) + '</div><div class="stat-lbl">Miles</div></div>'
-    + '</div>';
-
-  /* Header */
-  var hdr = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">'
-    + '<div><div class="screen-eyebrow">Today · ' + dateLabel + '</div><div class="screen-title">Day ' + day.day + '</div></div>'
-    + '<div style="text-align:right;"><div style="font-size:.72rem;font-weight:700;color:var(--text-3);margin-bottom:4px;">Trip progress</div>'
-    + '<div style="font-size:1.2rem;font-weight:900;color:var(--orange);">' + pct + '%</div></div>'
-    + '</div>';
-
-  /* Genie bar */
-  var genieHtml = '<button onclick="openTripGenie()" style="display:flex;align-items:center;justify-content:center;gap:12px;width:100%;background:linear-gradient(135deg,#7B2FBE,#4A90D9);color:#fff;border:none;border-radius:16px;padding:18px 20px;font-family:var(--font);cursor:pointer;box-shadow:0 4px 18px rgba(123,47,190,.35);margin-bottom:16px;">'
-    + '<span style="font-size:2rem;line-height:1;">✨</span>'
-    + '<div style="text-align:left;">'
-    + '<div style="font-size:1.05rem;font-weight:900;letter-spacing:-.01em;">Ask TripGenie</div>'
-    + '<div style="font-size:.8rem;opacity:.85;margin-top:2px;">"What should we do today at ' + (stop.name || 'this stop') + '?"</div>'
-    + '</div>'
-    + '<i class="fa-solid fa-microphone" style="font-size:1.2rem;margin-left:auto;opacity:.75;"></i>'
-    + '</button>';
 
   /* Quick actions */
   var qaHtml = '<h2 class="section-head">Quick actions</h2>'
@@ -20795,7 +20913,21 @@ function _smRenderToday() {
   var fill = document.getElementById('progress-fill');
   if (fill) fill.style.width = pct + '%';
 
-  el.innerHTML = hdr + driveHtml + statsHtml + heroHtml + genieHtml + qaHtml;
+  el.innerHTML = topBar + nextCard + ctaRow + genieBtn + divider + statsHtml + heroHtml + qaHtml;
+}
+
+/* ── DRIVING MODE CTA HANDLERS ────────────────────────────────────── */
+function _dmArrived(dayNum, stopLabel) {
+  /* Show big arrival celebration toast, then open camp info */
+  var label = stopLabel || 'your destination';
+  showToast('🎉 Welcome to ' + label + '! Time to set up camp.', 3500);
+  setTimeout(function() { openCampInfo(dayNum); }, 600);
+}
+
+function _dmDeparted(toLabel) {
+  /* Show departure toast — encourages switching to Google Maps */
+  var label = toLabel || 'the next stop';
+  showToast('🚐 On your way to ' + label + '! Safe travels!', 3000);
 }
 
 function _smRenderSchedule() {

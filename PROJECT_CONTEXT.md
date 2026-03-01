@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-01 (Session 17)
+2026-03-01 (Session 17 continued)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -133,6 +133,7 @@ tripgenie/
   - **Print map: Leaflet tiles replacing SVG grid**: `printTripPlan()` now uses a real Leaflet map (unpkg CDN) instead of a hand-drawn SVG schematic. Stop markers use numbered blue/green divIcons, route drawn as orange dashed polyline. Print is triggered after 4s (with a 2s early-check if tiles load fast) to give tiles time to render. Map CSS references `#print-map` div. Old SVG projection code (`_mMinLat`, `_mMaxLat`, `_prj()`, `_svgParts`) removed.
   - **Print stop names fixed**: `_mapStops` now stores `displayName` using `_stopCityDisplay(stop)` (which calls `_inferStopState()` for consistent 2-letter state codes). Both the Leaflet legend and the stop section headers now use this normalized name instead of raw `stop.name + stop.state`.
   - **Total miles health check (HC 12b)**: New check in `refreshTripPlan()` computes the actual sum of all drive-day miles from the live TRIP_DAYS array and compares with CONFIG.totalMiles. If different by >5% (or >100mi), auto-fixes `CONFIG.totalMiles`, `customTripData.totalMiles`, and the displayed value. This fixes the "2,402 est. miles" display bug in the Print PDF header.
+  - **Driving mode today screen redesign** (iPad mini split-screen, Session 17 cont.): `_smRenderToday()` completely rewritten with above-fold priority layout. New structure: (1) compact `dm-top-bar` showing day badge + date + progress%; (2) `dm-next-card` — blue card for drive days (green for explore days) showing destination name, miles, hours, route viz, emoji; (3) `dm-cta-row` — two large CTA buttons: drive days get "We've Arrived! 🎉" (green, calls `_dmArrived`) + "We've Left 🚐" (orange, calls `_dmDeparted`); explore days get "Camp Info 🏕" + "Journal 📓"; (4) `dm-genie-big` — full-width purple→blue gradient TripGenie button. Below the `dm-divider`: stats row, tonight's hero card, quick actions (unchanged). New handler functions: `_dmArrived(dayNum, stopLabel)` shows celebration toast + opens camp info; `_dmDeparted(toLabel)` shows departure toast. All CSS classes added in previous sub-session. Designed for ~375–520px wide × 640px tall (iPad mini split-screen landscape).
   - **Regression tests**: 111/111 passing.
 
 ## Known Issues / In Progress
