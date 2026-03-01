@@ -239,6 +239,17 @@ tripgenie/
     - **Preferred hotel chain in Trip Settings**: New text input `ts-hotel-chain` added to Trip Settings UI after RV Amps. Saved to `appState.tripSettings.hotelChain`. Injected into hotel AI prompt as "We prefer [chain] properties when possible."
     - **Transit-only stops excluded from route navigator**: `renderStopNavigator()` now filters out stops where every single TRIP_DAY has `sleepType` in `{walmart, boondock, rest_area}` — pure overnight-while-driving stops. Real destination stops remain unaffected.
 
+- Session 18 (2026-03-01):
+  - **Hamburger menu for iPad mini header**: Replaced aggressive text-label hiding with proper ☰ hamburger button (641–1024px breakpoint). Button opens dropdown with 4 actions: Plan a New Trip, Ask TripGenie, Change the Plan, Help. `_hamToggle()`, `_hamClose()`, `_hamAct(fn)` JS helpers. Click-outside closes menu. Button swaps to ✕ when open.
+  - **Duplicate weather forecast button removed**: Removed the "Forecast" button from the expanded stop body in Day Planner Stops tab (kept only the one in the stop card header).
+  - **School day count fixed**: `_isWeekendDay(dateStr)` helper (uses `new Date(...+'T12:00:00').getDay()`) excludes Saturdays/Sundays from school day count. Result: 25 real school days, 12 weekends off, 5 spring break days. Stats card updated to show "Weekends Off: 12" stat.
+  - **Dashboard countdown pill fix**: Removed `white-space:nowrap`, added `flex-wrap:wrap` and `min-width:140px` on text div — fixes text overlap on iPad portrait.
+  - **Day row trash button action sheet**: `_dayRowAction(stopId, phaseName)` opens action sheet with "Remove 1 day" vs "Remove entire stop". `_doRemoveStop()` internal function removes without double-confirm. `_removeStopFromRow` redirects to action sheet.
+  - **Purple sleep info modal stay-type fix**: `_getStayType()` derives smart default from TRIP_DAYS `sleepType` field (rv_park/campsite→campground, hotel/motel→hotel, cabin/glamping→cabin, airbnb/vrbo→airbnb). No more "Loading campground info" for hotel stays. `fetchAimPhotos` uses `_sMeta.label.toLowerCase()` instead of hardcoded 'campground'. `fetchCampInfo` accepts `_typeLabel` param for dynamic error messages.
+  - **Orange day detail modal simplified**: Removed Activities Near Here, Restaurants Near Here, Pro Tips, Local Music buttons. Kept: Area Guide + We Arrived! + We Left merged onto one row. `ddm-music-btn` kept as `display:none` hidden element so JS refs don't break.
+  - **Welcome Home duplicate banner fixed**: `var _lastHeaderWasHome = false` initialized in `renderSchedule()` near `lastPhase`/`lastStopId`. The phase-header block now checks `!(_dIsHome && _lastHeaderWasHome)` to skip the green home banner if we're already in home territory. Prevents duplicate banners when days 43 (phase='Heading Home') and 44–46 (phase='Home') both have sleepType='home'.
+  - **Transit day toggle**: New `_toggleTransitDay(dayNum)` function flips `appState.dayOverrides[dayNum].transitMode` between true/false. Transit days show: grey left-border card, "🚗 Transit Day" meta text, "Drive & Sleep" badge, campground/car toggle button in action column. Planned activities section hidden. Toggle button (green campground icon = explore, blue car icon = transit) appears on all non-drive, non-home day cards. Clicking restores with "🏕️ Explore day restored" toast or sets with "🚗 Marked as Transit Day" toast.
+
 ## Suggested Next Steps
 - **0-day waypoint stops**: User wants stops with 0 nights for driving waypoints (fuel, Walmart overnight, route planning) — not yet built
 - Push to GitHub (git push) when network is available — commits pending from sessions 8+
@@ -249,3 +260,4 @@ tripgenie/
 - Test voice chat on actual iPhone/iPad — may need microphone permission prompt handling
 - **Budget tab**: User requested budget categories per item (restaurants, lodging, fuel, supplies) with per-item amount input — not yet built
 - `_initDragDrop` is guarded but never implemented — drag-to-reorder time blocks in DDM could be a future feature
+- **Drive-home planning**: Help Paul figure out actual drive-time per day for the return trip (days 40–43). Currently 3 explore days + 1 drive day; likely needs 2–3 transit days with overnight hotel/campground stops.

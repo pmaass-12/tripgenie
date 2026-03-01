@@ -7393,6 +7393,20 @@ function _doRemoveStop(stopId, phaseName) {
   showToast('🗑️ ' + phaseName + ' removed. Use the + button to restore days.', 2800);
 }
 
+/* ── TRANSIT DAY TOGGLE ──────────────────────────────────────────── */
+/* Flips a non-drive explore day to "transit/drive-through" mode.
+   Transit days show a car icon, grey border, and hide planned activities.
+   Toggling again restores the day to normal Explore mode.              */
+function _toggleTransitDay(dayNum) {
+  if (!appState.dayOverrides) appState.dayOverrides = {};
+  if (!appState.dayOverrides[dayNum]) appState.dayOverrides[dayNum] = {};
+  var cur = !!(appState.dayOverrides[dayNum].transitMode);
+  appState.dayOverrides[dayNum].transitMode = !cur;
+  saveState(appState);
+  renderSchedule();
+  showToast(cur ? '🏕️ Explore day restored' : '🚗 Marked as Transit Day — Drive & Sleep', 2000);
+}
+
 /* ── REMOVE ENTIRE STOP (legacy entry points kept for other callers) ── */
 function _removeStopFromRow(stopId, phaseName) {
   /* Legacy: now just opens the action sheet */
@@ -7529,6 +7543,7 @@ function renderSchedule() {
   var _live     = tripIsLive(); // only mark "Today" if trip has actually started
   var lastPhase = '';
   var lastStopId = null;
+  var _lastHeaderWasHome = false;  // prevent duplicate "Home" banner
   var html      = '';
 
   /* Pre-compute which day numbers are hidden because a stop had days removed */
@@ -7605,9 +7620,12 @@ function renderSchedule() {
     // Phase header when phase OR stop changes — each stop gets its own blue bar
     // (handles generic region phases like "Southwest" containing White Sands + Albuquerque)
     if (d.phase !== lastPhase || d.stopId !== lastStopId) {
-      if (!removedStopIds[d.stopId]) {
+      /* Don't repeat the green "Home" banner if we're still in home territory */
+      var _dIsHome = d.sleepType === 'home';
+      if (!removedStopIds[d.stopId] && !(_dIsHome && _lastHeaderWasHome)) {
         html += phaseHeaderHtml(d.phase, d);
       }
+      _lastHeaderWasHome = _dIsHome;
       lastPhase = d.phase;
       lastStopId = d.stopId;
     }
@@ -7615,9 +7633,14 @@ function renderSchedule() {
     // Skip this day if it was hidden by the - button or full stop removal
     if (skipDayNums[d.day]) continue;
 
+    // Transit mode — explore day toggled to drive-through/transit day
+    var _isTransit = !d.driveDay && d.sleepType !== 'home'
+                     && !!(appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].transitMode);
+
     // Card background — border-free, whitespace + light shadow as separator
     var cardBg = isToday      ? 'border-left:4px solid var(--orange);background:var(--orange-l);box-shadow:0 1px 8px rgba(232,129,58,.12);'
                : d.springBreak ? 'border-left:4px solid var(--purple);background:var(--purple-l);box-shadow:0 1px 4px rgba(0,0,0,.05);'
+               : _isTransit   ? 'border-left:4px solid #64748b;background:#f8fafc;box-shadow:0 1px 3px rgba(0,0,0,.04);'
                : isBefore     ? 'background:#fafaf8;opacity:.75;box-shadow:none;'
                : 'background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.04),0 3px 10px rgba(0,0,0,.06);';
 
@@ -7672,7 +7695,12 @@ function renderSchedule() {
         html += '<span style="background:var(--orange);color:#fff;font-size:.66rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;cursor:pointer;" onclick="openDayDetail(' + d.day + ')"><i class="fa-solid fa-triangle-exclamation"></i> Long Drive — tap to split</span>';
       }
     } else if (!d.driveDay) {
-      html += '<span style="font-size:.75rem;color:var(--green);font-weight:600;"><i class="fa-solid fa-campground"></i> Explore day</span>';
+      if (_isTransit) {
+        html += '<span style="font-size:.75rem;color:#64748b;font-weight:600;"><i class="fa-solid fa-car-side"></i> Transit Day</span>';
+        html += '<span style="background:#64748b;color:#fff;font-size:.65rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;">Drive &amp; Sleep</span>';
+      } else {
+        html += '<span style="font-size:.75rem;color:var(--green);font-weight:600;"><i class="fa-solid fa-campground"></i> Explore day</span>';
+      }
     }
     // City display (shows city/town name if override set, or stop name+state)
     if (stop && d.sleepType !== 'home') {
@@ -7691,6 +7719,15 @@ function renderSchedule() {
     html += '<div style="display:flex;gap:4px;">';
     if (stop && stop.id !== 15) {
       html += '<button onclick="showStopForecastModal(' + stop.id + ')" title="Forecast" style="background:var(--blue-l);border:1px solid var(--border);border-radius:100px;padding:4px 8px;font-size:.72rem;cursor:pointer;color:var(--blue);font-family:var(--font);">&#127780;&#65039;</button>';
+      /* Transit toggle — only for non-drive explore days */
+      if (!d.driveDay && d.sleepType !== 'home') {
+        var _transBg = _isTransit
+          ? 'background:#dbeafe;border:1px solid #93c5fd;color:#1d4ed8;'
+          : 'background:#f0fdf4;border:1px solid #86efac;color:#16a34a;';
+        var _transTitle = _isTransit ? 'Switch back to Explore day' : 'Mark as Transit / Drive-through day';
+        var _transIcon  = _isTransit ? '<i class="fa-solid fa-campground"></i>' : '<i class="fa-solid fa-car-side"></i>';
+        html += '<button onclick="event.stopPropagation();_toggleTransitDay(' + d.day + ')" title="' + _transTitle + '" style="' + _transBg + 'border-radius:100px;padding:4px 8px;font-size:.72rem;cursor:pointer;font-family:var(--font);">' + _transIcon + '</button>';
+      }
       /* Day-row action button — opens action sheet (remove 1 day / remove whole stop) */
       var _safeRowPhase = (d.phase || '').replace(/'/g, "\\'");
       html += '<button onclick="event.stopPropagation();_dayRowAction(' + d.stopId + ',\'' + _safeRowPhase + '\')" title="Adjust days at this stop" style="background:#fff0ef;border:1px solid #fca5a5;border-radius:100px;padding:4px 8px;font-size:.7rem;cursor:pointer;color:#dc2626;font-family:var(--font);display:flex;align-items:center;gap:3px;" onmouseenter="this.style.background=\'#fee2e2\'" onmouseleave="this.style.background=\'#fff0ef\'"><i class="fa-solid fa-trash-can"></i></button>';
@@ -7701,9 +7738,9 @@ function renderSchedule() {
 
     html += '</div>'; // grid
 
-    // Planned items for this stop
+    // Planned items for this stop (hidden if transit day — no explore activities)
     var stopForDay2 = getStop(d.stopId);
-    if (stopForDay2 && typeof getPlannedForStop === 'function') {
+    if (stopForDay2 && typeof getPlannedForStop === 'function' && !_isTransit) {
       var dp = getPlannedForStop(d.stopId, d.day);
       if (dp.activities.length > 0 || dp.restaurants.length > 0) {
         html += '<div style="padding:8px 12px 10px;border-top:1px solid var(--border);background:var(--green-l);">';
