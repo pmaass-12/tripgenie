@@ -5982,7 +5982,12 @@ function buildMapMarkers(mapObj) {
     : [41.2559, -74.3593];
   var _homeStopId = _homeStop ? _homeStop.id : 15;
   var _removedIds = (appState && appState.removedStops) ? appState.removedStops : {};
-  var _validStops = TRIP_STOPS.filter(function(s) { return s.lat && s.lng && s.id !== _homeStopId && !_removedIds[s.id]; });
+  /* Merge built-in stops with custom trip wizard stops so all appear on the map */
+  var _ctCustomArr = (appState.customTripData && appState.customTripData.stops) || [];
+  var _builtinIdSet = {};
+  TRIP_STOPS.forEach(function(s) { _builtinIdSet[s.id] = true; });
+  var _allStopsArr = TRIP_STOPS.concat(_ctCustomArr.filter(function(s) { return !_builtinIdSet[s.id]; }));
+  var _validStops = _allStopsArr.filter(function(s) { return s.lat && s.lng && s.id !== _homeStopId && !_removedIds[s.id]; });
 
   /* Build stop number map (1-based, trip-day order, excluding home and waypoints) */
   /* Waypoints are stops whose only day has waypoint:true — they get a separate icon */
@@ -6050,8 +6055,8 @@ function buildMapMarkers(mapObj) {
     .addTo(mapObj)
     .bindPopup('<strong>🏠 ' + _tripStartCity() + '</strong><br>' + (_roundTrip ? 'Start &amp; End' : 'Start'));
 
-  // Add all destination stops (skip removed stops and home stop)
-  TRIP_STOPS.forEach(stop => {
+  // Add all destination stops (built-in + custom wizard stops; skip removed and home)
+  _allStopsArr.forEach(function(stop) {
     if (!stop.lat || !stop.lng) return; // skip stops with no coordinates
     if (stop.id === _homeStopId) return;  // home already rendered above
     if (_removedIds[stop.id]) return;     // skip stops removed from the trip
@@ -10472,6 +10477,7 @@ function closeTripSelectorMenu() {
 
 function _switchToBuiltinTrip() {
   appState.activeTrip = 'builtin';
+  appState.tripGenieAdvice = ''; // clear advice — may be from a different route
   saveState(appState);
   closeTripSelectorMenu();
   initApp();
@@ -10480,6 +10486,7 @@ function _switchToBuiltinTrip() {
 
 function _switchToCustomTrip() {
   appState.activeTrip = 'custom';
+  appState.tripGenieAdvice = ''; // clear advice — may be from a different route
   saveState(appState);
   closeTripSelectorMenu();
   initApp();
@@ -17996,6 +18003,28 @@ function tripCleanup() {
   });
   appState.customTripData = { stops: TRIP_STOPS.slice(), days: TRIP_DAYS.slice() };
 
+  /* Clear stale TripGenie advice if it mentions stops not on the current route */
+  if (appState.tripGenieAdvice) {
+    var _hcAllStops = TRIP_STOPS.concat((appState.customTripData && appState.customTripData.stops) || []);
+    var _hcRemIds   = appState.removedStops || {};
+    var _hcNames    = [];
+    _hcAllStops.forEach(function(s) {
+      if (!_hcRemIds[s.id] && s.name) {
+        _hcNames.push(s.name.toLowerCase());
+        if (s.state) _hcNames.push((s.name + ', ' + s.state).toLowerCase());
+      }
+    });
+    var _adviceStale = false;
+    _parseGenieItems(appState.tripGenieAdvice).forEach(function(item) {
+      var colonIdx = (item.text || '').indexOf(':');
+      if (colonIdx === -1) return;
+      var loc = item.text.substring(0, colonIdx).trim().toLowerCase().split(',')[0].trim();
+      var found = _hcNames.some(function(n) { var nb = n.split(',')[0].trim(); return loc.indexOf(nb) !== -1 || nb.indexOf(loc) !== -1; });
+      if (!found) _adviceStale = true;
+    });
+    if (_adviceStale) { appState.tripGenieAdvice = ''; fixed++; }
+  }
+
   /* Sync CONFIG dates/totalDays from TRIP_DAYS ground truth so header stats are accurate */
   if (TRIP_DAYS.length > 0) {
     CONFIG.startDate = TRIP_DAYS[0].date;
@@ -19004,10 +19033,34 @@ function renderDecisions() {
           if (!_cached) {
             return _genieLoading ? '' : '<div style="font-size:.78rem;color:#7b1fa2;opacity:.8;">Tap "Ask TripGenie" for personalized suggestions on trimming ' + vari.daysDelta + ' day' + (vari.daysDelta !== 1 ? 's' : '') + ' without losing the highlights.</div>';
           }
-          // Parse into discrete action cards
+          // Parse into discrete action cards, then filter to only current-route stops
           _genieItems = _parseGenieItems(_cached);
           if (_genieItems.length > 0) {
-            return _renderGenieCards(_genieItems, '#4a148c', 'rgba(255,255,255,.75)', '#e1bee7');
+            /* Build active stop name set to filter out stale suggestions */
+            var _decAllStops2 = TRIP_STOPS.concat((appState.customTripData && appState.customTripData.stops) || []);
+            var _decRemIds2   = appState.removedStops || {};
+            var _decNames2    = [];
+            _decAllStops2.forEach(function(s) {
+              if (!_decRemIds2[s.id] && s.name) {
+                _decNames2.push(s.name.toLowerCase());
+                if (s.state) _decNames2.push((s.name + ', ' + s.state).toLowerCase());
+              }
+            });
+            var _staleCount = 0;
+            _genieItems = _genieItems.filter(function(item) {
+              var colonIdx = (item.text || '').indexOf(':');
+              if (colonIdx === -1) return true;
+              var loc = item.text.substring(0, colonIdx).trim().toLowerCase();
+              var locBase = loc.split(',')[0].trim();
+              for (var ki = 0; ki < _decNames2.length; ki++) {
+                var nb = _decNames2[ki].split(',')[0].trim();
+                if (locBase.indexOf(nb) !== -1 || nb.indexOf(locBase) !== -1) return true;
+              }
+              _staleCount++;
+              return false;
+            });
+            var staleNote = _staleCount ? '<div style="font-size:.72rem;color:#9c27b0;opacity:.75;padding:4px 4px 0;font-style:italic;">(' + _staleCount + ' suggestion' + (_staleCount !== 1 ? 's' : '') + ' for stops not on your current route were hidden)</div>' : '';
+            return staleNote + _renderGenieCards(_genieItems, '#4a148c', 'rgba(255,255,255,.75)', '#e1bee7');
           }
           // Fallback: raw text
           return '<div style="font-size:.81rem;color:#4a148c;line-height:1.65;border-top:1px solid #ce93d8;padding-top:10px;margin-top:4px;">' + _cached + '</div>';
