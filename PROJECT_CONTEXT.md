@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-01 (Session 17 continued)
+2026-03-01 (Session 18)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.

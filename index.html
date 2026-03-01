@@ -2147,6 +2147,74 @@
   /* Prevent map section from overflowing viewport horizontally on narrow screens */
   #tab-map { overflow-x:hidden; }
 
+  /* ── GUEST OVERLAY ───────────────────────────────────────────────── */
+  .guest-body-wrap { display:flex; flex-direction:row; }
+  .guest-map-col   { width:340px; flex-shrink:0; }
+  .guest-stop-card {
+    background:#fff;
+    border-radius:12px;
+    overflow:hidden;
+    box-shadow:0 2px 12px rgba(123,94,167,.1);
+    border:1px solid #e5deff;
+  }
+  .guest-form-input {
+    width:100%;
+    padding:9px 11px;
+    border:1.5px solid #d0c4f0;
+    border-radius:8px;
+    background:#fff;
+    font-family:var(--font);
+    font-size:.875rem;
+    box-sizing:border-box;
+    outline:none;
+    transition:border-color .15s;
+  }
+  .guest-form-input:focus { border-color:#7B5EA7; }
+  .guest-submit-btn {
+    width:100%;
+    padding:11px;
+    background:#7B5EA7;
+    color:#fff;
+    border:none;
+    border-radius:8px;
+    font-family:var(--font);
+    font-size:.9rem;
+    font-weight:800;
+    cursor:pointer;
+    transition:opacity .15s;
+  }
+  .guest-submit-btn:hover { opacity:.88; }
+  .guest-voice-btn {
+    position:absolute;
+    right:8px;
+    top:8px;
+    width:32px;
+    height:32px;
+    background:#7B5EA7;
+    border:none;
+    border-radius:50%;
+    color:#fff;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-size:.9rem;
+    transition:background .15s;
+    flex-shrink:0;
+  }
+  .guest-voice-btn.recording { background:#e53e3e; animation:guestPulse .7s infinite alternate; }
+  @keyframes guestPulse { from { box-shadow:0 0 0 0 rgba(229,62,62,.4); } to { box-shadow:0 0 0 8px rgba(229,62,62,0); } }
+  /* Mobile: stack map above stops list */
+  @media (max-width:720px) {
+    .guest-body-wrap { flex-direction:column !important; overflow-y:auto; }
+    .guest-map-col   { width:100% !important; height:220px; border-right:none !important; border-bottom:1px solid #ddd; }
+    #guest-map-container { position:absolute; inset:0; }
+    #guest-stops-col { flex:none; overflow-y:visible; }
+  }
+  /* Guest overlay full-height flex */
+  #guest-overlay { flex-direction:column; }
+  #guest-body     { flex:1; min-height:0; }
+
   </style>
 </head>
 <body>
@@ -2538,6 +2606,7 @@
             <span style="display:flex;align-items:center;gap:5px;"><span style="width:20px;height:0;border-top:3px dashed #a855f7;display:inline-block;border-radius:2px"></span> Return</span>
             <button onclick="forceRefreshMap(this)" style="display:flex;align-items:center;gap:5px;background:var(--blue-l);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:var(--blue);cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-rotate"></i> Refresh</button>
             <button onclick="printTripPlan()" style="display:flex;align-items:center;gap:5px;background:var(--orange-l);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:var(--orange);cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-print"></i> Print PDF</button>
+            <button onclick="_copyShareLink()" style="display:flex;align-items:center;gap:5px;background:#f3edff;border:1px solid #c9a8f5;border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:#7B5EA7;cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-share-nodes"></i> Share Route</button>
           </div>
         </div>
         <!-- Nav + Map row -->
@@ -2567,10 +2636,12 @@
         <button id="plan-seg-schedule" onclick="_mainSeg('schedule')" style="flex:1;padding:9px 16px;border:1.5px solid var(--orange);border-radius:50px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-calendar-days"></i> Schedule</button>
         <button id="plan-seg-stops" onclick="_mainSeg('stops')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-map-pin"></i> Day Planner</button>
         <button id="plan-seg-stats" onclick="_mainSeg('stats')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-star"></i> Trip Stats</button>
+        <button id="plan-seg-friends" onclick="_mainSeg('friends')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-users"></i> Friends</button>
       </div>
       <div id="schedule-content" style="display:block"></div>
       <div id="stops-content" style="display:none"></div>
       <div id="stats-content" style="display:none"></div>
+      <div id="friends-content" style="display:none"></div>
     </div>
 
     <!-- SCHOOL TAB -->
@@ -4667,6 +4738,17 @@ function _initVersionCheck() {
       }
     } catch(e) {}
   })();
+  /* ── Guest mode: ?guest=TRIP_ID bypasses login entirely ─────────── */
+  _detectGuestMode();
+  if (_guestTripId) {
+    // Hide login screen, show guest overlay immediately
+    var _ls = document.getElementById('login-screen');
+    if (_ls) _ls.classList.add('hidden');
+    // Kick off async guest load (shows overlay + fetches stops)
+    _initGuestMode(_guestTripId);
+    return; // skip normal auto-login flow
+  }
+
   if (!_tryAutoLogin()) {
     // No saved session — focus email field so user can start typing immediately
     setTimeout(function() {
@@ -9105,20 +9187,27 @@ function _mainSeg(which) {
   var schDiv = document.getElementById('schedule-content');
   var stpDiv = document.getElementById('stops-content');
   var staDiv = document.getElementById('stats-content');
+  var frnDiv = document.getElementById('friends-content');
   var btnSch = document.getElementById('plan-seg-schedule');
   var btnStp = document.getElementById('plan-seg-stops');
   var btnSta = document.getElementById('plan-seg-stats');
+  var btnFrn = document.getElementById('plan-seg-friends');
   if (!schDiv || !stpDiv) return;
   var _on  = function(b) { if (b) { b.style.background='var(--orange)'; b.style.borderColor='var(--orange)'; b.style.color='#fff'; } };
-  var _off = function(b) { if (b) { b.style.background='var(--card)';   b.style.borderColor='var(--border)'; b.style.color='var(--text-2)'; } };
-  schDiv.style.display = 'none'; stpDiv.style.display = 'none'; if (staDiv) staDiv.style.display = 'none';
-  _off(btnSch); _off(btnStp); _off(btnSta);
+  var _onP = function(b) { if (b) { b.style.background='#7B5EA7'; b.style.borderColor='#7B5EA7'; b.style.color='#fff'; } };
+  var _off = function(b) { if (b) { b.style.background='var(--card)'; b.style.borderColor='var(--border)'; b.style.color='var(--text-2)'; } };
+  schDiv.style.display = 'none'; stpDiv.style.display = 'none';
+  if (staDiv) staDiv.style.display = 'none';
+  if (frnDiv) frnDiv.style.display = 'none';
+  _off(btnSch); _off(btnStp); _off(btnSta); _off(btnFrn);
   if (which === 'schedule') {
     schDiv.style.display = 'block'; _on(btnSch);
   } else if (which === 'stops') {
     stpDiv.style.display = 'block'; _on(btnStp); renderStops();
   } else if (which === 'stats') {
     if (staDiv) { staDiv.style.display = 'block'; renderTripStats(); } _on(btnSta);
+  } else if (which === 'friends') {
+    if (frnDiv) { frnDiv.style.display = 'block'; _loadFriendSuggestions(); } _onP(btnFrn);
   }
 }
 
@@ -9129,6 +9218,305 @@ function switchTab(tabId) {
   var panel  = document.getElementById('tab-' + tabId);
   if (navBtn) navBtn.classList.add('active');
   if (panel)  { panel.classList.remove('hidden'); panel.classList.add('active'); }
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   GUEST / FRIENDS RECOMMENDATION SYSTEM
+   • Guest mode:  ?guest=TRIP_ID  → open link, no login needed
+   • Family view: Planner > Friends tab → see all tips by stop
+   ══════════════════════════════════════════════════════════════════ */
+
+var _guestTripId  = null;   // set from URL param before initApp
+var _guestMapInst = null;   // Leaflet instance for guest map
+var _guestStops   = [];     // stops loaded from Supabase for this guest session
+
+/* ── 1. Detect guest mode from URL ──────────────────────────────── */
+function _detectGuestMode() {
+  try {
+    var p = new URLSearchParams(window.location.search);
+    _guestTripId = p.get('guest') || null;
+  } catch(e) {}
+}
+
+/* ── 2. Boot guest experience ────────────────────────────────────── */
+async function _initGuestMode(tripId) {
+  var overlay = document.getElementById('guest-overlay');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+
+  // Fetch trip from Supabase (anon key — needs public SELECT policy on trips)
+  var stops = null;
+  var tripName = 'Our RV Adventure 2026';
+  try {
+    var resp = await fetch(SUPA_URL + '/rest/v1/trips?id=eq.' + encodeURIComponent(tripId) + '&select=name,trip_data&limit=1', {
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+    });
+    var rows = await resp.json();
+    if (Array.isArray(rows) && rows[0]) {
+      if (rows[0].name) tripName = rows[0].name;
+      var td = rows[0].trip_data || {};
+      if (td.customTripData && td.customTripData.stops) stops = td.customTripData.stops;
+    }
+  } catch(e) {}
+
+  // Fallback: use built-in stops if Supabase read fails (e.g. RLS not yet set up)
+  if (!stops && typeof _BUILTIN_TRIP !== 'undefined') stops = _BUILTIN_TRIP.stops.slice();
+  if (!stops) stops = (TRIP_STOPS || []).slice();
+
+  // Filter out the home stop (last stop)
+  stops = stops.filter(function(s) { return !(s.sleepOptions && s.sleepOptions.length === 0) && s.name !== 'Home' && s.id < 15; });
+  _guestStops = stops;
+
+  document.getElementById('guest-trip-name').textContent = tripName;
+  document.getElementById('guest-loading').style.display = 'none';
+  var body = document.getElementById('guest-body');
+  body.style.display = 'flex';
+  body.style.flexDirection = 'row';
+
+  _renderGuestStopsList(stops, tripId);
+  setTimeout(function() { _initGuestMapInst(stops); }, 300);
+}
+
+/* ── 3. Render per-stop recommendation forms ─────────────────────── */
+function _renderGuestStopsList(stops, tripId) {
+  var el = document.getElementById('guest-stops-list');
+  if (!el) return;
+  var stopColors = ['#2C6EA5','#3A8A5C','#7B5EA7','#C96820','#2C8A6A','#8A3C7B','#5C6EA5','#8A5C2C','#3C8A5C','#8A2C5C','#5C8A2C','#6E5CA5','#8A6C2C','#2C7A8A'];
+  var html = '';
+  stops.forEach(function(stop, idx) {
+    var col = stopColors[idx % stopColors.length];
+    html += '<div class="guest-stop-card">';
+    // Stop header
+    html += '<div style="background:' + col + ';padding:14px 16px;display:flex;align-items:center;gap:12px;">';
+    html += '<div style="font-size:2.2rem;flex-shrink:0;line-height:1;">' + (stop.emoji || '📍') + '</div>';
+    html += '<div style="flex:1;">';
+    html += '<div style="font-weight:900;font-size:1rem;color:#fff;">' + stop.name + (stop.state ? ', ' + stop.state : '') + '</div>';
+    if (stop.description) {
+      var shortDesc = stop.description.length > 110 ? stop.description.substring(0,110) + '…' : stop.description;
+      html += '<div style="font-size:.76rem;color:rgba(255,255,255,.82);line-height:1.4;margin-top:3px;">' + shortDesc + '</div>';
+    }
+    html += '</div></div>';
+
+    // Recommendation form
+    html += '<div style="padding:14px 16px;">';
+    html += '<div style="font-size:.78rem;font-weight:800;color:#7B5EA7;margin-bottom:10px;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-lightbulb"></i> Your Recommendation</div>';
+    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
+    html += '<div><label style="font-size:.68rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px;">First Name *</label>';
+    html += '<input id="gf-fn-' + stop.id + '" class="guest-form-input" type="text" placeholder="Jane" autocomplete="given-name"></div>';
+    html += '<div><label style="font-size:.68rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px;">Last Name *</label>';
+    html += '<input id="gf-ln-' + stop.id + '" class="guest-form-input" type="text" placeholder="Smith" autocomplete="family-name"></div>';
+    html += '</div>';
+    html += '<div style="position:relative;margin-bottom:10px;">';
+    html += '<textarea id="gf-txt-' + stop.id + '" class="guest-form-input" placeholder="What should the Maass family see, eat, or do here? Any hidden gems, great restaurants, or must-do activities?" style="min-height:88px;resize:vertical;padding-right:46px;"></textarea>';
+    html += '<button id="gf-voice-' + stop.id + '" class="guest-voice-btn" onclick="_guestVoice(' + stop.id + ')" title="Tap to speak your recommendation"><i class="fa-solid fa-microphone"></i></button>';
+    html += '</div>';
+    html += '<div id="gf-success-' + stop.id + '" style="display:none;background:#edfaf4;border:1.5px solid #3A8A5C;border-radius:8px;padding:10px 14px;font-size:.85rem;font-weight:700;color:#2d7a50;margin-bottom:8px;">✅ Recommendation sent! Thanks so much 🎉</div>';
+    html += '<button class="guest-submit-btn" onclick="_guestSubmit(' + stop.id + ',\'' + stop.name.replace(/'/g,"\\'") + '\')">';
+    html += '<i class="fa-solid fa-paper-plane"></i> Send to the Maass Family</button>';
+    html += '</div></div>';
+  });
+  el.innerHTML = html;
+}
+
+/* ── 4. Voice input ──────────────────────────────────────────────── */
+function _guestVoice(stopId) {
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { _guestToast('Voice not supported in this browser', 2500); return; }
+  var btn = document.getElementById('gf-voice-' + stopId);
+  var r   = new SR();
+  r.lang = 'en-US'; r.interimResults = false; r.maxAlternatives = 1;
+  if (btn) btn.classList.add('recording');
+  r.onresult = function(e) {
+    var t = e.results[0][0].transcript;
+    var el = document.getElementById('gf-txt-' + stopId);
+    if (el) el.value = (el.value ? el.value.trimEnd() + ' ' : '') + t;
+  };
+  r.onend = r.onerror = function() { if (btn) btn.classList.remove('recording'); };
+  r.start();
+}
+
+/* ── 5. Submit suggestion to Supabase ────────────────────────────── */
+async function _guestSubmit(stopId, stopName) {
+  var fn  = ((document.getElementById('gf-fn-'  + stopId) || {}).value || '').trim();
+  var ln  = ((document.getElementById('gf-ln-'  + stopId) || {}).value || '').trim();
+  var txt = ((document.getElementById('gf-txt-' + stopId) || {}).value || '').trim();
+  if (!fn || !ln) { _guestToast('Please enter your first and last name 👋', 2500); return; }
+  if (!txt)       { _guestToast('Don\'t forget to write your recommendation!', 2500); return; }
+
+  try {
+    var resp = await fetch(SUPA_URL + '/rest/v1/trip_suggestions', {
+      method: 'POST',
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
+                 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ trip_id: _guestTripId, stop_id: stopId,
+                             stop_name: stopName, first_name: fn, last_name: ln, suggestion: txt })
+    });
+    if (resp.ok || resp.status === 201) {
+      // Clear form + show success
+      ['gf-fn-','gf-ln-','gf-txt-'].forEach(function(p) {
+        var el = document.getElementById(p + stopId); if (el) el.value = '';
+      });
+      var suc = document.getElementById('gf-success-' + stopId);
+      if (suc) { suc.style.display = 'block'; setTimeout(function() { suc.style.display = 'none'; }, 4000); }
+    } else {
+      var errBody = await resp.text();
+      /* If table doesn't exist yet, show setup hint */
+      if (resp.status === 404 || errBody.indexOf('relation') !== -1) {
+        _guestToast('Setup needed — see Supabase SQL in Friends tab', 4000);
+      } else {
+        _guestToast('Could not send — please try again.', 2500);
+      }
+    }
+  } catch(e) { _guestToast('Network error — check connection.', 2500); }
+}
+
+/* ── 6. Init guest Leaflet map ───────────────────────────────────── */
+function _initGuestMapInst(stops) {
+  var mapEl = document.getElementById('guest-map-container');
+  if (!mapEl || typeof L === 'undefined') return;
+  if (_guestMapInst) { try { _guestMapInst.remove(); } catch(e){} _guestMapInst = null; }
+  _guestMapInst = L.map('guest-map-container', { zoomControl:true });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'© OpenStreetMap contributors', maxZoom:18
+  }).addTo(_guestMapInst);
+  var bounds = [], colors = ['#2C6EA5','#3A8A5C','#7B5EA7','#C96820','#2C8A6A','#8A3C7B','#5C6EA5','#8A5C2C','#3C8A5C','#8A2C5C','#5C8A2C','#6E5CA5','#8A6C2C','#2C7A8A'];
+  var latLngs = [];
+  stops.forEach(function(stop, idx) {
+    if (!stop.lat || !stop.lng) return;
+    var c = colors[idx % colors.length];
+    var icon = L.divIcon({ className:'', iconSize:[28,28], iconAnchor:[14,14],
+      html:'<div style="width:28px;height:28px;background:' + c + ';border:2.5px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:900;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);">' + (idx+1) + '</div>' });
+    L.marker([stop.lat, stop.lng], { icon:icon })
+      .bindPopup('<strong>' + (stop.emoji||'📍') + ' ' + stop.name + '</strong>' + (stop.state ? '<br>' + stop.state : ''))
+      .addTo(_guestMapInst);
+    latLngs.push([stop.lat, stop.lng]);
+    bounds.push([stop.lat, stop.lng]);
+  });
+  if (latLngs.length > 1) L.polyline(latLngs, { color:'#7B5EA7', weight:2.5, opacity:.6, dashArray:'6,5' }).addTo(_guestMapInst);
+  if (bounds.length) _guestMapInst.fitBounds(bounds, { padding:[30,30] });
+}
+
+/* ── 7. Guest toast ──────────────────────────────────────────────── */
+function _guestToast(msg, dur) {
+  var t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:rgba(30,20,50,.92);color:#fff;padding:11px 22px;border-radius:100px;font-size:.85rem;font-weight:700;z-index:999999;white-space:nowrap;font-family:sans-serif;pointer-events:none;';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function() { if (t.parentNode) t.parentNode.removeChild(t); }, dur || 2500);
+}
+
+/* ── 8. Copy share link ──────────────────────────────────────────── */
+function _copyShareLink() {
+  if (!_currentTripId) {
+    showToast('Log in and sync your trip first, then share the link', 3500);
+    return;
+  }
+  var link = window.location.origin + window.location.pathname + '?guest=' + encodeURIComponent(_currentTripId);
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(link).then(function() {
+      showToast('🔗 Share link copied! Send it to friends & family — no login needed', 3500);
+    }).catch(function() { _fallbackCopy(link); });
+  } else { _fallbackCopy(link); }
+}
+function _fallbackCopy(link) {
+  var inp = document.createElement('input');
+  inp.value = link; inp.style.cssText = 'position:fixed;top:-999px;';
+  document.body.appendChild(inp); inp.select(); document.execCommand('copy');
+  document.body.removeChild(inp);
+  showToast('🔗 Share link copied!', 3000);
+}
+
+/* ── 9. Family: load + render all suggestions from Supabase ─────── */
+async function _loadFriendSuggestions() {
+  var el = document.getElementById('friends-content');
+  if (!el) return;
+
+  /* Header row */
+  var hdrHtml = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">'
+    + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-users"></i> Friend Recommendations</h2>'
+    + '<button onclick="_copyShareLink()" style="background:#7B5EA7;color:#fff;border:none;border-radius:100px;padding:8px 16px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px;"><i class="fa-solid fa-share-nodes"></i> Share Link</button>'
+    + '</div>'
+    + '<div style="background:#ede8ff;border:1px solid #c9a8f5;border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:.8rem;color:#7B5EA7;line-height:1.55;">'
+    + '<strong>How it works:</strong> Click Share Link → send it to anyone. They open it in any browser, see your stops on a map, and leave recommendations — no login or app needed!'
+    + '<br><br><details style="cursor:pointer;"><summary style="font-weight:700;font-size:.78rem;">⚙️ First-time Supabase setup (run once)</summary>'
+    + '<pre style="font-size:.68rem;background:#fff;border-radius:6px;padding:10px;margin-top:8px;overflow-x:auto;color:#333;white-space:pre-wrap;">'
+    + 'CREATE TABLE IF NOT EXISTS trip_suggestions (\n'
+    + '  id bigserial PRIMARY KEY,\n'
+    + '  trip_id text NOT NULL,\n'
+    + '  stop_id integer,\n'
+    + '  stop_name text,\n'
+    + '  first_name text NOT NULL,\n'
+    + '  last_name text NOT NULL,\n'
+    + '  suggestion text NOT NULL,\n'
+    + '  created_at timestamptz DEFAULT now()\n'
+    + ');\n'
+    + 'ALTER TABLE trip_suggestions ENABLE ROW LEVEL SECURITY;\n'
+    + 'CREATE POLICY "public_insert" ON trip_suggestions FOR INSERT WITH CHECK (true);\n'
+    + 'CREATE POLICY "public_select" ON trip_suggestions FOR SELECT USING (true);\n\n'
+    + '-- Also allow unauthenticated reads of your trip:\n'
+    + 'CREATE POLICY "public_read_trips" ON trips FOR SELECT USING (true);'
+    + '</pre></details>'
+    + '</div>';
+
+  el.innerHTML = hdrHtml + '<div id="friends-inner"><div style="text-align:center;padding:30px;color:var(--text-3);">Loading…</div></div>';
+
+  if (!_currentTripId) {
+    document.getElementById('friends-inner').innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--text-3);"><div style="font-size:2rem;margin-bottom:10px;">🔒</div><div style="font-weight:700;margin-bottom:6px;">Sign in to see friend suggestions</div><div style="font-size:.82rem;">Suggestions are stored in the cloud — log in to access them.</div></div>';
+    return;
+  }
+  try {
+    var resp = await fetch(SUPA_URL + '/rest/v1/trip_suggestions?trip_id=eq.' + encodeURIComponent(_currentTripId) + '&select=*&order=created_at.asc', {
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+    });
+    var rows = await resp.json();
+    if (!Array.isArray(rows)) throw new Error('bad response');
+    _renderFriendSuggestionsFamily(rows);
+  } catch(e) {
+    document.getElementById('friends-inner').innerHTML = '<div style="color:var(--red);padding:20px;font-size:.85rem;">Could not load suggestions — make sure the Supabase table exists (see setup above).</div>';
+  }
+}
+
+function _renderFriendSuggestionsFamily(rows) {
+  var inner = document.getElementById('friends-inner');
+  if (!inner) return;
+  if (!rows || !rows.length) {
+    inner.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--text-3);">'
+      + '<div style="font-size:3rem;margin-bottom:12px;">💌</div>'
+      + '<div style="font-weight:700;font-size:.95rem;margin-bottom:6px;">No recommendations yet</div>'
+      + '<div style="font-size:.82rem;">Share the link with friends and family to collect their tips!</div>'
+      + '</div>';
+    return;
+  }
+  /* Group by stop */
+  var byStop = {}, stopOrder = [];
+  rows.forEach(function(r) {
+    var k = r.stop_id ? String(r.stop_id) : '0';
+    if (!byStop[k]) { byStop[k] = []; stopOrder.push(k); }
+    byStop[k].push(r);
+  });
+  stopOrder = stopOrder.filter(function(v,i) { return stopOrder.indexOf(v) === i; });
+
+  var html = '<div style="display:flex;flex-direction:column;gap:18px;">';
+  stopOrder.forEach(function(key) {
+    var suggs = byStop[key];
+    var stopObj = TRIP_STOPS.find(function(s) { return String(s.id) === key; });
+    var label = stopObj ? (stopObj.emoji + ' ' + stopObj.name + (stopObj.state ? ', ' + stopObj.state : '')) : (suggs[0].stop_name || 'General');
+    html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;">';
+    html += '<div style="background:#7B5EA7;color:#fff;padding:10px 16px;font-weight:800;font-size:.88rem;display:flex;justify-content:space-between;align-items:center;">';
+    html += '<span>' + label + '</span><span style="opacity:.8;font-weight:400;font-size:.78rem;">' + suggs.length + ' tip' + (suggs.length !== 1 ? 's' : '') + '</span>';
+    html += '</div>';
+    html += '<div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px;">';
+    suggs.forEach(function(s) {
+      var dt = new Date(s.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+      html += '<div style="border-left:3px solid #7B5EA7;padding:9px 12px;background:#f8f4ff;border-radius:0 8px 8px 0;">';
+      html += '<div style="font-size:.74rem;font-weight:800;color:#7B5EA7;margin-bottom:4px;">' + s.first_name + ' ' + s.last_name + ' <span style="font-weight:400;color:var(--text-3);">&middot; ' + dt + '</span></div>';
+      html += '<div style="font-size:.85rem;color:var(--text);line-height:1.55;">' + s.suggestion.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>';
+      html += '</div>';
+    });
+    html += '</div></div>';
+  });
+  html += '</div>';
+  inner.innerHTML = html;
 }
 
 /* ── FRIEND MODE ─────────────────────────────────────────────────── */
@@ -21637,6 +22025,43 @@ function _smRenderAll() {
 </div>
 
 <!-- NEW TRIP WIZARD OVERLAY -->
+<!-- ═══════════════════════════════════════════════════════════════
+     GUEST / FRIENDS OVERLAY — shown when ?guest=TRIP_ID in URL
+     ═══════════════════════════════════════════════════════════════ -->
+<div id="guest-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:#f5f0ff;flex-direction:column;overflow:hidden;">
+
+  <!-- Sticky guest header -->
+  <div style="background:linear-gradient(135deg,#7B5EA7,#9B6FCA);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:sticky;top:0;z-index:2;box-shadow:0 2px 12px rgba(123,94,167,.25);">
+    <div>
+      <div style="font-size:.65rem;font-weight:700;letter-spacing:.1em;opacity:.8;text-transform:uppercase;margin-bottom:2px;">🚐 TripGenie — Friends View</div>
+      <div id="guest-trip-name" style="font-size:1.05rem;font-weight:900;">Loading trip…</div>
+    </div>
+    <div style="font-size:1.8rem;">🗺️</div>
+  </div>
+
+  <!-- Loading state -->
+  <div id="guest-loading" style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;gap:12px;">
+    <div style="font-size:3rem;">✈️</div>
+    <div style="font-weight:700;font-size:1rem;color:#7B5EA7;">Loading the trip…</div>
+    <div style="font-size:.85rem;color:#999;">Getting the stops ready for you!</div>
+  </div>
+
+  <!-- Body: map (left) + stops list (right) -->
+  <div id="guest-body" style="flex:1;display:none;overflow:hidden;flex-direction:row;" class="guest-body-wrap">
+    <!-- Leaflet map column -->
+    <div class="guest-map-col" style="width:340px;flex-shrink:0;position:relative;border-right:1px solid #ddd;">
+      <div id="guest-map-container" style="position:absolute;inset:0;"></div>
+    </div>
+    <!-- Stops list column -->
+    <div style="flex:1;overflow-y:auto;padding:16px 18px;" id="guest-stops-col">
+      <div style="font-size:.82rem;color:#7B5EA7;font-weight:700;margin-bottom:14px;background:#ede8ff;border-radius:8px;padding:10px 14px;">
+        💌 You're looking at the Maass family's RV trip stops. Leave a recommendation at any stop — they'll see it on their end!
+      </div>
+      <div id="guest-stops-list" style="display:flex;flex-direction:column;gap:18px;"></div>
+    </div>
+  </div>
+</div>
+
 <div id="new-trip-wizard-overlay" style="display:none;position:fixed;inset:0;z-index:9100;background:rgba(0,0,0,.5);align-items:center;justify-content:center;padding:16px;box-sizing:border-box;" onclick="if(event.target===this)_hideNewTripWizard()">
   <div style="background:var(--bg);border-radius:20px;width:100%;max-width:440px;max-height:90vh;overflow-y:auto;padding:24px 20px 20px;box-shadow:0 20px 60px rgba(0,0,0,.3);">
     <div style="display:flex;justify-content:flex-end;margin-bottom:-8px;">
