@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-01 (Session 18)
+2026-03-01 (Session 18, third context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -284,6 +284,13 @@ tripgenie/
     - `_tsTestElVoice()` — plays "Hi! I'm TripGenie…" via EL with the saved key/voice.
     - `saveTripSettings()` updated to persist `elApiKey` + `elVoiceId`.
   - **Print route legend vertical ordering**: Changed `.legend-grid` from CSS grid (fills left-to-right, row by row) to CSS `columns: 3` (fills top-to-bottom per column). Stop 1–N now read vertically: col 1 = stops 1–10, col 2 = stops 11–20, etc. Used `break-inside: avoid` on each item.
+
+- Session 18 continued (2026-03-01, third context):
+  - **Drive days protected from skipDayNums**: In `renderSchedule()`, the skipDayNums computation loop now skips days where `driveDay === true`. Drive days can never be hidden by the "−" button logic — they're the backbone of the itinerary. Fixes "Day 2 → Day 5" and "Day 9 → Day 11" gaps where drive days were being caught in the removal set.
+  - **Sequential display day numbers**: Added `_dayDisplayNum` pre-computation map in `renderSchedule()`. Before the main loop, all visible (non-skipped, non-home) days are counted and given a sequential integer (1, 2, 3…). The "Day X" badge in each card now shows `_dayDisplayNum[d.day]` instead of the raw `d.day`. User always sees Day 1, 2, 3… regardless of which explore days were removed.
+  - **`_tripDayCount` updated**: Header now shows `_dispCounter` (total visible days) instead of the old `TRIP_DAYS.filter()` count, so "X-Day Schedule" matches the sequential numbers shown.
+  - **ElevenLabs test — 2-step validation**: `_tsTestElVoice()` now first validates the API key via `/v1/user` endpoint (lightweight, no characters consumed). Clear 401 error message: "❌ Invalid key — go to elevenlabs.io → Profile → API Keys and copy a fresh key". Checks remaining character quota — if < 100 chars left, warns instead of attempting TTS. Key length sanity check (< 20 chars rejects immediately). Step 2 is the actual TTS POST with specific 401 message for that layer too.
+  - **Health check 12d — schedule date gaps**: New check in `refreshTripPlan()` computes which days are visible (mirrors renderSchedule's skipDayNums logic, with drive-day protection). Walks visible days in date order checking for calendar holes. If any gap > 1 day is found, warns with dates and gap count. Passes with "✓ All N visible days are consecutive" when clean.
 
 ## Suggested Next Steps
 - **0-day waypoint stops**: User wants stops with 0 nights for driving waypoints (fuel, Walmart overnight, route planning) — not yet built

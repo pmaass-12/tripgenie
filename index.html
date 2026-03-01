@@ -7696,14 +7696,29 @@ function renderSchedule() {
         var isWaypoint = Math.abs(extra) >= days.length;
         var skip = (removedStopIds[sid] || isWaypoint) ? days.length : Math.min(Math.abs(extra), days.length - 1);
         for (var si = days.length - skip; si < days.length; si++) {
+          if (days[si].driveDay) continue; // Never skip drive days — they're the backbone of the itinerary
           skipDayNums[days[si].day] = true;
         }
       }
     });
   }
 
+  /* Pre-compute sequential display numbers so the schedule never shows gaps (Day 1, 2, 5…).
+     Each visible day gets the next integer; skipped/home days are excluded from the count. */
+  var _dayDisplayNum = {};
+  var _dispCounter   = 0;
+  var _sortedForCount = TRIP_DAYS.slice().sort(function(a,b){
+    if (a.date < b.date) return -1; if (a.date > b.date) return 1; return (a.day||0)-(b.day||0);
+  });
+  _sortedForCount.forEach(function(sd) {
+    if (sd.sleepType === 'home' && !sd.driveDay) return;
+    if (skipDayNums[sd.day]) return;
+    _dispCounter++;
+    _dayDisplayNum[sd.day] = _dispCounter;
+  });
+
   // Header row — count only actual trip days (exclude post-arrival home days)
-  var _tripDayCount = TRIP_DAYS.filter(function(d) { return !(d.sleepType === 'home' && !d.driveDay); }).length;
+  var _tripDayCount = _dispCounter; // equals total visible days
   html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">'
     + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-calendar-days"></i> ' + _tripDayCount + '-Day Schedule</h2>'
     + '<button onclick="openAddDest()" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:7px 14px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px;">&#128205; Add Destination</button>'
@@ -7800,7 +7815,7 @@ function renderSchedule() {
       + '<span style="font-size:.7rem;font-weight:700;opacity:.85;letter-spacing:.02em;white-space:nowrap;">' + dWday + '</span>'
       + '<span style="font-size:.95rem;font-weight:900;line-height:1.2;white-space:nowrap;">' + dMDay + '</span>'
       + '</div>'
-      + '<div style="background:#f0ece6;text-align:center;padding:3px 4px;font-size:.65rem;font-weight:800;color:var(--text-3);letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;border-top:1px solid var(--border);">Day ' + d.day + '</div>'
+      + '<div style="background:#f0ece6;text-align:center;padding:3px 4px;font-size:.65rem;font-weight:800;color:var(--text-3);letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;border-top:1px solid var(--border);">Day ' + (_dayDisplayNum[d.day] || d.day) + '</div>'
       + '</div>';
 
     // Middle: title + meta
@@ -16627,6 +16642,46 @@ function refreshTripPlan() {
     issues.push({ type:'warn', msg: _zeroDriveDays.length + ' drive day(s) have 0 miles recorded. Go to Trip Settings → Health Check → Recalculate Drive Miles to fix.' });
   }
 
+  /* ── 12d. Schedule date gaps — verify no calendar holes in visible schedule ── */
+  /* Build the same skipDayNums the schedule renderer uses so we see what's visible */
+  var _hcSkip = {};
+  var _hcStopDayMap = {};
+  days.forEach(function(d) {
+    if (!_hcStopDayMap[d.stopId]) _hcStopDayMap[d.stopId] = [];
+    _hcStopDayMap[d.stopId].push(d);
+  });
+  if (appState.phaseExtraDays) {
+    Object.keys(appState.phaseExtraDays).forEach(function(sid) {
+      var extra = appState.phaseExtraDays[sid];
+      if (extra < 0) {
+        var _hcDays = _hcStopDayMap[sid] || [];
+        var _hcWaypoint = Math.abs(extra) >= _hcDays.length;
+        var _hcSkipN = (removedIds[sid] || _hcWaypoint) ? _hcDays.length : Math.min(Math.abs(extra), _hcDays.length - 1);
+        for (var _hci = _hcDays.length - _hcSkipN; _hci < _hcDays.length; _hci++) {
+          if (_hcDays[_hci].driveDay) continue; // protect drive days (same logic as renderSchedule)
+          _hcSkip[_hcDays[_hci].day] = true;
+        }
+      }
+    });
+  }
+  var _visibleDays = days
+    .filter(function(d) { return !(d.sleepType === 'home' && !d.driveDay) && !_hcSkip[d.day] && !removedIds[d.stopId]; })
+    .sort(function(a,b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+  var _dateGaps = [];
+  for (var _gi = 1; _gi < _visibleDays.length; _gi++) {
+    var _prev = new Date(_visibleDays[_gi-1].date + 'T00:00:00');
+    var _curr = new Date(_visibleDays[_gi].date   + 'T00:00:00');
+    var _diffDays = Math.round((_curr - _prev) / 86400000);
+    if (_diffDays > 1) {
+      _dateGaps.push(_visibleDays[_gi-1].date + ' → ' + _visibleDays[_gi].date + ' (' + (_diffDays-1) + ' day' + (_diffDays-1>1?'s':'') + ' missing)');
+    }
+  }
+  if (_dateGaps.length > 0) {
+    issues.push({ type:'warn', msg: 'Schedule has ' + _dateGaps.length + ' calendar gap(s): ' + _dateGaps.join('; ') + '. These dates show no planned activity — check if any stops had days removed that should still appear.' });
+  } else if (_visibleDays.length > 0) {
+    issues.push({ type:'info', msg: 'Schedule continuity \u2713 All ' + _visibleDays.length + ' visible days are consecutive with no calendar gaps' });
+  }
+
   /* ── APPLY FIXES ─────────────────────────────────────────────────────────── */
   if (fixCount > 0) {
     /* Always sync totalMiles from computed drive-day sum */
@@ -18645,7 +18700,33 @@ async function _tsTestElVoice() {
   var key   = (keyEl   ? keyEl.value.trim()   : '') || _elKey();
   var voice = (voiceEl ? voiceEl.value.trim() : '') || _elVoice();
   if (!key) { showToast('Enter your ElevenLabs API key first', 2400); return; }
-  showToast('🎙️ Testing voice…', 1500);
+  /* Quick key-format sanity check */
+  if (key.length < 20) { showToast('API key looks too short — copy the full key from ElevenLabs Profile → API Keys', 3500); return; }
+
+  showToast('🎙️ Verifying key then testing voice…', 2000);
+
+  /* Step 1: Validate key via lightweight /v1/user endpoint before wasting characters on TTS */
+  try {
+    var userResp = await fetch('https://api.elevenlabs.io/v1/user', { headers: { 'xi-api-key': key } });
+    if (userResp.status === 401) {
+      showToast('❌ 401 Invalid key — go to elevenlabs.io → Profile → API Keys and copy a fresh key', 5000);
+      return;
+    }
+    if (!userResp.ok) {
+      showToast('ElevenLabs API error ' + userResp.status + ' — try again', 3000);
+      return;
+    }
+    var userJson = await userResp.json();
+    var _charLeft = userJson.subscription && userJson.subscription.character_limit != null
+      ? (userJson.subscription.character_limit - (userJson.subscription.character_count || 0))
+      : null;
+    if (_charLeft !== null && _charLeft < 100) {
+      showToast('⚠️ Only ' + _charLeft + ' characters left on your ElevenLabs plan — upgrade to test TTS', 4000);
+      return;
+    }
+  } catch(e) { /* network error — fall through and try TTS anyway */ }
+
+  /* Step 2: Attempt actual TTS */
   try {
     var resp = await fetch(
       'https://api.elevenlabs.io/v1/text-to-speech/' + voice + '?output_format=mp3_44100_128',
@@ -18659,7 +18740,8 @@ async function _tsTestElVoice() {
         })
       }
     );
-    if (!resp.ok) { showToast('ElevenLabs error ' + resp.status + ' — check your API key', 3000); return; }
+    if (resp.status === 401) { showToast('❌ 401 — key valid but TTS rejected. Try a different voice or check your ElevenLabs plan.', 5000); return; }
+    if (!resp.ok) { showToast('ElevenLabs TTS error ' + resp.status + ' — check plan limits', 3000); return; }
     var blob = await resp.blob();
     var url  = URL.createObjectURL(blob);
     if (!_tgAudioEl) { _tgAudioEl = document.createElement('audio'); document.body.appendChild(_tgAudioEl); }
