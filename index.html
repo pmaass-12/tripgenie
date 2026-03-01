@@ -2744,26 +2744,26 @@
         <button onclick="openTripGenieAboutStop('What should we know before arriving here? Any tips or heads-up?')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">💡 Pro tips</button>
       </div>
 
-      <!-- Row 3: Action buttons — Arrived / Left / Music -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px;">
+      <!-- Row 3: Action buttons — compact pill row -->
+      <div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap;">
         <button id="ddm-arrive-btn"
           onclick="recordArrival()"
           onmousedown="startLongPress('arrive')" onmouseup="cancelLongPress()" onmouseleave="cancelLongPress()"
           ontouchstart="startLongPress('arrive')" ontouchend="cancelLongPress()"
-          style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:12px;padding:9px 6px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);user-select:none;-webkit-user-select:none;display:flex;flex-direction:column;align-items:center;gap:3px;line-height:1.2;text-align:center;">
-          <span style="font-size:1.1rem;">&#129001;</span>We Arrived!
+          style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:100px;padding:6px 13px;font-size:.73rem;font-weight:800;cursor:pointer;font-family:var(--font);user-select:none;-webkit-user-select:none;display:flex;align-items:center;gap:5px;white-space:nowrap;">
+          &#129001; We Arrived!
         </button>
         <button id="ddm-leave-btn"
           onclick="recordDeparture()"
           onmousedown="startLongPress('depart')" onmouseup="cancelLongPress()" onmouseleave="cancelLongPress()"
           ontouchstart="startLongPress('depart')" ontouchend="cancelLongPress()"
-          style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:12px;padding:9px 6px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);user-select:none;-webkit-user-select:none;display:flex;flex-direction:column;align-items:center;gap:3px;line-height:1.2;text-align:center;">
-          <span style="font-size:1.1rem;">&#128666;</span>We Left
+          style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:100px;padding:6px 13px;font-size:.73rem;font-weight:800;cursor:pointer;font-family:var(--font);user-select:none;-webkit-user-select:none;display:flex;align-items:center;gap:5px;white-space:nowrap;">
+          &#128666; We Left
         </button>
         <button id="ddm-music-btn"
           onclick="openLocalMusic()"
-          style="background:rgba(29,185,84,.3);border:1.5px solid rgba(29,185,84,.55);color:#fff;border-radius:12px;padding:9px 6px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;flex-direction:column;align-items:center;gap:3px;line-height:1.2;text-align:center;">
-          <span style="font-size:1.1rem;">&#127926;</span>Local Music
+          style="background:rgba(29,185,84,.3);border:1.5px solid rgba(29,185,84,.55);color:#fff;border-radius:100px;padding:6px 13px;font-size:.73rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:5px;white-space:nowrap;">
+          &#127926; Local Music
         </button>
       </div>
 
@@ -5471,7 +5471,7 @@ function renderDashboard() {
     for (var ui = 0; ui < upcoming.length; ui++) {
       var ud = upcoming[ui];
       var us = getStop(ud.stopId);
-      var uEmoji = us ? us.emoji + ' ' + us.name : 'En Route';
+      var uEmoji = us ? ((us.emoji ? us.emoji + ' ' : '') + us.name) : 'En Route';
       var uBreak = ud.springBreak ? '<span class="badge badge-purple"><i class="fa-solid fa-star"></i> Break</span>' : '';
       var uDrive = ud.driveDay
         ? '<div style="font-size:.78rem;color:var(--orange);margin-top:4px;font-weight:600"><i class="fa-solid fa-car-side"></i> Drive — ' + ud.miles + ' mi / ' + ud.driveHours + 'h</div>'
@@ -5930,11 +5930,22 @@ function renderStopNavigator() {
   var _homeStop   = (typeof _tripHomeStop === 'function') ? _tripHomeStop() : null;
   var _homeId     = _homeStop ? _homeStop.id : 15;
 
+  /* Transit-only sleepTypes — used to exclude pure overnight-while-driving stops */
+  var _transitTypes = { walmart: 1, boondock: 1, rest_area: 1 };
+
   /* Ordered unique non-home stop IDs in trip-day sequence */
   var _seenIds = {}, _orderedIds = [];
   TRIP_DAYS.forEach(function(d) {
     if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeId) return;
     if (!_seenIds[d.stopId]) { _seenIds[d.stopId] = true; _orderedIds.push(d.stopId); }
+  });
+
+  /* Remove stops where every single day is a transit sleep type (no real stay) */
+  _orderedIds = _orderedIds.filter(function(sid) {
+    var sdays = TRIP_DAYS.filter(function(d) { return d.stopId === sid; });
+    if (!sdays.length) return false;
+    var allTransit = sdays.every(function(d) { return _transitTypes[d.sleepType]; });
+    return !allTransit;
   });
 
   var html = '';
@@ -6695,25 +6706,33 @@ function forceRefreshMap(btn) {
 }
 
 function initMiniMap(dayNum) {
-  if (document.getElementById('mini-map-container')) {
-    const m = L.map('mini-map-container', { zoomControl: false, scrollWheelZoom: false, dragging: false, touchZoom: false, doubleClickZoom: false }).setView([37, -98], 3);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '', maxZoom: 18
-    }).addTo(m);
-    buildMapMarkers(m);
-    // Highlight today's stop
-    const today = getDay(dayNum);
-    if (today) {
-      const stop = getStop(today.stopId);
-      if (stop && stop.id !== 15) {
-        const pulseIcon = L.divIcon({
-          html: `<div style="width:20px;height:20px;background:#E8813A;border-radius:50%;border:3px solid white;box-shadow:0 0 0 4px rgba(232,129,58,.3);"></div>`,
-          className: '', iconSize: [20, 20], iconAnchor: [10, 10]
-        });
-        L.marker([stop.lat, stop.lng], { icon: pulseIcon }).addTo(m).bindPopup('<strong>📍 You are here</strong>').openPopup();
-      }
+  var container = document.getElementById('mini-map-container');
+  if (!container) return;
+  // Destroy any existing Leaflet map on this container to avoid grey-tile issue
+  if (miniMap) { try { miniMap.remove(); } catch(e) {} miniMap = null; }
+  // Also clear any Leaflet-set attribute so it re-initialises cleanly
+  delete container._leaflet_id;
+  miniMap = L.map('mini-map-container', { zoomControl: false, scrollWheelZoom: false, dragging: false, touchZoom: false, doubleClickZoom: false }).setView([37, -98], 3);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '', maxZoom: 18
+  }).addTo(miniMap);
+  buildMapMarkers(miniMap);
+  // Highlight today's stop
+  var today = getDay(dayNum);
+  if (today) {
+    var stop = getStop(today.stopId);
+    if (stop && stop.id !== 15 && stop.lat && stop.lng) {
+      var pulseIcon = L.divIcon({
+        html: '<div style="width:20px;height:20px;background:#E8813A;border-radius:50%;border:3px solid white;box-shadow:0 0 0 4px rgba(232,129,58,.3);"></div>',
+        className: '', iconSize: [20, 20], iconAnchor: [10, 10]
+      });
+      L.marker([stop.lat, stop.lng], { icon: pulseIcon }).addTo(miniMap).bindPopup('<strong>📍 You are here</strong>');
     }
   }
+  // Force Leaflet to recalculate the container size (fixes grey-area on first render)
+  setTimeout(function() {
+    if (miniMap) { miniMap.invalidateSize(); }
+  }, 80);
 }
 
 /* ── NAV HELPERS ──────────────────────────────────────────────────── */
@@ -6964,7 +6983,7 @@ function _cycleToStayType(stopId, targetType) {
     var _s = _d ? getStop(_d.stopId) : null;
     var blocksEl = document.getElementById('ddm-blocks');
     if (blocksEl && _d) blocksEl.innerHTML = renderDayTimeBlocks(_d, _s);
-    _initDragDrop();
+    if (typeof _initDragDrop === 'function') _initDragDrop();
   }
   /* Also refresh the schedule phase header */
   renderSchedule();
@@ -11579,7 +11598,10 @@ function openDayDetail(dayNum) {
   document.getElementById('ddm-title').textContent = d.driveDay ? _getDriveDayTitle(d) : d.title;
   var metaParts = [];
   if (d.driveDay && d.miles > 0) metaParts.push('&#128665; ' + d.miles + ' mi &middot; ~' + d.driveHours + 'h drive');
-  else metaParts.push('&#127957; Explore day at ' + (stop ? stop.name : 'camp'));
+  else {
+    var _sleepMeta = _getStayMeta(d.stopId);
+    metaParts.push(_sleepMeta.icon + ' ' + _sleepMeta.label);
+  }
   document.getElementById('ddm-meta').innerHTML = metaParts.join('&nbsp;&nbsp;&middot;&nbsp;&nbsp;');
   document.getElementById('ddm-blocks').innerHTML = renderDayTimeBlocks(d, stop);
   var arrBtn = document.getElementById('ddm-arrive-btn');
@@ -12484,7 +12506,8 @@ function handleTbbDrop(event, dayNum) {
       var _splitNow = _overridesNow.splitResolved && _overridesNow.splitHours;
       _metaParts.push('🚗 ' + d.miles + ' mi · ~' + (_splitNow ? _overridesNow.splitHours + 'h each leg' : d.driveHours + 'h') + ' drive');
     } else {
-      _metaParts.push('🏕️ Explore day at ' + (stop ? stop.name : 'camp'));
+      var _reorderStayMeta = _getStayMeta(d.stopId);
+      _metaParts.push(_reorderStayMeta.icon + ' ' + _reorderStayMeta.label);
     }
     _metaEl.innerHTML = _metaParts.join('&nbsp;&nbsp;·&nbsp;&nbsp;');
   }
@@ -12886,12 +12909,14 @@ function openCampInfo(dayNum) {
   var stop = getStop(d.stopId);
   var campName = d.sleep;
   var loc = stop ? _sn(stop) : d.phase;
+  var _sMeta = _getStayMeta(d.stopId);
+  var _loadingLabel = _sMeta.v === 'hotel' ? 'lodging info' : _sMeta.v === 'cabin' ? 'cabin info' : _sMeta.v === 'airbnb' ? 'rental info' : 'campground info';
   document.getElementById('aim-title').textContent = campName;
-  document.getElementById('aim-sub').textContent = '\u26FA ' + loc;
+  document.getElementById('aim-sub').textContent = _sMeta.icon + ' ' + loc;
   document.getElementById('aim-address-link').style.display = 'none';
   document.getElementById('aim-phone').style.display = 'none';
   document.getElementById('aim-official-link').style.display = 'none';
-  document.getElementById('aim-body').innerHTML = '<div style="text-align:center;padding:36px 20px;color:var(--text-2);font-size:.9rem;">&#129302; Loading campground info\u2026</div>';
+  document.getElementById('aim-body').innerHTML = '<div style="text-align:center;padding:36px 20px;color:var(--text-2);font-size:.9rem;">&#129302; Loading ' + _loadingLabel + '\u2026</div>';
   var pb = document.getElementById('aim-price-badge'); if (pb) pb.style.display = 'none';
   var planB = document.getElementById('aim-plan-btn'); if (planB) { planB.style.display = 'none'; planB.onclick = null; }
   var rr = document.getElementById('aim-rating-row'); if (rr) rr.style.display = 'none';
@@ -12905,30 +12930,54 @@ function openCampInfo(dayNum) {
   fetchCampInfo(campName, loc, d.stopId);
 }
 function fetchCampInfo(campName, location, stopId) {
-  var _campAmps = (appState.tripSettings && appState.tripSettings.rvAmps) ? appState.tripSettings.rvAmps + '-amp' : '50-amp';
-  var _stayCtx = (typeof _getStayContext === 'function' && stopId) ? _getStayContext(stopId) : '';
-  var _restCtx = (typeof getRestaurantPrefContext === 'function') ? getRestaurantPrefContext() : '';
-  var _rvCtx   = (typeof getRVContext === 'function') ? getRVContext() : '';
-  var prompt = 'You are a helpful RV travel guide. Provide a detailed info page for "'
-    + campName + '" near ' + location + '. Our RV requires ' + _campAmps + ' service. '
-    + (_stayCtx ? 'Note: we are ' + _stayCtx + '. ' : '')
-    + (_rvCtx || '')
-    + (_restCtx ? 'Dining preferences: ' + _restCtx + ' ' : '')
-    + '\n\n'
-    + 'CRITICAL: Output ONE raw JSON object on its own line first — NO markdown fences:\n'
-    + '{"address":"full street address","phone":"phone number or empty","website":"url or empty","nightly":"$XX/night or range","hookups":"full/water-electric/dry","amps":"30/50/both or unknown","checkIn":"3pm","checkOut":"11am","googleRating":4.2,"reviewCount":340}\n\n'
-    + 'Then output sections with EXACT bold headers:\n'
-    + '**Overview** (2-3 sentences: setting, vibe, who it\'s best for)\n'
-    + '**Power & Hookups** (does this campground offer 30-amp, 50-amp, or both? Are full hookup sites available? Explicitly note if our ' + _campAmps + ' RV can be accommodated — bullet list)\n'
-    + '**Check-in & Checkout** (standard check-in time, check-out time, early arrival policy, late checkout options)\n'
-    + '**Nearest Laundromat** (name of the closest laundromat to this campground, approximate distance, hours of operation if known)\n'
-    + '**Amenities** (bathrooms, showers, pool, WiFi, store, dump station — bullet list)\n'
-    + '**Site Types** (pull-through, back-in, big-rig friendly, pet policy)\n'
-    + '**Reviews** (3 visitor quotes each starting with a star rating like ★★★★☆ then 1-2 sentences)\n'
-    + '**Family Tips** (what kids love, nearby activities, playground/pool)\n'
-    + '**Insider Tips** (best sites to request, arrival tips, one pro tip)\n'
-    + '**Quick Facts** (4 surprising one-liner facts about this campground or nearby area, each on its own line starting with an emoji)\n'
-    + 'Friendly, helpful tone. No markdown code fences anywhere.';
+  var _campAmps    = (appState.tripSettings && appState.tripSettings.rvAmps) ? appState.tripSettings.rvAmps + '-amp' : '50-amp';
+  var _hotelChain  = (appState.tripSettings && appState.tripSettings.hotelChain) ? appState.tripSettings.hotelChain.trim() : '';
+  var _stayCtx     = (typeof _getStayContext === 'function' && stopId) ? _getStayContext(stopId) : '';
+  var _restCtx     = (typeof getRestaurantPrefContext === 'function') ? getRestaurantPrefContext() : '';
+  var _rvCtx       = (typeof getRVContext === 'function') ? getRVContext() : '';
+  var _stayType    = (typeof _getStayMeta === 'function' && stopId) ? _getStayMeta(stopId).v : 'campground';
+  var prompt;
+  if (_stayType === 'hotel') {
+    prompt = 'You are a helpful travel guide. Provide a detailed info page for the hotel/motel "'
+      + campName + '" near ' + location + '. '
+      + (_hotelChain ? 'We prefer ' + _hotelChain + ' properties when possible. ' : '')
+      + (_restCtx ? 'Dining preferences: ' + _restCtx + ' ' : '')
+      + '\n\n'
+      + 'CRITICAL: Output ONE raw JSON object on its own line first — NO markdown fences:\n'
+      + '{"address":"full street address","phone":"phone number or empty","website":"url or empty","nightly":"$XX/night or range","hookups":"","amps":"","checkIn":"3pm","checkOut":"11am","googleRating":4.2,"reviewCount":340}\n\n'
+      + 'Then output sections with EXACT bold headers:\n'
+      + '**Overview** (2-3 sentences: setting, vibe, who it\'s best for)\n'
+      + '**RV & Large Vehicle Parking** (does this hotel have a large parking lot or designated spots for RVs / oversized vehicles? Surface lot vs garage — critical for us)\n'
+      + '**Check-in & Checkout** (standard check-in time, check-out time, early arrival policy, late checkout options)\n'
+      + '**Amenities** (pool, fitness center, breakfast, pet policy, WiFi — bullet list)\n'
+      + '**Room Types** (what room categories are available: suites, king, double, etc.)\n'
+      + '**Reviews** (3 guest quotes each starting with a star rating like ★★★★☆ then 1-2 sentences)\n'
+      + '**Family Tips** (what works best for families, connecting rooms, kid-friendly features)\n'
+      + '**Insider Tips** (best room to request, parking tip, arrival tip)\n'
+      + '**Quick Facts** (4 helpful one-liner facts about this property or the nearby area, each on its own line starting with an emoji)\n'
+      + 'Friendly, helpful tone. No markdown code fences anywhere.';
+  } else {
+    prompt = 'You are a helpful RV travel guide. Provide a detailed info page for "'
+      + campName + '" near ' + location + '. Our RV requires ' + _campAmps + ' service. '
+      + (_stayCtx ? 'Note: we are ' + _stayCtx + '. ' : '')
+      + (_rvCtx || '')
+      + (_restCtx ? 'Dining preferences: ' + _restCtx + ' ' : '')
+      + '\n\n'
+      + 'CRITICAL: Output ONE raw JSON object on its own line first — NO markdown fences:\n'
+      + '{"address":"full street address","phone":"phone number or empty","website":"url or empty","nightly":"$XX/night or range","hookups":"full/water-electric/dry","amps":"30/50/both or unknown","checkIn":"3pm","checkOut":"11am","googleRating":4.2,"reviewCount":340}\n\n'
+      + 'Then output sections with EXACT bold headers:\n'
+      + '**Overview** (2-3 sentences: setting, vibe, who it\'s best for)\n'
+      + '**Power & Hookups** (does this campground offer 30-amp, 50-amp, or both? Are full hookup sites available? Explicitly note if our ' + _campAmps + ' RV can be accommodated — bullet list)\n'
+      + '**Check-in & Checkout** (standard check-in time, check-out time, early arrival policy, late checkout options)\n'
+      + '**Nearest Laundromat** (name of the closest laundromat to this campground, approximate distance, hours of operation if known)\n'
+      + '**Amenities** (bathrooms, showers, pool, WiFi, store, dump station — bullet list)\n'
+      + '**Site Types** (pull-through, back-in, big-rig friendly, pet policy)\n'
+      + '**Reviews** (3 visitor quotes each starting with a star rating like ★★★★☆ then 1-2 sentences)\n'
+      + '**Family Tips** (what kids love, nearby activities, playground/pool)\n'
+      + '**Insider Tips** (best sites to request, arrival tips, one pro tip)\n'
+      + '**Quick Facts** (4 surprising one-liner facts about this campground or nearby area, each on its own line starting with an emoji)\n'
+      + 'Friendly, helpful tone. No markdown code fences anywhere.';
+  }
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:800,temperature:0.6} });
   fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
   .then(function(r) { return r.json(); })
@@ -14329,6 +14378,14 @@ function renderTripSettings() {
   html += '<div style="font-size:.75rem;color:var(--text-3);margin-top:4px;">Used by AI to check hookup compatibility at campgrounds.</div>';
   html += '</div>';
 
+  // Preferred Hotel Chain
+  var _tsHotel = (appState.tripSettings && appState.tripSettings.hotelChain) ? appState.tripSettings.hotelChain : '';
+  html += '<div>';
+  html += '<label style="font-size:.72rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em;">🏨 Preferred Hotel Chain</label>';
+  html += '<input id="ts-hotel-chain" type="text" value="' + _tsHotel.replace(/"/g,'&quot;') + '" placeholder="e.g. Marriott, Hilton, Holiday Inn..." style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-s);font-size:.95rem;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;box-sizing:border-box;" />';
+  html += '<div style="font-size:.75rem;color:var(--text-3);margin-top:4px;">AI will prioritize this chain when suggesting hotels.</div>';
+  html += '</div>';
+
   // Time Format
   var _tsFmt = (appState.tripSettings && appState.tripSettings.timeFormat) ? appState.tripSettings.timeFormat : '12h';
   html += '<div>';
@@ -15442,6 +15499,8 @@ function applySplitDrive(dayNum) {
   appState.activeTrip = 'custom';
   saveState(appState);
 
+  // Close day detail modal before full re-init (prevents stale "Split the Drive" button)
+  closeDayDetail();
   // Full re-init so the new customTripData is picked up everywhere
   initApp();
   updateDecisionsBadge();
@@ -15596,12 +15655,13 @@ function saveTripSettings() {
   var newDays = Math.max(1, Math.round((new Date(newEnd + 'T12:00:00') - new Date(newStart + 'T12:00:00')) / 86400000) + 1);
 
   // Persist to appState (no startCity/endCity — those come from TRIP_STOPS[0]/[last])
-  var _saveAmps     = parseInt(((document.getElementById('ts-amps') || {}).value) || '50') || 50;
-  var _saveTimeFmt  = ((document.getElementById('ts-timefmt') || {}).value) || '12h';
-  var _saveDepTime  = ((document.getElementById('ts-deptime') || {}).value) || '08:00';
-  var _saveLateArr  = ((document.getElementById('ts-latearrival') || {}).value) || '20:00';
-  var _saveMaxDays  = Math.max(1, parseInt(((document.getElementById('ts-max-days') || {}).value) || '5') || 5);
-  appState.tripSettings = { startDate: newStart, endDate: newEnd, tripName: newName, totalDays: newDays, rvAmps: _saveAmps, timeFormat: _saveTimeFmt, departureTime: _saveDepTime, latestArrival: _saveLateArr, maxDaysPerStop: _saveMaxDays };
+  var _saveAmps      = parseInt(((document.getElementById('ts-amps') || {}).value) || '50') || 50;
+  var _saveTimeFmt   = ((document.getElementById('ts-timefmt') || {}).value) || '12h';
+  var _saveDepTime   = ((document.getElementById('ts-deptime') || {}).value) || '08:00';
+  var _saveLateArr   = ((document.getElementById('ts-latearrival') || {}).value) || '20:00';
+  var _saveMaxDays   = Math.max(1, parseInt(((document.getElementById('ts-max-days') || {}).value) || '5') || 5);
+  var _saveHotelChain = ((document.getElementById('ts-hotel-chain') || {}).value || '').trim();
+  appState.tripSettings = { startDate: newStart, endDate: newEnd, tripName: newName, totalDays: newDays, rvAmps: _saveAmps, timeFormat: _saveTimeFmt, departureTime: _saveDepTime, latestArrival: _saveLateArr, maxDaysPerStop: _saveMaxDays, hotelChain: _saveHotelChain };
   /* Keep customTripData.tripName in sync so all references agree */
   if (appState.customTripData && newName) appState.customTripData.tripName = newName;
   saveState(appState);
@@ -19612,9 +19672,10 @@ function deletePauseDay(id) {
   if (!appState.pauseDays) return;
   appState.pauseDays = appState.pauseDays.filter(function(p) { return p.id !== id; });
   saveState(appState);
+  renderSchedule();
   renderDecisions();
   updateDecisionsBadge();
-  showToast('Pause day removed', 1800);
+  showToast('✈️ Trip pause removed', 1800);
 }
 
 function manualGenerateSuggestions() {

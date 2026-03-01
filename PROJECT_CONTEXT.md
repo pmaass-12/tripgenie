@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-02-28 (Session 15)
+2026-03-01 (Session 16 continued)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -218,6 +218,17 @@ tripgenie/
   - **Auto dark mode at night**: 3-state toggle: light → dark → auto-night → light. Button cycles with icons: 🌙 / ☀️ / 🌓 with tooltip. `_applyAutoNight()` sets dark-mode class when hour is 20–6 (8pm–7am), removes it during daytime. `_nightModeInterval` runs every 60s when in auto-night mode so switch happens automatically. State saved as `appState.darkMode = 'auto-night'`.
   - **Pause delete button**: `_renderPauseScheduleBlock()` now includes a trash can button (🗑️ pill style) inline in the orange pause bar. Calls existing `deletePauseDay(pd.id)`.
   - **Blue-bar trash button style**: Updated the remove-stop button in `phaseHeaderHtml` from square-ish emoji style to pill shape matching white row trash: `border-radius:100px`, Font Awesome `fa-trash-can` icon, white text on semi-transparent red.
+  - **Session 16 continued — Dashboard + modal bugs fixed**:
+    - **"undefined Wytheville" in Up Next cards**: Guarded `us.emoji` with `(us.emoji ? us.emoji + ' ' : '')` — stops with no emoji were concatenating `"undefined Name"`.
+    - **Mini map grey area**: `initMiniMap()` now properly destroys the previous Leaflet map instance, clears the `_leaflet_id` from the container DOM node, uses the module-level `miniMap` variable (was a local `const m`), and calls `miniMap.invalidateSize()` after 80ms to force Leaflet to recalculate the container's full width.
+    - **`deletePauseDay` broken**: Added `renderSchedule()` call so the orange pause block immediately disappears from the planner view when deleted. Fixed toast text from `'Pause day removed'` → `'✈️ Trip pause removed'`.
+    - **`_initDragDrop` not defined**: Guarded the call in `_cycleToStayType` with `if (typeof _initDragDrop === 'function') _initDragDrop()` — function doesn't exist yet, was causing ReferenceError on stay type toggle.
+    - **Orange modal redesign**: Action buttons (We Arrived / We Left / Local Music) converted from 3-column grid to compact pill row (flex, gap:7px, border-radius:100px, inline layout). Meta line now shows stay type icon+label (e.g. "🏨 Hotel/Motel") instead of redundant "🏕️ Explore day at Wytheville".
+    - **Split drive closes modal first**: `applySplitDrive()` now calls `closeDayDetail()` before `initApp()` re-render so user doesn't see stale "Split the Drive" button after the trip is restructured.
+    - **Loading text dynamic by stay type**: `openCampInfo()` sets loading label based on `_getStayMeta()`: hotel → "lodging info", cabin → "cabin info", airbnb → "rental info", default → "campground info". Sub-line also shows stay type icon + city name.
+    - **Hotel-specific AI prompt**: `fetchCampInfo()` now branches on `_stayType`. When hotel: asks about RV/large-vehicle parking (critical), room types, hotel amenities, family tips. When other: existing campground prompt unchanged. Preferred hotel chain injected if set.
+    - **Preferred hotel chain in Trip Settings**: New text input `ts-hotel-chain` added to Trip Settings UI after RV Amps. Saved to `appState.tripSettings.hotelChain`. Injected into hotel AI prompt as "We prefer [chain] properties when possible."
+    - **Transit-only stops excluded from route navigator**: `renderStopNavigator()` now filters out stops where every single TRIP_DAY has `sleepType` in `{walmart, boondock, rest_area}` — pure overnight-while-driving stops. Real destination stops remain unaffected.
 
 ## Suggested Next Steps
 - **0-day waypoint stops**: User wants stops with 0 nights for driving waypoints (fuel, Walmart overnight, route planning) — not yet built
@@ -227,3 +238,5 @@ tripgenie/
 - User needs to add `SUPABASE_URL` + `SUPABASE_ANON_KEY` env vars to Netlify for multi-user auth to work
 - Consider adding "Nashville" and "Fredericksburg" as proper TRIP_STOPS entries (currently inferred from TRIP_DAYS but no markers on map)
 - Test voice chat on actual iPhone/iPad — may need microphone permission prompt handling
+- **Budget tab**: User requested budget categories per item (restaurants, lodging, fuel, supplies) with per-item amount input — not yet built
+- `_initDragDrop` is guarded but never implemented — drag-to-reorder time blocks in DDM could be a future feature
