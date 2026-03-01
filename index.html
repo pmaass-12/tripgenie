@@ -9514,7 +9514,8 @@ async function _initGuestMode(tripId) {
   var stops = null;
   var tripName = (CONFIG && CONFIG.tripName) || 'Maass Family RV Adventure 2026';
 
-  var guestArrivals = {};   // { stopId: { time: ISO } } — most recent check-in
+  var guestArrivals   = {};   // { stopId: { time: ISO } } — arrival check-ins
+  var guestDepartures = {};   // { stopId: { time: ISO } } — departure check-outs
 
   if (tripId && tripId !== 'local') {
     // Supabase path — fetch trip data by ID
@@ -9527,15 +9528,17 @@ async function _initGuestMode(tripId) {
         if (rows[0].name) tripName = rows[0].name;
         var td = rows[0].trip_data || {};
         if (td.customTripData && td.customTripData.stops) stops = td.customTripData.stops;
-        if (td.arrivals) guestArrivals = td.arrivals;
+        if (td.arrivals)   guestArrivals   = td.arrivals;
+        if (td.departures) guestDepartures = td.departures;
       }
     } catch(e) {}
   }
   // Local / fallback path — use hardcoded trip stops, and read arrivals from local appState
   if (!stops && typeof _BUILTIN_TRIP !== 'undefined') stops = _BUILTIN_TRIP.stops.slice();
   if (!stops) stops = (TRIP_STOPS || []).slice();
-  // For local path, read arrivals from the in-memory appState (works when Paul views ?friends=1 on his own device)
-  if (!Object.keys(guestArrivals).length && appState && appState.arrivals) guestArrivals = appState.arrivals;
+  // For local path, read from the in-memory appState (works when Paul views ?friends=1 on his own device)
+  if (!Object.keys(guestArrivals).length   && appState && appState.arrivals)   guestArrivals   = appState.arrivals;
+  if (!Object.keys(guestDepartures).length && appState && appState.departures) guestDepartures = appState.departures;
 
   // Filter out the home stop (last stop)
   stops = stops.filter(function(s) { return !(s.sleepOptions && s.sleepOptions.length === 0) && s.name !== 'Home' && s.id < 15; });
@@ -9548,7 +9551,7 @@ async function _initGuestMode(tripId) {
   body.style.flexDirection = 'row';
 
   _renderGuestStopsList(stops, tripId);
-  setTimeout(function() { _initGuestMapInst(stops, guestArrivals); }, 300);
+  setTimeout(function() { _initGuestMapInst(stops, guestArrivals, guestDepartures); }, 300);
 }
 
 /* ── 3. Render per-stop recommendation forms ─────────────────────── */
@@ -9688,7 +9691,7 @@ async function _guestSubmit(stopId, stopName) {
 }
 
 /* ── 6. Init guest Leaflet map ───────────────────────────────────── */
-function _initGuestMapInst(stops, arrivals) {
+function _initGuestMapInst(stops, arrivals, departures) {
   var mapEl = document.getElementById('guest-map-container');
   if (!mapEl || typeof L === 'undefined') return;
   if (_guestMapInst) { try { _guestMapInst.remove(); } catch(e){} _guestMapInst = null; }
@@ -9698,58 +9701,96 @@ function _initGuestMapInst(stops, arrivals) {
   }).addTo(_guestMapInst);
   var bounds = [], colors = ['#2C6EA5','#3A8A5C','#7B5EA7','#C96820','#2C8A6A','#8A3C7B','#5C6EA5','#8A5C2C','#3C8A5C','#8A2C5C','#5C8A2C','#6E5CA5','#8A6C2C','#2C7A8A'];
   var latLngs = [];
+  arrivals   = arrivals   || {};
+  departures = departures || {};
 
-  /* Find most-recently-arrived stop to show "We Are Here" pin */
-  var currentStopId = null;
-  var currentArrivalTime = null;
-  if (arrivals && typeof arrivals === 'object') {
-    Object.keys(arrivals).forEach(function(sid) {
-      var a = arrivals[sid];
-      var t = a && a.time ? new Date(a.time).getTime() : 0;
-      if (!currentArrivalTime || t > currentArrivalTime) {
-        currentArrivalTime = t;
-        currentStopId = String(sid);
-      }
-    });
+  /* Determine the family's current status:
+     - "at" a stop   → arrived at stopId, NOT departed from it yet
+     - "transit to"  → departed from last-arrived stop, not yet arrived at next
+     - no data       → no check-ins yet */
+  var lastArrivedId   = null;
+  var lastArrivalTime = 0;
+  Object.keys(arrivals).forEach(function(sid) {
+    var t = arrivals[sid] && arrivals[sid].time ? new Date(arrivals[sid].time).getTime() : 0;
+    if (t > lastArrivalTime) { lastArrivalTime = t; lastArrivedId = String(sid); }
+  });
+
+  /* Check if they've departed that last-arrived stop */
+  var inTransit = false;
+  var nextStopIdx = -1;
+  if (lastArrivedId && departures[lastArrivedId]) {
+    var deptTime = departures[lastArrivedId] && departures[lastArrivedId].time
+      ? new Date(departures[lastArrivedId].time).getTime() : 0;
+    if (deptTime >= lastArrivalTime) {
+      inTransit = true;
+      /* Find next stop in the ordered stops array */
+      var lastIdx = stops.findIndex(function(s) { return String(s.id) === lastArrivedId; });
+      if (lastIdx >= 0 && lastIdx < stops.length - 1) nextStopIdx = lastIdx + 1;
+    }
+  }
+
+  /* Inject animation keyframes once */
+  if (!document.getElementById('herePulseStyle')) {
+    var styleTag = document.createElement('style');
+    styleTag.id = 'herePulseStyle';
+    styleTag.textContent = '@keyframes herePulse{0%,100%{box-shadow:0 0 0 4px rgba(232,129,58,.35),0 4px 12px rgba(0,0,0,.3)}50%{box-shadow:0 0 0 11px rgba(232,129,58,.12),0 4px 12px rgba(0,0,0,.3)}}'
+      + '@keyframes transitPulse{0%,100%{box-shadow:0 0 0 4px rgba(44,95,138,.35),0 4px 12px rgba(0,0,0,.3)}50%{box-shadow:0 0 0 11px rgba(44,95,138,.12),0 4px 12px rgba(0,0,0,.3)}}';
+    document.head.appendChild(styleTag);
   }
 
   stops.forEach(function(stop, idx) {
     if (!stop.lat || !stop.lng) return;
-    var isHere = currentStopId && String(stop.id) === currentStopId;
-    var c = colors[idx % colors.length];
-    var icon;
+    var sid      = String(stop.id);
+    var isHere   = !inTransit && sid === lastArrivedId;
+    var isNext   = inTransit && idx === nextStopIdx;
+    var wasHere  = !isHere && arrivals[sid];   // visited stop (arrived + departed)
+    var c        = colors[idx % colors.length];
+    var icon, popup;
+
     if (isHere) {
-      /* Big animated "We Are Here! 🚐" marker */
+      /* Currently at this stop */
       icon = L.divIcon({ className:'', iconSize:[44,44], iconAnchor:[22,22],
-        html:'<div style="width:44px;height:44px;background:#E8813A;border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.3rem;box-shadow:0 0 0 4px rgba(232,129,58,.35),0 4px 12px rgba(0,0,0,.3);animation:herePulse 1.8s ease-in-out infinite;">🚐</div>'
+        html:'<div style="width:44px;height:44px;background:#E8813A;border:3px solid #fff;border-radius:50%;'
+          + 'display:flex;align-items:center;justify-content:center;font-size:1.3rem;'
+          + 'box-shadow:0 0 0 4px rgba(232,129,58,.35),0 4px 12px rgba(0,0,0,.3);animation:herePulse 1.8s ease-in-out infinite;">🚐</div>'
       });
-    } else {
+      popup = '<strong>🚐 We\'re here right now!</strong><br>' + (stop.emoji||'📍') + ' ' + stop.name + (stop.state ? ', ' + stop.state : '');
+    } else if (isNext) {
+      /* In transit — heading to this stop next */
+      icon = L.divIcon({ className:'', iconSize:[44,44], iconAnchor:[22,22],
+        html:'<div style="width:44px;height:44px;background:#2C5F8A;border:3px solid #fff;border-radius:50%;'
+          + 'display:flex;align-items:center;justify-content:center;font-size:1.3rem;'
+          + 'box-shadow:0 0 0 4px rgba(44,95,138,.35),0 4px 12px rgba(0,0,0,.3);animation:transitPulse 1.8s ease-in-out infinite;">🗺️</div>'
+      });
+      popup = '<strong>🚐 We\'re heading here!</strong><br>'
+        + (stop.emoji||'📍') + ' ' + stop.name + (stop.state ? ', ' + stop.state : '')
+        + '<br><span style="font-size:.8em;color:#666;">In transit — arriving soon</span>';
+    } else if (wasHere) {
+      /* Already visited this stop */
       icon = L.divIcon({ className:'', iconSize:[28,28], iconAnchor:[14,14],
-        html:'<div style="width:28px;height:28px;background:' + c + ';border:2.5px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:900;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);">' + (idx+1) + '</div>' });
+        html:'<div style="width:28px;height:28px;background:#3A8A5C;border:2.5px solid #fff;border-radius:50%;'
+          + 'display:flex;align-items:center;justify-content:center;font-size:.8rem;'
+          + 'box-shadow:0 2px 6px rgba(0,0,0,.25);">✓</div>'
+      });
+      popup = '<strong>✅ We visited!</strong><br>' + (stop.emoji||'📍') + ' ' + stop.name + (stop.state ? ', ' + stop.state : '');
+    } else {
+      /* Upcoming stop */
+      icon = L.divIcon({ className:'', iconSize:[28,28], iconAnchor:[14,14],
+        html:'<div style="width:28px;height:28px;background:' + c + ';border:2.5px solid #fff;border-radius:50%;'
+          + 'display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:900;color:#fff;'
+          + 'box-shadow:0 2px 6px rgba(0,0,0,.25);">' + (idx+1) + '</div>'
+      });
+      popup = '<strong>' + (stop.emoji||'📍') + ' ' + stop.name + '</strong>' + (stop.state ? '<br>' + stop.state : '');
     }
-    var popup = '<strong>' + (stop.emoji||'📍') + ' ' + stop.name + '</strong>' + (stop.state ? '<br>' + stop.state : '');
-    if (isHere) popup = '<strong>🚐 We\'re here right now!</strong><br>' + (stop.emoji||'📍') + ' ' + stop.name + (stop.state ? ', ' + stop.state : '');
-    L.marker([stop.lat, stop.lng], { icon:icon })
-      .bindPopup(popup)
-      .addTo(_guestMapInst);
-    if (isHere) {
-      /* Auto-open popup for current location */
-      L.marker([stop.lat, stop.lng], { icon:icon, opacity:0 })
-        .addTo(_guestMapInst);
-    }
+
+    var marker = L.marker([stop.lat, stop.lng], { icon:icon }).bindPopup(popup).addTo(_guestMapInst);
+    if (isHere || isNext) marker.openPopup();
     latLngs.push([stop.lat, stop.lng]);
     bounds.push([stop.lat, stop.lng]);
   });
+
   if (latLngs.length > 1) L.polyline(latLngs, { color:'#7B5EA7', weight:2.5, opacity:.6, dashArray:'6,5' }).addTo(_guestMapInst);
   if (bounds.length) _guestMapInst.fitBounds(bounds, { padding:[30,30] });
-
-  /* Inject keyframe animation for the "We Are Here" pulse if not already added */
-  if (currentStopId && !document.getElementById('herePulseStyle')) {
-    var style = document.createElement('style');
-    style.id = 'herePulseStyle';
-    style.textContent = '@keyframes herePulse{0%,100%{box-shadow:0 0 0 4px rgba(232,129,58,.35),0 4px 12px rgba(0,0,0,.3)}50%{box-shadow:0 0 0 10px rgba(232,129,58,.15),0 4px 12px rgba(0,0,0,.3)}}';
-    document.head.appendChild(style);
-  }
 }
 
 /* ── 7. Guest toast ──────────────────────────────────────────────── */
