@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Schedule View Mockup — TripGenie</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  :root {
+    --orange: #E8813A;
+    --blue:   #2C5F8A;
+    --green:  #3A8A5C;
+    --purple: #7B5EA7;
+    --red:    #D94F3D;
+    --gold:   #D4A017;
+    --bg:     #F7F4EF;
+    --card:   #FFFFFF;
+    --border: #E2DDD6;
+    --text:   #1A1714;
+    --text-2: #5A5450;
+    --text-3: #9A918C;
+    --font:   -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --radius: 14px;
+    --radius-s: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── Page header (mimic app chrome) ── */
+  .app-bar {
+    background: var(--blue);
+    color: #fff;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-weight: 800;
+    font-size: 1rem;
+    letter-spacing: -.01em;
+  }
+  .app-bar span { opacity: .65; font-weight: 400; font-size: .82rem; }
+
+  /* ── Schedule scroll area ── */
+  .schedule {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 20px 16px 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* ════════════════════════════════════════════════════════
+     OPTION A  — "Road ribbon" drive separator
+     ════════════════════════════════════════════════════════ */
+  .drive-sep {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    position: relative;
+    margin: 6px 0;
+    user-select: none;
+  }
+  .drive-sep-line {
+    flex: 1;
+    height: 2px;
+    background: repeating-linear-gradient(90deg, var(--orange) 0, var(--orange) 8px, transparent 8px, transparent 16px);
+  }
+  .drive-sep-pill {
+    flex-shrink: 0;
+    background: var(--orange);
+    color: #fff;
+    border-radius: 100px;
+    padding: 6px 16px;
+    font-size: .78rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+    box-shadow: 0 2px 8px rgba(232,129,58,.3);
+  }
+  .drive-sep-pill .meta {
+    font-weight: 500;
+    opacity: .85;
+    font-size: .72rem;
+  }
+
+  /* ════════════════════════════════════════════════════════
+     OPTION B  — Minimal thin line with floating label
+     ════════════════════════════════════════════════════════ */
+  .drive-sep-b {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 8px 0;
+  }
+  .drive-sep-b::before {
+    content: '';
+    position: absolute;
+    left: 0; right: 0;
+    top: 50%;
+    height: 1.5px;
+    background: linear-gradient(90deg, transparent, #cbbfb0 20%, #cbbfb0 80%, transparent);
+  }
+  .drive-sep-b-inner {
+    position: relative;
+    background: var(--bg);
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .76rem;
+    color: var(--text-2);
+    font-weight: 600;
+  }
+  .drive-sep-b-inner .icon {
+    width: 28px; height: 28px;
+    background: var(--orange);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: .75rem;
+  }
+
+  /* ════════════════════════════════════════════════════════
+     OPTION C  — Full-bleed stripe (like a ticket stub)
+     ════════════════════════════════════════════════════════ */
+  .drive-sep-c {
+    background: linear-gradient(135deg, #2a3a50 0%, #1e2d40 100%);
+    color: #fff;
+    border-radius: var(--radius-s);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 6px 0;
+    border-left: 4px solid var(--orange);
+  }
+  .drive-sep-c .rv { font-size: 1.3rem; }
+  .drive-sep-c .info { flex: 1; }
+  .drive-sep-c .info .route { font-weight: 800; font-size: .88rem; letter-spacing: -.01em; }
+  .drive-sep-c .info .sub { font-size: .72rem; opacity: .7; margin-top: 1px; }
+  .drive-sep-c .badge { background: rgba(232,129,58,.25); border: 1px solid var(--orange); border-radius: 100px; padding: 3px 10px; font-size: .72rem; font-weight: 700; color: #f4a86a; white-space: nowrap; }
+
+  /* ── Phase / destination block ── */
+  .phase-block {
+    background: var(--card);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+  }
+  .phase-header {
+    background: linear-gradient(135deg, var(--blue) 0%, #1e3f5c 100%);
+    color: #fff;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .phase-header .stop-num {
+    width: 30px; height: 30px;
+    background: rgba(255,255,255,.18);
+    border: 1.5px solid rgba(255,255,255,.4);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 900; font-size: .85rem;
+    flex-shrink: 0;
+  }
+  .phase-header .info { flex: 1; min-width: 0; }
+  .phase-header .name { font-weight: 900; font-size: 1rem; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .phase-header .sub { font-size: .72rem; opacity: .75; margin-top: 1px; }
+  .phase-header .badges { display: flex; gap: 6px; align-items: center; }
+  .phase-header .badge-pill {
+    background: rgba(255,255,255,.15);
+    border: 1px solid rgba(255,255,255,.3);
+    border-radius: 100px;
+    padding: 3px 9px;
+    font-size: .68rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  /* ── Day rows inside a phase block ── */
+  .day-list { }
+  .day-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background .12s;
+    position: relative;
+  }
+  .day-row:last-child { border-bottom: none; }
+  .day-row:hover { background: #faf8f4; }
+  .day-row.today { background: #fffaf5; }
+  .day-row.today::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: var(--orange);
+    border-radius: 0 2px 2px 0;
+  }
+  .day-badge {
+    width: 36px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding-top: 1px;
+  }
+  .day-badge .num {
+    font-size: .65rem;
+    font-weight: 800;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  .day-badge .date-num {
+    font-size: 1.2rem;
+    font-weight: 900;
+    color: var(--text-2);
+    line-height: 1;
+  }
+  .day-badge .month { font-size: .6rem; color: var(--text-3); font-weight: 600; text-transform: uppercase; }
+  .day-row.today .day-badge .date-num { color: var(--orange); }
+  .day-body { flex: 1; min-width: 0; }
+  .day-title { font-size: .88rem; font-weight: 700; color: var(--text); line-height: 1.3; }
+  .day-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+  .day-meta-chip {
+    display: flex; align-items: center; gap: 4px;
+    font-size: .7rem; color: var(--text-3); font-weight: 600;
+  }
+  .day-actions { display: flex; align-items: center; gap: 6px; padding-top: 2px; }
+  .day-action-btn {
+    background: none; border: none; color: var(--text-3);
+    font-size: .8rem; cursor: pointer; padding: 4px 5px;
+    border-radius: 6px; transition: background .1s, color .1s;
+  }
+  .day-action-btn:hover { background: var(--bg); color: var(--orange); }
+
+  .spring-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: linear-gradient(135deg, #f59e0b, #fbbf24);
+    color: #78350f;
+    border-radius: 100px;
+    padding: 2px 8px;
+    font-size: .65rem; font-weight: 800;
+  }
+
+  /* ── Home block ── */
+  .home-block {
+    background: linear-gradient(135deg, #1a4a2c 0%, #0f3320 100%);
+    color: #fff;
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 6px;
+  }
+  .home-block .icon { font-size: 2rem; }
+  .home-block .info { flex: 1; }
+  .home-block .title { font-weight: 900; font-size: 1.05rem; }
+  .home-block .sub { font-size: .78rem; opacity: .7; margin-top: 3px; }
+
+  /* ── Toggle to switch between option A/B/C ── */
+  .option-picker {
+    display: flex;
+    gap: 8px;
+    padding: 16px 16px 4px;
+    max-width: 680px;
+    margin: 0 auto;
+    flex-wrap: wrap;
+  }
+  .option-btn {
+    padding: 7px 16px;
+    border-radius: 100px;
+    border: 2px solid var(--border);
+    background: var(--card);
+    font-size: .8rem;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: var(--font);
+    transition: all .15s;
+    color: var(--text-2);
+  }
+  .option-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+
+  .option-label {
+    background: #fff3cd; border: 1.5px solid #ffc107;
+    border-radius: var(--radius-s);
+    padding: 10px 16px;
+    font-size: .8rem;
+    color: #856404;
+    max-width: 680px;
+    margin: 0 auto 4px;
+    line-height: 1.5;
+  }
+  .spacer { max-width: 680px; margin: 0 auto; padding: 0 16px 6px; font-size: .72rem; color: var(--text-3); font-weight: 600; text-transform: uppercase; letter-spacing: .08em; padding-top: 12px; }
+</style>
+</head>
+<body>
+
+<div class="app-bar">
+  <i class="fa-solid fa-calendar-days"></i> Schedule
+  <span style="margin-left:auto;">Mar 1 – Apr 14, 2026 · 45 days</span>
+</div>
+
+<!-- Option picker -->
+<div class="option-picker">
+  <div style="font-size:.78rem;font-weight:700;color:var(--text-2);align-self:center;margin-right:4px;">Drive separator style:</div>
+  <button class="option-btn active" onclick="setOption('A')">A — Road ribbon</button>
+  <button class="option-btn" onclick="setOption('B')">B — Thin line</button>
+  <button class="option-btn" onclick="setOption('C')">C — Dark stripe</button>
+</div>
+
+<div class="option-label" id="opt-label">
+  <strong>Option A — Road ribbon:</strong> Orange dashed line with a pill badge in the center. Clean, recognizable as a route. Drive info stays compact.
+</div>
+
+<div class="schedule">
+
+  <!-- ══════════════ STOP 1 ══════════════ -->
+  <div class="phase-block">
+    <div class="phase-header">
+      <div class="stop-num">1</div>
+      <div class="info">
+        <div class="name">Shenandoah Valley, VA</div>
+        <div class="sub">Mar 1 – Mar 2 &nbsp;·&nbsp; 2 nights &nbsp;·&nbsp; 🏕️ RV Park</div>
+      </div>
+      <div class="badges">
+        <div class="badge-pill">🌤 52°</div>
+      </div>
+    </div>
+    <div class="day-list">
+      <div class="day-row today">
+        <div class="day-badge">
+          <div class="num">Day 1</div>
+          <div class="date-num">1</div>
+          <div class="month">Mar</div>
+        </div>
+        <div class="day-body">
+          <div class="day-title">Skyline Drive & Luray Caverns</div>
+          <div class="day-meta">
+            <span class="day-meta-chip"><i class="fa-solid fa-mountain"></i> Hike</span>
+            <span class="day-meta-chip"><i class="fa-solid fa-bed"></i> Luray RV Resort</span>
+            <span class="day-meta-chip" style="color:var(--orange);font-weight:800;">TODAY</span>
+          </div>
+        </div>
+        <div class="day-actions">
+          <button class="day-action-btn" title="Day detail"><i class="fa-solid fa-circle-info"></i></button>
+        </div>
+      </div>
+      <div class="day-row">
+        <div class="day-badge">
+          <div class="num">Day 2</div>
+          <div class="date-num">2</div>
+          <div class="month">Mar</div>
+        </div>
+        <div class="day-body">
+          <div class="day-title">Shenandoah — Old Rag Mountain Hike</div>
+          <div class="day-meta">
+            <span class="day-meta-chip"><i class="fa-solid fa-mountain"></i> 7h hike</span>
+            <span class="day-meta-chip"><i class="fa-solid fa-bed"></i> Luray RV Resort</span>
+          </div>
+        </div>
+        <div class="day-actions">
+          <button class="day-action-btn"><i class="fa-solid fa-circle-info"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ DRIVE SEPARATOR (shown in selected style) ══════════════ -->
+  <div id="sep-1"><!-- injected by JS --></div>
+
+  <!-- ══════════════ STOP 2 ══════════════ -->
+  <div class="phase-block">
+    <div class="phase-header">
+      <div class="stop-num">2</div>
+      <div class="info">
+        <div class="name">Great Smoky Mountains, TN</div>
+        <div class="sub">Mar 3 – Mar 6 &nbsp;·&nbsp; 4 nights &nbsp;·&nbsp; 🏕️ RV Park</div>
+      </div>
+      <div class="badges">
+        <div class="badge-pill">🌥 58°</div>
+      </div>
+    </div>
+    <div class="day-list">
+      <div class="day-row">
+        <div class="day-badge">
+          <div class="num">Day 3</div>
+          <div class="date-num">3</div>
+          <div class="month">Mar</div>
+        </div>
+        <div class="day-body">
+          <div class="day-title">Smokies — Cades Cove Loop & Waterfalls</div>
+          <div class="day-meta">
+            <span class="day-meta-chip"><i class="fa-solid fa-tree"></i> Nature</span>
+            <span class="day-meta-chip"><i class="fa-solid fa-bed"></i> Creekwood Farm RV Park</span>
+          </div>
+        </div>
+        <div class="day-actions">
+          <button class="day-action-btn"><i class="fa-solid fa-circle-info"></i></button>
+        </div>
+      </div>
+      <div class="day-row">
+        <div class="day-badge">
+          <div class="num">Day 4</div>
+          <div class="date-num">4</div>
+          <div class="month">Mar</div>
+        </div>
+        <div class="day-body">
+          <div class="day-title">Dollywood Day! 🎢</div>
+          <div class="day-meta">
+            <span class="day-meta-chip"><i class="fa-solid fa-star"></i> Attraction</span>
+            <span class="day-meta-chip"><i class="fa-solid fa-bed"></i> Creekwood Farm RV Park</span>
+          </div>
+        </div>
+        <div class="day-actions">
+          <button class="day-action-btn"><i class="fa-solid fa-circle-info"></i></button>
+        </div>
+      </div>
+      <div class="day-row">
+        <div class="day-badge">
+          <div class="num">Day 5</div>
+          <div class="date-num">5</div>
+          <div class="month">Mar</div>
+        </div>
+        <div class="day-body">
+          <div class="day-title">Gatlinburg & Pigeon Forge</div>
+          <div class="day-meta">
+            <span class="day-meta-chip"><i class="fa-solid fa-city"></i> Town</span>
+            <span class="day-meta-chip"><i class="fa-solid fa-bed"></i> Creekwood Farm RV Park</span>
+          </div>
+        </div>
+        <div class="day-actions">
+          <button class="day-action-btn"><i class="fa-solid fa-circle-info"></i></button>
+        </div>
+      </div>
+      <div class="day-row">
+        <div class="day-badge">
+          <div class="num">Day 6</div>
+          <div class="date-num">6</div>
+          <div class="month">Mar</div>
+        </div>
+        <div class="day-body">
+          <div class="day-title">Rest & Explore at Camp</div>
+          <div class="day-meta">
+            <span class="day-meta-chip"><i class="fa-solid fa-fire"></i> Free day</span>
+          </div>
+        </div>
+        <div class="day-actions">
+          <button class="day-action-btn"><i class="fa-solid fa-circle-info"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ DRIVE SEPARATOR ══════════════ -->
+  <div id="sep-2"><!-- injected --></div>
+
+  <!-- ══════════════ STOP 3 ══════════════ -->
+  <div class="phase-block">
+    <div class="phase-header">
+      <div class="stop-num">3</div>
+      <div class="info">
+        <div class="name">Ozark Mountains, AR</div>
+        <div class="sub">Mar 7 – Mar 10 &nbsp;·&nbsp; 4 nights &nbsp;·&nbsp; 🏕️ RV Park</div>
+      </div>
+      <div class="badges">
+        <div class="badge-pill">⛅ 62°</div>
+      </div>
+    </div>
+    <div class="day-list">
+      <div class="day-row">
+        <div class="day-badge">
+          <div class="num">Day 8</div>
+          <div class="date-num">8</div>
+          <div class="month">Mar</div>
+        </div>
+        <div class="day-body">
+          <div class="day-title">Buffalo National River</div>
+          <div class="day-meta">
+            <span class="day-meta-chip"><i class="fa-solid fa-water"></i> River</span>
+            <span class="day-meta-chip"><i class="fa-solid fa-bed"></i> Lost Bridge Village RV</span>
+          </div>
+        </div>
+        <div class="day-actions">
+          <button class="day-action-btn"><i class="fa-solid fa-circle-info"></i></button>
+        </div>
+      </div>
+      <div class="day-row">
+        <div class="day-badge">
+          <div class="num">Day 9</div>
+          <div class="date-num">9</div>
+          <div class="month">Mar</div>
+        </div>
+        <div class="day-body">
+          <div class="day-title">Mystic Caverns & Boxley Valley</div>
+          <div class="day-meta">
+            <span class="day-meta-chip"><i class="fa-solid fa-mountain"></i> Cave</span>
+          </div>
+        </div>
+        <div class="day-actions">
+          <button class="day-action-btn"><i class="fa-solid fa-circle-info"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ DRIVE SEPARATOR ══════════════ -->
+  <div id="sep-3"><!-- injected --></div>
+
+  <!-- ══════════════ STOP 4 — SPRING BREAK ══════════════ -->
+  <div class="phase-block">
+    <div class="phase-header" style="background:linear-gradient(135deg,#b45309 0%,#92400e 100%);">
+      <div class="stop-num" style="background:rgba(255,255,255,.2);">4</div>
+      <div class="info">
+        <div class="name">Texas Hill Country, TX</div>
+        <div class="sub">Mar 11 – Mar 14 &nbsp;·&nbsp; 4 nights &nbsp;·&nbsp; 🏕️ RV Park</div>
+      </div>
+      <div class="badges">
+        <div class="spring-badge">🌟 Spring Break!</div>
+      </div>
+    </div>
+    <div class="day-list">
+      <div class="day-row">
+        <div class="day-badge">
+          <div class="num">Day 12</div>
+          <div class="date-num">12</div>
+          <div class="month">Mar</div>
+        </div>
+        <div class="day-body">
+          <div class="day-title">Enchanted Rock & Wildflowers</div>
+          <div class="day-meta">
+            <span class="day-meta-chip"><i class="fa-solid fa-mountain"></i> Hike</span>
+            <span class="day-meta-chip"><i class="fa-solid fa-bed"></i> Fredericksburg KOA</span>
+          </div>
+        </div>
+        <div class="day-actions">
+          <button class="day-action-btn"><i class="fa-solid fa-circle-info"></i></button>
+        </div>
+      </div>
+      <div class="day-row">
+        <div class="day-badge">
+          <div class="num">Day 13</div>
+          <div class="date-num">13</div>
+          <div class="month">Mar</div>
+        </div>
+        <div class="day-body">
+          <div class="day-title">Austin Day Trip — Bats, Barton Springs</div>
+          <div class="day-meta">
+            <span class="day-meta-chip"><i class="fa-solid fa-city"></i> Day trip · 150 mi round trip</span>
+          </div>
+        </div>
+        <div class="day-actions">
+          <button class="day-action-btn"><i class="fa-solid fa-circle-info"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════ DRIVE SEPARATOR ══════════════ -->
+  <div id="sep-4"><!-- injected --></div>
+
+  <!-- ══════════════ STOP 5 ══════════════ -->
+  <div class="phase-block">
+    <div class="phase-header">
+      <div class="stop-num">5</div>
+      <div class="info">
+        <div class="name">Grand Canyon, AZ</div>
+        <div class="sub">Mar 22 – Mar 25 &nbsp;·&nbsp; 4 nights &nbsp;·&nbsp; 🏕️ RV Park</div>
+      </div>
+      <div class="badges">
+        <div class="badge-pill">☀️ 68°</div>
+      </div>
+    </div>
+    <div class="day-list">
+      <div class="day-row">
+        <div class="day-badge">
+          <div class="num">Day 22</div>
+          <div class="date-num">22</div>
+          <div class="month">Mar</div>
+        </div>
+        <div class="day-body">
+          <div class="day-title">Mather Point Sunrise & Rim Trail</div>
+          <div class="day-meta">
+            <span class="day-meta-chip"><i class="fa-solid fa-mountain"></i> Scenic</span>
+            <span class="day-meta-chip"><i class="fa-solid fa-bed"></i> Trailer Village RV</span>
+          </div>
+        </div>
+        <div class="day-actions">
+          <button class="day-action-btn"><i class="fa-solid fa-circle-info"></i></button>
+        </div>
+      </div>
+      <div class="day-row">
+        <div class="day-badge">
+          <div class="num">Day 23</div>
+          <div class="date-num">23</div>
+          <div class="month">Mar</div>
+        </div>
+        <div class="day-body">
+          <div class="day-title">Desert View Drive & Bright Angel Trail</div>
+          <div class="day-meta">
+            <span class="day-meta-chip"><i class="fa-solid fa-person-hiking"></i> Hike</span>
+          </div>
+        </div>
+        <div class="day-actions">
+          <button class="day-action-btn"><i class="fa-solid fa-circle-info"></i></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Home block at bottom -->
+  <div id="sep-home"><!-- injected --></div>
+
+  <div class="home-block">
+    <div class="icon">🏡</div>
+    <div class="info">
+      <div class="title">Back Home — Warwick, NY</div>
+      <div class="sub">Apr 12 · Welcome back after 45 days on the road!</div>
+    </div>
+  </div>
+
+</div><!-- end .schedule -->
+
+<script>
+var currentOption = 'A';
+
+var seps = [
+  {
+    id: 'sep-1',
+    from: 'Shenandoah Valley', to: 'Great Smoky Mountains',
+    miles: 445, hours: 7, date: 'Sun Mar 3', driver: 'Melissa'
+  },
+  {
+    id: 'sep-2',
+    from: 'Great Smoky Mountains', to: 'Ozark Mountains',
+    miles: 450, hours: 7, date: 'Sat Mar 7', driver: 'Paul'
+  },
+  {
+    id: 'sep-3',
+    from: 'Ozark Mountains', to: 'Texas Hill Country',
+    miles: 490, hours: 8, date: 'Tue Mar 10', driver: 'Paul'
+  },
+  {
+    id: 'sep-4',
+    from: 'Texas', to: 'Grand Canyon',
+    miles: 810, hours: 12, date: 'Sun Mar 15–16', driver: 'Paul + Melissa'
+  }
+];
+
+var homeData = {
+  id: 'sep-home',
+  from: 'Blue Ridge Mountains', to: 'Warwick, NY',
+  miles: 450, hours: 7, date: 'Sat Apr 11', driver: 'Paul'
+};
+
+function renderOptionA(sep) {
+  return '<div class="drive-sep">'
+    + '<div class="drive-sep-line"></div>'
+    + '<div class="drive-sep-pill">'
+    + '<i class="fa-solid fa-rv"></i>'
+    + '<span>' + sep.from + ' <i class="fa-solid fa-arrow-right" style="font-size:.6rem;opacity:.7;"></i> ' + sep.to + '</span>'
+    + '<span class="meta">&nbsp; ' + sep.date + ' &middot; ' + sep.miles + ' mi &middot; ~' + sep.hours + 'h &middot; ' + sep.driver + '</span>'
+    + '</div>'
+    + '<div class="drive-sep-line"></div>'
+    + '</div>';
+}
+
+function renderOptionB(sep) {
+  return '<div class="drive-sep-b">'
+    + '<div class="drive-sep-b-inner">'
+    + '<div class="icon"><i class="fa-solid fa-rv"></i></div>'
+    + '<span style="font-weight:800;">' + sep.from + ' → ' + sep.to + '</span>'
+    + '<span style="color:var(--text-3);">' + sep.date + ' · ' + sep.miles + ' mi · ~' + sep.hours + 'h</span>'
+    + '</div>'
+    + '</div>';
+}
+
+function renderOptionC(sep) {
+  return '<div class="drive-sep-c">'
+    + '<div class="rv">🚐</div>'
+    + '<div class="info">'
+    + '<div class="route">' + sep.from + ' → ' + sep.to + '</div>'
+    + '<div class="sub">' + sep.date + ' &nbsp;·&nbsp; Driver: ' + sep.driver + '</div>'
+    + '</div>'
+    + '<div class="badge">' + sep.miles + ' mi &nbsp;~' + sep.hours + 'h</div>'
+    + '</div>';
+}
+
+function renderSep(sep, option) {
+  if (option === 'A') return renderOptionA(sep);
+  if (option === 'B') return renderOptionB(sep);
+  return renderOptionC(sep);
+}
+
+var labels = {
+  A: '<strong>Option A — Road ribbon:</strong> Orange dashed lines with a floating pill in the center. Drive info is always visible, bold. Compact.',
+  B: '<strong>Option B — Thin line + label:</strong> Barely-there hairline with floating text. Very minimal — drives recede, destinations dominate.',
+  C: '<strong>Option C — Dark stripe:</strong> A small dark card with an orange left-border accent. More prominent — looks like a "transit" block. Easy to scan.'
+};
+
+function setOption(opt) {
+  currentOption = opt;
+  document.querySelectorAll('.option-btn').forEach(function(b) { b.classList.remove('active'); });
+  event.target.classList.add('active');
+  document.getElementById('opt-label').innerHTML = labels[opt];
+  renderAll();
+}
+
+function renderAll() {
+  seps.forEach(function(s) {
+    var el = document.getElementById(s.id);
+    if (el) el.innerHTML = renderSep(s, currentOption);
+  });
+  var homeEl = document.getElementById('sep-home');
+  if (homeEl) homeEl.innerHTML = renderSep(homeData, currentOption);
+}
+
+renderAll();
+</script>
+</body>
+</html>
