@@ -2774,7 +2774,7 @@
         <button id="plan-seg-schedule" onclick="_mainSeg('schedule')" style="flex:1;padding:9px 16px;border:1.5px solid var(--orange);border-radius:50px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-calendar-days"></i> Schedule</button>
         <button id="plan-seg-stops" onclick="_mainSeg('stops')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-map-pin"></i> Day Planner</button>
         <button id="plan-seg-stats" onclick="_mainSeg('stats')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-star"></i> Trip Stats</button>
-        <button id="plan-seg-friends" onclick="_mainSeg('friends')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-users"></i> Friends</button>
+        <button id="plan-seg-friends" onclick="_mainSeg('friends')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-lightbulb"></i> Suggestions</button>
       </div>
       <div id="schedule-content" style="display:block"></div>
       <div id="stops-content" style="display:none"></div>
@@ -9514,6 +9514,8 @@ async function _initGuestMode(tripId) {
   var stops = null;
   var tripName = (CONFIG && CONFIG.tripName) || 'Maass Family RV Adventure 2026';
 
+  var guestArrivals = {};   // { stopId: { time: ISO } } — most recent check-in
+
   if (tripId && tripId !== 'local') {
     // Supabase path — fetch trip data by ID
     try {
@@ -9525,12 +9527,15 @@ async function _initGuestMode(tripId) {
         if (rows[0].name) tripName = rows[0].name;
         var td = rows[0].trip_data || {};
         if (td.customTripData && td.customTripData.stops) stops = td.customTripData.stops;
+        if (td.arrivals) guestArrivals = td.arrivals;
       }
     } catch(e) {}
   }
-  // Local / fallback path — use hardcoded trip stops directly
+  // Local / fallback path — use hardcoded trip stops, and read arrivals from local appState
   if (!stops && typeof _BUILTIN_TRIP !== 'undefined') stops = _BUILTIN_TRIP.stops.slice();
   if (!stops) stops = (TRIP_STOPS || []).slice();
+  // For local path, read arrivals from the in-memory appState (works when Paul views ?friends=1 on his own device)
+  if (!Object.keys(guestArrivals).length && appState && appState.arrivals) guestArrivals = appState.arrivals;
 
   // Filter out the home stop (last stop)
   stops = stops.filter(function(s) { return !(s.sleepOptions && s.sleepOptions.length === 0) && s.name !== 'Home' && s.id < 15; });
@@ -9543,7 +9548,7 @@ async function _initGuestMode(tripId) {
   body.style.flexDirection = 'row';
 
   _renderGuestStopsList(stops, tripId);
-  setTimeout(function() { _initGuestMapInst(stops); }, 300);
+  setTimeout(function() { _initGuestMapInst(stops, guestArrivals); }, 300);
 }
 
 /* ── 3. Render per-stop recommendation forms ─────────────────────── */
@@ -9604,7 +9609,7 @@ function _guestVoice(stopId) {
   r.start();
 }
 
-/* ── 5. Submit suggestion — Supabase when available, localStorage fallback ── */
+/* ── 5. Submit suggestion — Netlify Forms + Supabase + localStorage fallback ── */
 async function _guestSubmit(stopId, stopName) {
   var fn  = ((document.getElementById('gf-fn-'  + stopId) || {}).value || '').trim();
   var ln  = ((document.getElementById('gf-ln-'  + stopId) || {}).value || '').trim();
@@ -9612,37 +9617,61 @@ async function _guestSubmit(stopId, stopName) {
   if (!fn || !ln) { _guestToast('Please enter your first and last name 👋', 2500); return; }
   if (!txt)       { _guestToast('Don\'t forget to write your recommendation!', 2500); return; }
 
-  var suggestion = {
-    id:         'sugg_' + Date.now() + '_' + Math.random().toString(36).slice(2,6),
-    trip_id:    _guestTripId || 'local',
-    stop_id:    stopId,
-    stop_name:  stopName,
-    first_name: fn,
-    last_name:  ln,
-    suggestion: txt,
-    created_at: new Date().toISOString()
-  };
-
   var saved = false;
 
-  /* Try Supabase first (if a real trip ID is set) */
-  if (_guestTripId && _guestTripId !== 'local' && SUPA_URL && SUPA_KEY) {
+  /* ── 1. Submit to Netlify Forms (persistent, emails Paul) ── */
+  try {
+    var formData = new URLSearchParams({
+      'form-name':  'friend-suggestions',
+      'stop_id':    String(stopId),
+      'stop_name':  stopName,
+      'first_name': fn,
+      'last_name':  ln,
+      'suggestion': txt
+    });
+    var resp = await fetch('/', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body:    formData.toString()
+    });
+    if (resp.ok) saved = true;
+  } catch(e) {}
+
+  /* ── 2. Also insert into Supabase trip_suggestions table (so Paul sees it in-app) ── */
+  if (SUPA_URL && SUPA_KEY) {
     try {
-      var resp = await fetch(SUPA_URL + '/rest/v1/trip_suggestions', {
+      var tripIdForSave = _guestTripId && _guestTripId !== 'local' ? _guestTripId : 'local';
+      await fetch(SUPA_URL + '/rest/v1/trip_suggestions', {
         method: 'POST',
-        headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY,
-                   'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-        body: JSON.stringify(suggestion)
+        headers: {
+          'apikey': SUPA_KEY,
+          'Authorization': 'Bearer ' + SUPA_KEY,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({
+          trip_id:    tripIdForSave,
+          stop_id:    stopId,
+          stop_name:  stopName,
+          first_name: fn,
+          last_name:  ln,
+          suggestion: txt
+        })
       });
-      if (resp.ok || resp.status === 201) saved = true;
+      saved = true;
     } catch(e) {}
   }
 
-  /* Always save locally too — so the family can see it even without Supabase */
+  /* ── 3. Also cache locally as fallback ── */
   try {
-    var stored = JSON.parse(localStorage.getItem('rv_friend_suggestions') || '[]');
-    stored.unshift(suggestion);
-    localStorage.setItem('rv_friend_suggestions', JSON.stringify(stored));
+    var cached = JSON.parse(localStorage.getItem('rv_friend_suggestions') || '[]');
+    cached.unshift({
+      id: 'sugg_' + Date.now(),
+      stop_id: stopId, stop_name: stopName,
+      first_name: fn, last_name: ln,
+      suggestion: txt, created_at: new Date().toISOString()
+    });
+    localStorage.setItem('rv_friend_suggestions', JSON.stringify(cached.slice(0, 200)));
     saved = true;
   } catch(e) {}
 
@@ -9651,14 +9680,15 @@ async function _guestSubmit(stopId, stopName) {
       var el = document.getElementById(pfx + stopId); if (el) el.value = '';
     });
     var suc = document.getElementById('gf-success-' + stopId);
-    if (suc) { suc.style.display = 'block'; setTimeout(function() { suc.style.display = 'none'; }, 4500); }
+    if (suc) { suc.style.display = 'block'; setTimeout(function() { suc.style.display = 'none'; }, 5000); }
+    _guestToast('🙌 Thanks ' + fn + '! The Maass family will love your tip!', 4000);
   } else {
-    _guestToast('Could not save — please try again.', 2500);
+    _guestToast('Could not send — check your connection and try again.', 3000);
   }
 }
 
 /* ── 6. Init guest Leaflet map ───────────────────────────────────── */
-function _initGuestMapInst(stops) {
+function _initGuestMapInst(stops, arrivals) {
   var mapEl = document.getElementById('guest-map-container');
   if (!mapEl || typeof L === 'undefined') return;
   if (_guestMapInst) { try { _guestMapInst.remove(); } catch(e){} _guestMapInst = null; }
@@ -9668,19 +9698,58 @@ function _initGuestMapInst(stops) {
   }).addTo(_guestMapInst);
   var bounds = [], colors = ['#2C6EA5','#3A8A5C','#7B5EA7','#C96820','#2C8A6A','#8A3C7B','#5C6EA5','#8A5C2C','#3C8A5C','#8A2C5C','#5C8A2C','#6E5CA5','#8A6C2C','#2C7A8A'];
   var latLngs = [];
+
+  /* Find most-recently-arrived stop to show "We Are Here" pin */
+  var currentStopId = null;
+  var currentArrivalTime = null;
+  if (arrivals && typeof arrivals === 'object') {
+    Object.keys(arrivals).forEach(function(sid) {
+      var a = arrivals[sid];
+      var t = a && a.time ? new Date(a.time).getTime() : 0;
+      if (!currentArrivalTime || t > currentArrivalTime) {
+        currentArrivalTime = t;
+        currentStopId = String(sid);
+      }
+    });
+  }
+
   stops.forEach(function(stop, idx) {
     if (!stop.lat || !stop.lng) return;
+    var isHere = currentStopId && String(stop.id) === currentStopId;
     var c = colors[idx % colors.length];
-    var icon = L.divIcon({ className:'', iconSize:[28,28], iconAnchor:[14,14],
-      html:'<div style="width:28px;height:28px;background:' + c + ';border:2.5px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:900;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);">' + (idx+1) + '</div>' });
+    var icon;
+    if (isHere) {
+      /* Big animated "We Are Here! 🚐" marker */
+      icon = L.divIcon({ className:'', iconSize:[44,44], iconAnchor:[22,22],
+        html:'<div style="width:44px;height:44px;background:#E8813A;border:3px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.3rem;box-shadow:0 0 0 4px rgba(232,129,58,.35),0 4px 12px rgba(0,0,0,.3);animation:herePulse 1.8s ease-in-out infinite;">🚐</div>'
+      });
+    } else {
+      icon = L.divIcon({ className:'', iconSize:[28,28], iconAnchor:[14,14],
+        html:'<div style="width:28px;height:28px;background:' + c + ';border:2.5px solid #fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:900;color:#fff;box-shadow:0 2px 6px rgba(0,0,0,.25);">' + (idx+1) + '</div>' });
+    }
+    var popup = '<strong>' + (stop.emoji||'📍') + ' ' + stop.name + '</strong>' + (stop.state ? '<br>' + stop.state : '');
+    if (isHere) popup = '<strong>🚐 We\'re here right now!</strong><br>' + (stop.emoji||'📍') + ' ' + stop.name + (stop.state ? ', ' + stop.state : '');
     L.marker([stop.lat, stop.lng], { icon:icon })
-      .bindPopup('<strong>' + (stop.emoji||'📍') + ' ' + stop.name + '</strong>' + (stop.state ? '<br>' + stop.state : ''))
+      .bindPopup(popup)
       .addTo(_guestMapInst);
+    if (isHere) {
+      /* Auto-open popup for current location */
+      L.marker([stop.lat, stop.lng], { icon:icon, opacity:0 })
+        .addTo(_guestMapInst);
+    }
     latLngs.push([stop.lat, stop.lng]);
     bounds.push([stop.lat, stop.lng]);
   });
   if (latLngs.length > 1) L.polyline(latLngs, { color:'#7B5EA7', weight:2.5, opacity:.6, dashArray:'6,5' }).addTo(_guestMapInst);
   if (bounds.length) _guestMapInst.fitBounds(bounds, { padding:[30,30] });
+
+  /* Inject keyframe animation for the "We Are Here" pulse if not already added */
+  if (currentStopId && !document.getElementById('herePulseStyle')) {
+    var style = document.createElement('style');
+    style.id = 'herePulseStyle';
+    style.textContent = '@keyframes herePulse{0%,100%{box-shadow:0 0 0 4px rgba(232,129,58,.35),0 4px 12px rgba(0,0,0,.3)}50%{box-shadow:0 0 0 10px rgba(232,129,58,.15),0 4px 12px rgba(0,0,0,.3)}}';
+    document.head.appendChild(style);
+  }
 }
 
 /* ── 7. Guest toast ──────────────────────────────────────────────── */
@@ -9727,12 +9796,15 @@ async function _loadFriendSuggestions() {
 
   /* Header row */
   var hdrHtml = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">'
-    + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-users"></i> Friend Recommendations</h2>'
-    + '<button onclick="_copyShareLink()" style="background:#7B5EA7;color:#fff;border:none;border-radius:100px;padding:8px 16px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px;"><i class="fa-solid fa-share-nodes"></i> Share Link</button>'
+    + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-lightbulb"></i> Friend &amp; Family Suggestions</h2>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
+    + '<button onclick="_loadFriendSuggestions()" style="background:var(--card);color:var(--text-2);border:1.5px solid var(--border);border-radius:100px;padding:7px 14px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-rotate-right"></i> Refresh</button>'
+    + '<button onclick="_copyShareLink()" style="background:#7B5EA7;color:#fff;border:none;border-radius:100px;padding:7px 14px;font-size:.78rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-share-nodes"></i> Share Link</button>'
     + '</div>'
-    + '<div style="background:#ede8ff;border:1px solid #c9a8f5;border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:.8rem;color:#7B5EA7;line-height:1.55;">'
-    + '<strong>How it works:</strong> Click Share Link → send it to anyone. They open it in any browser, see your stops on a map, and leave recommendations — no login or app needed!'
-    + '<br><br><details style="cursor:pointer;"><summary style="font-weight:700;font-size:.78rem;">⚙️ First-time Supabase setup (run once)</summary>'
+    + '</div>'
+    + '<div style="background:#ede8ff;border:1px solid #c9a8f5;border-radius:10px;padding:12px 16px;margin-bottom:18px;font-size:.82rem;color:#6a4c9c;line-height:1.55;">'
+    + '<strong>💡 How it works:</strong> Tap <strong>Share Link</strong> → send to anyone. They see your stops on an interactive map, leave suggestions for each one, and you\'ll see them here. Tap <strong>Explore This Idea</strong> on any suggestion to get AI details + send it straight to Change Plan!'
+    + '<br><br><details style="cursor:pointer;"><summary style="font-weight:700;font-size:.78rem;">⚙️ First-time Supabase setup (run once — enables in-app syncing)</summary>'
     + '<pre style="font-size:.68rem;background:#fff;border-radius:6px;padding:10px;margin-top:8px;overflow-x:auto;color:#333;white-space:pre-wrap;">'
     + 'CREATE TABLE IF NOT EXISTS trip_suggestions (\n'
     + '  id bigserial PRIMARY KEY,\n'
@@ -9760,11 +9832,16 @@ async function _loadFriendSuggestions() {
     localRows = JSON.parse(localStorage.getItem('rv_friend_suggestions') || '[]');
   } catch(e) {}
 
-  /* Also try Supabase if we have a trip ID */
+  /* Also try Supabase — fetch suggestions for this trip AND 'local' (submitted via ?friends=1 link) */
   var cloudRows = [];
-  if (_currentTripId && _currentTripId !== 'local' && SUPA_URL && SUPA_KEY) {
+  if (SUPA_URL && SUPA_KEY) {
     try {
-      var resp = await fetch(SUPA_URL + '/rest/v1/trip_suggestions?trip_id=eq.' + encodeURIComponent(_currentTripId) + '&select=*&order=created_at.asc', {
+      /* Build OR filter: match current trip ID and 'local' trip_id */
+      var tripFilter = 'trip_id=eq.local';
+      if (_currentTripId && _currentTripId !== 'local') {
+        tripFilter = 'or=(trip_id.eq.' + encodeURIComponent(_currentTripId) + ',trip_id.eq.local)';
+      }
+      var resp = await fetch(SUPA_URL + '/rest/v1/trip_suggestions?' + tripFilter + '&select=*&order=created_at.asc', {
         headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
       });
       var rows = await resp.json();
@@ -9790,11 +9867,12 @@ function _renderFriendSuggestionsFamily(rows) {
   if (!rows || !rows.length) {
     inner.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--text-3);">'
       + '<div style="font-size:3rem;margin-bottom:12px;">💌</div>'
-      + '<div style="font-weight:700;font-size:.95rem;margin-bottom:6px;">No recommendations yet</div>'
-      + '<div style="font-size:.82rem;">Share the link with friends and family to collect their tips!</div>'
+      + '<div style="font-weight:700;font-size:.95rem;margin-bottom:6px;">No suggestions yet</div>'
+      + '<div style="font-size:.82rem;">Share the link — friends & family can leave tips for any stop on your route!</div>'
       + '</div>';
     return;
   }
+
   /* Group by stop */
   var byStop = {}, stopOrder = [];
   rows.forEach(function(r) {
@@ -9804,27 +9882,148 @@ function _renderFriendSuggestionsFamily(rows) {
   });
   stopOrder = stopOrder.filter(function(v,i) { return stopOrder.indexOf(v) === i; });
 
-  var html = '<div style="display:flex;flex-direction:column;gap:18px;">';
+  var totalCount = rows.length;
+  var html = '<div style="font-size:.8rem;color:var(--text-3);margin-bottom:14px;">'
+    + totalCount + ' suggestion' + (totalCount !== 1 ? 's' : '') + ' from friends &amp; family</div>';
+  html += '<div style="display:flex;flex-direction:column;gap:16px;">';
+
   stopOrder.forEach(function(key) {
     var suggs = byStop[key];
     var stopObj = TRIP_STOPS.find(function(s) { return String(s.id) === key; });
-    var label = stopObj ? (stopObj.emoji + ' ' + stopObj.name + (stopObj.state ? ', ' + stopObj.state : '')) : (suggs[0].stop_name || 'General');
-    html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden;">';
-    html += '<div style="background:#7B5EA7;color:#fff;padding:10px 16px;font-weight:800;font-size:.88rem;display:flex;justify-content:space-between;align-items:center;">';
-    html += '<span>' + label + '</span><span style="opacity:.8;font-weight:400;font-size:.78rem;">' + suggs.length + ' tip' + (suggs.length !== 1 ? 's' : '') + '</span>';
-    html += '</div>';
-    html += '<div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px;">';
-    suggs.forEach(function(s) {
-      var dt = new Date(s.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
-      html += '<div style="border-left:3px solid #7B5EA7;padding:9px 12px;background:#f8f4ff;border-radius:0 8px 8px 0;">';
-      html += '<div style="font-size:.74rem;font-weight:800;color:#7B5EA7;margin-bottom:4px;">' + s.first_name + ' ' + s.last_name + ' <span style="font-weight:400;color:var(--text-3);">&middot; ' + dt + '</span></div>';
-      html += '<div style="font-size:.85rem;color:var(--text);line-height:1.55;">' + s.suggestion.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>';
+    var stopLabel = stopObj
+      ? ((stopObj.emoji ? stopObj.emoji + ' ' : '') + stopObj.name + (stopObj.state ? ', ' + stopObj.state : ''))
+      : (suggs[0].stop_name || 'General Suggestions');
+
+    html += '<div style="background:var(--card);border:1.5px solid #c9a8f5;border-radius:14px;overflow:hidden;">';
+    /* Stop header */
+    html += '<div style="background:linear-gradient(135deg,#7B5EA7,#9B6FCA);color:#fff;padding:12px 16px;'
+      + 'display:flex;align-items:center;justify-content:space-between;">'
+      + '<span style="font-weight:800;font-size:.92rem;">' + stopLabel + '</span>'
+      + '<span style="background:rgba(255,255,255,.22);border-radius:100px;padding:2px 10px;font-size:.72rem;font-weight:700;">'
+      + suggs.length + ' tip' + (suggs.length !== 1 ? 's' : '') + '</span>'
+      + '</div>';
+
+    /* Suggestion cards */
+    html += '<div style="padding:10px 14px;display:flex;flex-direction:column;gap:10px;">';
+    suggs.forEach(function(s, si) {
+      var dt   = s.created_at ? new Date(s.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+      var safe = (s.suggestion || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      var safeForJs = (s.suggestion || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,' ');
+      var safeStop  = stopLabel.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+      html += '<div style="border-left:3px solid #9B6FCA;padding:10px 12px;background:#faf7ff;border-radius:0 10px 10px 0;">';
+      /* Submitter + date */
+      html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'
+        + '<span style="font-size:.74rem;font-weight:800;color:#7B5EA7;">'
+        + s.first_name + ' ' + s.last_name + '</span>'
+        + '<span style="font-size:.7rem;color:var(--text-3);">' + dt + '</span>'
+        + '</div>';
+      /* Suggestion text */
+      html += '<div style="font-size:.85rem;color:var(--text);line-height:1.6;margin-bottom:10px;">' + safe + '</div>';
+      /* Explore This Idea button */
+      html += '<button onclick="_exploreIdea(\'' + safeStop + '\',\'' + safeForJs + '\')"'
+        + ' style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#7B5EA7,#9B6FCA);'
+        + 'color:#fff;border:none;border-radius:100px;padding:7px 14px;font-size:.78rem;font-weight:800;'
+        + 'cursor:pointer;font-family:var(--font);">'
+        + '<i class="fa-solid fa-wand-magic-sparkles"></i> Explore This Idea'
+        + '</button>';
       html += '</div>';
     });
     html += '</div></div>';
   });
   html += '</div>';
   inner.innerHTML = html;
+}
+
+/* ── 10. Explore This Idea — AI info modal + Change Plan pre-fill ── */
+async function _exploreIdea(stopLabel, suggestionText) {
+  /* Remove any existing modal */
+  var prev = document.getElementById('explore-idea-modal');
+  if (prev) prev.remove();
+
+  var safeTxt = suggestionText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  var safeForJs = suggestionText.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,' ');
+
+  var modal = document.createElement('div');
+  modal.id = 'explore-idea-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.52);z-index:9600;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;box-sizing:border-box;';
+  modal.innerHTML = '<div onclick="event.stopPropagation()" style="background:var(--card);border-radius:20px;width:100%;max-width:560px;margin:auto;box-shadow:0 16px 56px rgba(0,0,0,.32);overflow:hidden;">'
+    /* Header */
+    + '<div style="background:linear-gradient(135deg,#7B5EA7 0%,#9B6FCA 100%);padding:18px 20px 16px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;">'
+    + '<div>'
+    + '<div style="color:#fff;font-weight:900;font-size:1.05rem;display:flex;align-items:center;gap:8px;"><i class="fa-solid fa-wand-magic-sparkles"></i> Explore This Idea</div>'
+    + '<div style="color:rgba(255,255,255,.78);font-size:.8rem;margin-top:4px;">Near: ' + stopLabel + '</div>'
+    + '</div>'
+    + '<button onclick="document.getElementById(\'explore-idea-modal\').remove()" style="background:rgba(255,255,255,.18);border:none;color:#fff;border-radius:50%;width:34px;height:34px;cursor:pointer;font-size:1.1rem;display:flex;align-items:center;justify-content:center;flex-shrink:0;">&times;</button>'
+    + '</div>'
+    /* Quoted suggestion */
+    + '<div style="padding:16px 20px 0;">'
+    + '<div style="background:#f5f3ff;border-left:4px solid #9B6FCA;border-radius:0 10px 10px 0;padding:10px 14px;font-size:.87rem;color:var(--text);line-height:1.6;font-style:italic;">&ldquo;' + safeTxt + '&rdquo;</div>'
+    + '</div>'
+    /* AI content area */
+    + '<div id="explore-idea-ai" style="padding:16px 20px;min-height:130px;display:flex;align-items:center;justify-content:center;">'
+    + '<div style="text-align:center;color:var(--text-3);">'
+    + '<div style="font-size:1.8rem;margin-bottom:8px;">✨</div>'
+    + '<div style="font-size:.85rem;">Getting AI insights…</div>'
+    + '</div>'
+    + '</div>'
+    /* Action buttons */
+    + '<div style="padding:0 20px 20px;display:flex;gap:10px;flex-wrap:wrap;">'
+    + '<button onclick="_exploreIdeaAddToPlan(\'' + safeForJs + '\')" style="flex:1;min-width:160px;background:linear-gradient(135deg,var(--orange),#d4611a);color:#fff;border:none;border-radius:100px;padding:12px 18px;font-size:.84rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:7px;"><i class="fa-solid fa-arrows-spin"></i> Add to Change Plan</button>'
+    + '<button onclick="document.getElementById(\'explore-idea-modal\').remove()" style="flex:1;min-width:100px;background:var(--bg);color:var(--text-2);border:1.5px solid var(--border);border-radius:100px;padding:12px 18px;font-size:.84rem;font-weight:700;cursor:pointer;font-family:var(--font);">Dismiss</button>'
+    + '</div>'
+    + '</div>';
+
+  modal.addEventListener('click', function(e) { if (e.target === modal) modal.remove(); });
+  document.body.appendChild(modal);
+
+  /* Fetch AI insights about this suggestion */
+  var aiEl = document.getElementById('explore-idea-ai');
+  try {
+    var prompt = 'A friend suggested the following for our family RV trip stop near ' + stopLabel + ':\n"' + suggestionText + '"\n\n'
+      + 'Please give us a helpful, conversational overview in 3–4 short paragraphs:\n'
+      + '1. What this place/activity is (if it\'s a recognizable attraction, restaurant, park, etc.)\n'
+      + '2. Why it could be great for a family road trip (fun factor, age-appropriateness, scenery, food, etc.)\n'
+      + '3. Practical info: estimated time needed, cost range, hours, any must-know tips\n'
+      + '4. How it fits with the area — what else is nearby that pairs well with it\n'
+      + 'Keep it warm and practical. If the suggestion is vague, make a reasonable interpretation based on the region.';
+
+    var resp = await fetch(GEMINI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: prompt })
+    });
+    var data = await resp.json();
+    var text = (data.text || (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates[0].content.parts[0] && data.candidates[0].content.parts[0].text) || '').trim();
+    if (text) {
+      /* Light markdown: bold, paragraphs */
+      var formatted = text
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/\n\n+/g, '</p><p>')
+        .replace(/\n/g, '<br>');
+      aiEl.innerHTML = '<div style="font-size:.87rem;color:var(--text);line-height:1.75;"><p style="margin:0 0 .9em 0;">' + formatted + '</p></div>';
+    } else {
+      aiEl.innerHTML = '<div style="color:var(--text-3);font-size:.84rem;text-align:center;padding:10px 0;">No AI details available — use "Add to Change Plan" to explore it with TripGenie!</div>';
+    }
+  } catch(e) {
+    aiEl.innerHTML = '<div style="color:var(--text-3);font-size:.84rem;text-align:center;padding:10px 0;">Couldn\'t load AI info right now. Use the button below to discuss it with TripGenie.</div>';
+  }
+}
+
+function _exploreIdeaAddToPlan(suggestionText) {
+  /* Close the explore modal, open Change Plan, and pre-fill with the suggestion */
+  var modal = document.getElementById('explore-idea-modal');
+  if (modal) modal.remove();
+  openChangePlanModal();
+  setTimeout(function() {
+    var ta = document.getElementById('adj-voice-ta');
+    if (ta) {
+      ta.value = 'A friend suggested: "' + suggestionText + '"\n\nCan you suggest how we could work this into our trip? Could it fit as a stop, a side trip, or an activity at a nearby location?';
+      ta.focus();
+      /* Scroll to bottom of textarea */
+      ta.scrollTop = ta.scrollHeight;
+    }
+  }, 120);
 }
 
 /* ── FRIEND MODE ─────────────────────────────────────────────────── */
@@ -22475,6 +22674,17 @@ function _smRenderAll() {
     <div id="nt-wizard-body"></div>
   </div>
 </div>
+
+<!-- ── Netlify Forms anchor: Netlify detects this at build/deploy time ──
+     Submissions sent via JS fetch in _guestSubmit().
+     View results: netlify.com → your site → Forms → friend-suggestions     -->
+<form name="friend-suggestions" data-netlify="true" netlify hidden>
+  <input name="stop_id"    type="hidden" />
+  <input name="stop_name"  type="hidden" />
+  <input name="first_name" />
+  <input name="last_name"  />
+  <textarea name="suggestion"></textarea>
+</form>
 
 </body>
 </html>

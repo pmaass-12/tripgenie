@@ -255,14 +255,23 @@ tripgenie/
   - **Tab panel overflow fixed**: Added `overflow-x: hidden` and `box-sizing: border-box` to `.tab-panel` — prevents right-edge card cutoff on dashboard, route planner, and scheduler at all viewport sizes.
   - **Share route fixed**: `_copyShareLink()` no longer stuck in "login and sync" loop. When no Supabase trip ID (legacy family-password users), falls back to copying the main app URL with a message that viewers need the viewer password. `_fallbackCopy()` updated to accept a message param.
 
+- Session 18 continued (2026-03-01):
+  - **Netlify Forms + Supabase dual-submit for suggestions**: `_guestSubmit()` now POSTs to both Netlify Forms (for email notifications to Paul) AND inserts directly into Supabase `trip_suggestions` table (for in-app visibility). Falls back to localStorage cache as tertiary. Friends submitting via `?friends=1` link get `trip_id = 'local'` in Supabase.
+  - **_loadFriendSuggestions fetches both trip IDs**: Updated Supabase query to use PostgREST OR filter: `or=(trip_id.eq.TRIPID,trip_id.eq.local)` so Paul sees ALL submissions regardless of which link friends used. Added Refresh button to header.
+  - **Suggestions header redesign**: Cleaner header with Refresh + Share Link buttons. Better "How it works" explanation that mentions Explore This Idea button.
+  - **`_exploreIdea(stopLabel, suggestionText)`**: Full implementation. Opens an 560px modal with: (1) quoted suggestion in a purple-border callout, (2) AI-generated info about the place/activity via Gemini API (3–4 paragraphs: what it is, family appeal, practical tips, nearby pairings), (3) "Add to Change Plan" button + "Dismiss" button. Background tap closes modal.
+  - **`_exploreIdeaAddToPlan(suggestionText)`**: Closes explore modal, opens `openChangePlanModal()`, pre-fills `#adj-voice-ta` with `"A friend suggested: '[text]'\n\nCan you suggest how we could work this into our trip?"`.
+  - **Guest map "We Are Here" pin**: `_initGuestMapInst(stops, arrivals)` now accepts an `arrivals` object. Finds the most recently arrived stop (latest `.time` timestamp) and renders a 44×44 orange RV emoji 🚐 marker with a pulsing animation (`@keyframes herePulse`). Popup shows "🚐 We're here right now! [city, state]". All other markers unchanged.
+  - **`_initGuestMode` extracts arrivals**: For the `?guest=TRIPID` Supabase path, extracts `td.arrivals` from the trip data and passes to `_initGuestMapInst`. For the `?friends=1` local path, reads `appState.arrivals` (works when Paul is viewing it on his own device). `guestArrivals` passed to map function.
+  - **Animation style injected once**: `@keyframes herePulse` style tag (id=herePulseStyle) added to `<head>` on first use, not duplicated on re-renders.
+
 ## Suggested Next Steps
 - **0-day waypoint stops**: User wants stops with 0 nights for driving waypoints (fuel, Walmart overnight, route planning) — not yet built
 - Push to GitHub (git push) when network is available — commits pending from sessions 8+
 - User needs to create Mapbox public token at mapbox.com (no secret scopes), then enter it in Trip Settings → RV Profile & Map Routing
-- User needs to run Supabase SQL (in PROJECT_CONTEXT) to create `trips` table with RLS for multi-user support
-- User needs to add `SUPABASE_URL` + `SUPABASE_ANON_KEY` env vars to Netlify for multi-user auth to work
+- User needs to run Supabase SQL (in PROJECT_CONTEXT) to create `trips` table with RLS for multi-user support AND the `trip_suggestions` table (see Suggestions tab setup instructions) for in-app suggestion syncing
+- User needs to add `SUPABASE_URL` + `SUPABASE_ANON_KEY` env vars to Netlify for multi-user auth + suggestion syncing to work
 - Consider adding "Nashville" and "Fredericksburg" as proper TRIP_STOPS entries (currently inferred from TRIP_DAYS but no markers on map)
 - Test voice chat on actual iPhone/iPad — may need microphone permission prompt handling
-- **Budget tab**: User requested budget categories per item (restaurants, lodging, fuel, supplies) with per-item amount input — not yet built
 - `_initDragDrop` is guarded but never implemented — drag-to-reorder time blocks in DDM could be a future feature
 - **Drive-home planning**: Help Paul figure out actual drive-time per day for the return trip (days 40–43). Currently 3 explore days + 1 drive day; likely needs 2–3 transit days with overnight hotel/campground stops.
