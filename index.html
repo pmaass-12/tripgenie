@@ -7943,7 +7943,7 @@ function renderStops() {
     // Col 1: emoji strip
     html += '<div class="sc-emoji-col" style="background:' + headerBg + ';color:#fff;">'
       + '<div style="font-size:1.5rem;line-height:1;">' + (stop.emoji || '📍') + '</div>'
-      + '<div style="font-size:.63rem;opacity:.85;font-weight:700;">#' + stop.id + '</div>'
+      + '<div style="font-size:.6rem;opacity:.8;font-weight:700;">' + (i + 1) + ' of ' + TRIP_STOPS.length + '</div>'
       + '</div>';
 
     // Col 2: name + inline subtitle (always visible)
