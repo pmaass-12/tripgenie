@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-01 (Session 18, fifth context)
+2026-03-01 (Session 18, sixth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -291,6 +291,14 @@ tripgenie/
   - **`_tripDayCount` updated**: Header now shows `_dispCounter` (total visible days) instead of the old `TRIP_DAYS.filter()` count, so "X-Day Schedule" matches the sequential numbers shown.
   - **ElevenLabs test — 2-step validation**: `_tsTestElVoice()` now first validates the API key via `/v1/user` endpoint (lightweight, no characters consumed). Clear 401 error message: "❌ Invalid key — go to elevenlabs.io → Profile → API Keys and copy a fresh key". Checks remaining character quota — if < 100 chars left, warns instead of attempting TTS. Key length sanity check (< 20 chars rejects immediately). Step 2 is the actual TTS POST with specific 401 message for that layer too.
   - **Health check 12d — schedule date gaps**: New check in `refreshTripPlan()` computes which days are visible (mirrors renderSchedule's skipDayNums logic, with drive-day protection). Walks visible days in date order checking for calendar holes. If any gap > 1 day is found, warns with dates and gap count. Passes with "✓ All N visible days are consecutive" when clean.
+
+- Session 18 continued (2026-03-01, seventh context):
+  - **Drive separator single-line pill**: Reverted from 2-row to 1-row `flex-wrap:wrap` pill per user feedback. `border-radius:100px` (full pill), `align-items:center;flex-wrap:wrap;gap:6px`. All chips wrap naturally on narrow screens.
+  - **`_getDriveDayTitle` no truck-stop destination**: `destName` now always uses the stop name / phase (`destStop ? _sn(destStop) : d.phase`), never the sleep location. Removes "Wytheville → Truck Stop" style titles.
+  - **`_getDriveDayTitle` Day 1 shows Home city**: When `prevDay === null` (first drive day), origin is now `_tripHomeStop()` name (e.g. "Warwick → Winchester, VA") instead of falling back to `d.title`.
+  - **Dashboard `_gVisibleDayCount` inline compute**: `renderDashboard()` now computes `_gVisibleDayCount` itself when 0 (before `renderSchedule()` has run), so "Day X of N" is correct even on first load.
+  - **`2h ea` → `2h drive` for short drives**: Drive label only shows "ea" (each leg) when `_splitResolved && d.driveHours > _maxDriveH`. Short drives that fit in one sitting now show "2h drive" not "2h ea".
+  - **Virtual drive separators at all phase transitions**: New `_renderVirtualDriveSep(prevStop, destStop, d, effectiveDate, displayNum)` function. Uses haversine + 1.3x road factor + 55 mph to estimate drive time. Skips if < 1 hour. Renders same orange pill with "est." badge (so user knows it's inferred). Inserted in `renderSchedule` at every stop-change transition that has no explicit `driveDay:true` entry. Fixes missing Memphis→Austin separator.
 
 - Session 18 continued (2026-03-01, sixth context):
   - **Dashboard "Day X of 52" fix**: Added `_gVisibleDayCount` global set by `renderSchedule()`. Dashboard shows `(_gVisibleDayCount || TRIP_DAYS.length)` so "Day 1 of 45" matches "45-Day Schedule".

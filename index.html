@@ -4978,24 +4978,10 @@ function _getDriveDayTitle(d) {
   var destStop = getStop(d.stopId);
   var myPhase  = d.phase || '';
 
-  /* Destination: prefer the day's own sleep location for intermediate legs
-     (e.g. "Walmart Fredericksburg" on the night before arriving home).
-     Fall back to the stop's city name for same-day arrival legs.         */
-  var destName;
-  if (d.sleep && d.sleep !== 'HOME!' && d.sleep !== '') {
-    var _cleaned = _cleanSleepLabel(d.sleep);
-    // Only use sleep as destination when it looks like an overnight transit
-    // stop (walmart, boondock, etc.) — not an RV-park inside a destination
-    if (d.sleepType === 'walmart' || d.sleepType === 'boondock' || d.sleepType === 'rest_area') {
-      destName = _cleaned || (destStop ? _sn(destStop) : (d.phase || 'destination'));
-    } else {
-      destName = destStop ? _sn(destStop) : (d.phase || 'destination');
-    }
-  } else if (d.sleep === 'HOME!' || !d.sleep) {
-    destName = destStop ? _sn(destStop) : (d.phase || 'destination');
-  } else {
-    destName = destStop ? _sn(destStop) : (d.phase || 'destination');
-  }
+  /* Destination: always use the proper stop/phase name — never show a sleep
+     location (truck stop, Walmart, etc.) as the destination in the title.
+     Sleep location is where you're spending the night, not the destination. */
+  var destName = destStop ? _sn(destStop) : (d.phase || 'destination');
 
   // Find the immediate preceding non-removed day
   var prevDay = null;
@@ -5004,7 +4990,12 @@ function _getDriveDayTitle(d) {
     if (!pd || removedIds[pd.stopId]) continue;
     prevDay = pd; break;
   }
-  if (!prevDay) return d.title;
+  if (!prevDay) {
+    /* Day 1 has no preceding trip day — use home city as origin */
+    var _hs = _tripHomeStop();
+    var _homeCity = _hs ? _sn(_hs) : 'Home';
+    return _homeCity + ' \u2192 ' + destName;
+  }
   var prevPhase = prevDay.phase || '';
   if (prevPhase !== myPhase) {
     // Different phase — standard case: use prev phase name as origin
@@ -5459,6 +5450,17 @@ function renderDashboard() {
   var curStop  = dayData ? getStop(dayData.stopId) : null;
   var sleep    = dayData ? getDaySleep(dayNum)  : '—';
   var daysLeft = Math.max(0, Math.ceil((end - today) / 86400000));
+  /* Compute visible day count here too so dashboard is correct even before renderSchedule() runs */
+  if (!_gVisibleDayCount) {
+    var _removedSids = appState.removedStops || {};
+    var _dbCount = 0;
+    TRIP_DAYS.forEach(function(d) {
+      if (d.sleepType === 'home' && !d.driveDay) return;
+      if (_removedSids[d.stopId]) return;
+      _dbCount++;
+    });
+    _gVisibleDayCount = _dbCount;
+  }
 
   // ── Pre-compute stats (no logic inside template strings) ──────────
   var milesCompleted = 0;
@@ -7719,7 +7721,11 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
   /* Meta line */
   var metaParts = ['Day\u00a0' + displayNum, dWday + '\u00a0' + dMDay];
   if (d.miles > 0) metaParts.push(d.miles + '\u00a0mi');
-  var _driveLabel = _splitResolved ? (_splitHours + 'h\u00a0ea') : (d.driveHours + 'h\u00a0drive');
+  /* Only show "ea" (each leg) if the drive was actually split into 2 overnight segments.
+     Short drives ≤ maxDriveH should never say "ea" even if splitResolved is stored. */
+  var _driveLabel = (_splitResolved && d.driveHours > _maxDriveH)
+    ? (_splitHours + 'h\u00a0ea')
+    : ((d.driveHours || 0) + 'h\u00a0drive');
   if (_sbTotalH > 0) _driveLabel += '\u00a0+\u00a0' + _sbTotalH + 'h\u00a0stops';
   if (d.driveHours > 0) metaParts.push(_driveLabel);
 
@@ -7760,18 +7766,14 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
   var _clr     = _isBefore ? '#bbb' : 'var(--orange)';
   var _line    = 'flex:1;height:2px;background:repeating-linear-gradient(90deg,' + _clr + ' 0,' + _clr + ' 8px,transparent 8px,transparent 16px);min-width:8px;flex-shrink:1;';
 
-  /* Two-row pill: row 1 = route title + meta; row 2 = depart chip + arrive chip + badges + delete */
-  return '<div style="display:flex;align-items:center;gap:0;position:relative;margin:5px 0 5px;" onclick="openDayDetail(' + d.day + ')" title="' + _title.replace(/'/g, "&#39;") + ' — tap for detail" style="cursor:pointer;">'
+  /* Single-row pill that wraps naturally on narrow screens */
+  return '<div style="display:flex;align-items:center;gap:0;position:relative;margin:5px 0 5px;cursor:pointer;" onclick="openDayDetail(' + d.day + ')" title="' + _title.replace(/'/g, "&#39;") + ' — tap for detail">'
     + '<div style="' + _line + '"></div>'
-    + '<div style="flex-shrink:0;background:' + _pillBg + ';color:#fff;border-radius:14px;padding:7px 14px;font-size:.78rem;font-weight:800;display:flex;flex-direction:column;gap:5px;box-shadow:' + _shadow + ';max-width:88%;">'
-    + '<div style="display:flex;align-items:center;gap:7px;overflow:hidden;">'
+    + '<div style="flex-shrink:0;background:' + _pillBg + ';color:#fff;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;display:flex;align-items:center;flex-wrap:wrap;gap:6px;box-shadow:' + _shadow + ';max-width:90%;">'
     + '<i class="fa-solid fa-rv" style="flex-shrink:0;font-size:.85rem;"></i>'
-    + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;">' + _title + '</span>'
-    + '<span style="font-weight:500;opacity:.82;font-size:.7rem;flex-shrink:0;white-space:nowrap;">' + metaParts.join(' &middot; ') + '</span>'
-    + '</div>'
-    + '<div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">'
+    + '<span style="white-space:nowrap;">' + _title + '</span>'
+    + '<span style="font-weight:500;opacity:.82;font-size:.7rem;white-space:nowrap;">' + metaParts.join(' &middot; ') + '</span>'
     + _departChip + _arrivalChip + badges + _deleteChip
-    + '</div>'
     + '</div>'
     + '<div style="' + _line + '"></div>'
     + '</div>';
@@ -7839,6 +7841,77 @@ function _deleteDriveBar(dayNum) {
   saveState(appState);
   showToast('Drive day removed', 2000);
   renderSchedule();
+}
+
+/* ── VIRTUAL DRIVE SEPARATOR ─────────────────────────────────────────────
+   Renders a drive pill for stop-to-stop transitions that have no explicit
+   driveDay entry (e.g. AI-generated trips, or user-removed drive days).
+   Uses haversine distance to estimate drive time; skipped if < 1 hour. ── */
+function _renderVirtualDriveSep(prevStop, destStop, d, effectiveDate, displayNum) {
+  if (!prevStop || !destStop || !prevStop.lat || !prevStop.lng || !destStop.lat || !destStop.lng) return '';
+  /* Haversine distance in miles */
+  var R = 3958.8;
+  var lat1 = prevStop.lat * Math.PI / 180, lat2 = destStop.lat * Math.PI / 180;
+  var dLat = (destStop.lat - prevStop.lat) * Math.PI / 180;
+  var dLng = (destStop.lng - prevStop.lng) * Math.PI / 180;
+  var a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)*Math.sin(dLng/2);
+  var _straight = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  var _estMiles = Math.round(_straight * 1.3); /* road distance ~30% more than straight-line */
+  var _estHours = Math.round(_estMiles / 55 * 10) / 10; /* ~55 mph average with RV */
+  if (_estHours < 1) return ''; /* skip separators for <1 h hops */
+
+  var _title = _sn(prevStop) + ' \u2192 ' + _sn(destStop);
+  var _live = tripIsLive();
+  var _isBefore = _live && d.day < tripDay();
+  var _pillBg = _isBefore ? '#bbb' : 'var(--orange)';
+  var _clr    = _isBefore ? '#bbb' : 'var(--orange)';
+  var _shadow = _isBefore ? 'none' : '0 2px 8px rgba(232,129,58,.35)';
+  var _line   = 'flex:1;height:2px;background:repeating-linear-gradient(90deg,' + _clr + ' 0,' + _clr + ' 8px,transparent 8px,transparent 16px);min-width:8px;flex-shrink:1;';
+
+  var dWday = effectiveDate.toLocaleDateString('en-US', { weekday: 'short' });
+  var dMDay = effectiveDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+
+  /* Departure time */
+  var _departTime = (appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].departTime)
+    || (appState.drivingPrefs && appState.drivingPrefs.departureTime) || '08:00';
+  var _departH = parseInt(_departTime.split(':')[0], 10);
+  var _departM = parseInt(_departTime.split(':')[1] || '0', 10);
+  var _departDisp = (function() {
+    var h = _departH, m = _departM, ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12 || 12;
+    return h + (m ? ':' + String(m).padStart(2,'0') : '') + ' ' + ampm;
+  })();
+
+  var _arrivalH = _departH + Math.floor(_departM / 60) + _estHours;
+  var _fmtH = function(h) { h = h % 24; var ampm = h >= 12 ? 'PM' : 'AM'; h = h%12||12; return h + ' ' + ampm; };
+  var _arrivalStr = '~' + _fmtH(Math.floor(_arrivalH)) + '\u2013' + _fmtH(Math.floor(_arrivalH) + 1);
+
+  var metaParts = ['Day\u00a0' + displayNum, dWday + '\u00a0' + dMDay];
+  if (_estMiles > 0) metaParts.push(_estMiles + '\u00a0mi');
+  metaParts.push(_estHours + 'h\u00a0drive');
+
+  var _chipBg = _isBefore ? 'rgba(0,0,0,.15)' : 'rgba(255,255,255,.2)';
+  var _departChip = '<button onclick="event.stopPropagation();openDriveTimeModal(' + d.day + ')" title="Tap to set departure time" '
+    + 'style="display:inline-flex;align-items:center;gap:4px;background:' + _chipBg + ';border:1px solid rgba(255,255,255,.35);'
+    + 'color:#fff;border-radius:100px;padding:2px 9px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;white-space:nowrap;">'
+    + '<i class="fa-regular fa-clock" style="font-size:.65rem;"></i>\u00a0Depart\u00a0' + _departDisp + '</button>';
+  var _arrivalChip = '<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.2);'
+    + 'color:rgba(255,255,255,.9);border-radius:100px;padding:2px 9px;font-size:.68rem;font-weight:600;white-space:nowrap;flex-shrink:0;">'
+    + '\u2192\u00a0Arrive\u00a0' + _arrivalStr + '</span>';
+  /* "est." badge so user knows this is inferred, not data-entered */
+  var _estBadge = '<span style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:100px;'
+    + 'padding:2px 8px;font-size:.65rem;font-weight:700;flex-shrink:0;white-space:nowrap;opacity:.85;">est.</span>';
+
+  return '<div style="display:flex;align-items:center;gap:0;position:relative;margin:5px 0 5px;cursor:pointer;" onclick="openDayDetail(' + d.day + ')" title="' + _title.replace(/'/g,"&#39;") + ' — estimated drive">'
+    + '<div style="' + _line + '"></div>'
+    + '<div style="flex-shrink:0;background:' + _pillBg + ';color:#fff;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;display:flex;align-items:center;flex-wrap:wrap;gap:6px;box-shadow:' + _shadow + ';max-width:90%;">'
+    + '<i class="fa-solid fa-rv" style="flex-shrink:0;font-size:.85rem;"></i>'
+    + '<span style="white-space:nowrap;">' + _title + '</span>'
+    + '<span style="font-weight:500;opacity:.82;font-size:.7rem;white-space:nowrap;">' + metaParts.join(' &middot; ') + '</span>'
+    + _departChip + _arrivalChip + _estBadge
+    + '</div>'
+    + '<div style="' + _line + '"></div>'
+    + '</div>';
 }
 
 function renderSchedule() {
@@ -7952,8 +8025,17 @@ function renderSchedule() {
     if (_phaseJustChanged) {
       var _dIsHome = d.sleepType === 'home';
       /* Drive days get their phase header rendered AFTER the separator (see below).
-         Non-drive days render it here, before the card — normal behavior.          */
+         Non-drive days render it here — but first inject a virtual drive separator
+         if there's a different stop being visited (i.e. a cross-stop transition that
+         has no explicit driveDay entry). Skip if either stop was removed.           */
       if (!d.driveDay && !removedStopIds[d.stopId] && !(_dIsHome && _lastHeaderWasHome)) {
+        if (lastStopId && lastStopId !== d.stopId && !_dIsHome && stop && stop.lat && stop.lng) {
+          var _prevStopForSep = getStop(lastStopId);
+          if (_prevStopForSep && !removedStopIds[lastStopId]) {
+            var _vsep = _renderVirtualDriveSep(_prevStopForSep, stop, d, _effectiveDate, _dayDisplayNum[d.day] || d.day);
+            if (_vsep) html += _vsep;
+          }
+        }
         html += phaseHeaderHtml(d.phase, d);
         _lastHeaderWasHome = _dIsHome;
       }
