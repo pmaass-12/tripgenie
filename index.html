@@ -7325,32 +7325,85 @@ function removePhaseDay(stopId) {
   showToast(newVal < 0 ? 'Day hidden from schedule' : 'Extra day removed', 1600);
 }
 
-/* ── RENDER PAUSE SCHEDULE BLOCK ─────────────────────────────────── */
-/* Remove an entire stop/phase from the trip (hides all days for that stop) */
-/* Called from the trash icon on individual white schedule rows.
-   Shows a confirm dialog then delegates to removeStopFromTrip. */
+/* ── DAY ROW ACTION SHEET ─────────────────────────────────────────
+   Opened by the trash icon on individual schedule day rows.
+   Lets the user choose: remove 1 day  OR  remove the entire stop.    */
+function _dayRowAction(stopId, phaseName) {
+  var stop        = getStop(stopId);
+  var displayName = stop ? _sn(stop) : (phaseName || 'this stop');
+  var phaseDays   = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
+  var extraDays   = (appState.phaseExtraDays && appState.phaseExtraDays[stopId]) || 0;
+  var visibleDays = Math.max(0, phaseDays.length + extraDays);
+  var afterRemOne = visibleDays - 1;
+
+  /* Remove any existing sheet */
+  var old = document.getElementById('day-row-action-sheet');
+  if (old) old.remove();
+
+  var safePhase = (phaseName || displayName).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+  var sheet = document.createElement('div');
+  sheet.id = 'day-row-action-sheet';
+  sheet.style.cssText = 'position:fixed;inset:0;z-index:9998;display:flex;align-items:center;justify-content:center;padding:20px;background:rgba(0,0,0,.48);';
+  sheet.onclick = function(e) { if (e.target === sheet) sheet.remove(); };
+
+  sheet.innerHTML =
+    '<div style="background:var(--card);border-radius:18px;padding:22px 20px 18px;max-width:370px;width:100%;box-shadow:0 16px 48px rgba(0,0,0,.32);">'
+    + '<div style="font-weight:900;font-size:1rem;color:var(--text);margin-bottom:3px;">' + displayName + '</div>'
+    + '<div style="font-size:.8rem;color:var(--text-2);margin-bottom:18px;">Currently <strong>' + visibleDays + '</strong> night' + (visibleDays !== 1 ? 's' : '') + ' at this stop</div>'
+    + '<div style="display:flex;flex-direction:column;gap:9px;">'
+
+    /* ── Option 1: remove 1 day ── */
+    + (visibleDays > 0
+      ? '<button onclick="document.getElementById(\'day-row-action-sheet\').remove();removePhaseDay(' + stopId + ')"'
+        + ' style="display:flex;align-items:center;gap:12px;padding:13px 15px;background:var(--orange-l);border:1.5px solid #f0c89e;border-radius:13px;cursor:pointer;font-family:var(--font);text-align:left;width:100%;">'
+        + '<span style="font-size:1.4rem;flex-shrink:0;">📅</span>'
+        + '<div><div style="font-weight:700;font-size:.875rem;color:var(--text);">Remove 1 day from this stop</div>'
+        + '<div style="font-size:.75rem;color:var(--text-2);margin-top:2px;">' + visibleDays + ' night' + (visibleDays!==1?'s':'') + ' → ' + afterRemOne + ' night' + (afterRemOne!==1?'s':'') + '</div></div>'
+        + '</button>'
+      : '')
+
+    /* ── Option 2: remove entire stop ── */
+    + '<button onclick="document.getElementById(\'day-row-action-sheet\').remove();_doRemoveStop(' + stopId + ',\'' + safePhase + '\')"'
+      + ' style="display:flex;align-items:center;gap:12px;padding:13px 15px;background:#fff0ef;border:1.5px solid #fca5a5;border-radius:13px;cursor:pointer;font-family:var(--font);text-align:left;width:100%;">'
+      + '<span style="font-size:1.4rem;flex-shrink:0;">🗑️</span>'
+      + '<div><div style="font-weight:700;font-size:.875rem;color:#dc2626;">Remove entire stop from trip</div>'
+      + '<div style="font-size:.75rem;color:var(--text-2);margin-top:2px;">Hides all ' + visibleDays + ' day' + (visibleDays!==1?'s':'') + ' · Restorable from Audit Log</div></div>'
+      + '</button>'
+
+    /* ── Cancel ── */
+    + '<button onclick="document.getElementById(\'day-row-action-sheet\').remove()"'
+      + ' style="padding:11px 16px;background:var(--bg);border:1px solid var(--border);border-radius:13px;cursor:pointer;font-family:var(--font);font-size:.85rem;font-weight:600;color:var(--text-2);">Cancel</button>'
+    + '</div></div>';
+
+  document.body.appendChild(sheet);
+}
+
+/* Internal: remove entire stop, no confirm (user already chose in action sheet) */
+function _doRemoveStop(stopId, phaseName) {
+  var phaseDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
+  if (phaseDays.length === 0) { showToast('Stop not found', 1600); return; }
+  if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
+  if (!appState.removedStops)   appState.removedStops = {};
+  appState.removedStops[stopId]    = true;
+  appState.phaseExtraDays[stopId]  = -(phaseDays.length);
+  saveState(appState);
+  renderSchedule(); refreshMainMap();
+  showToast('🗑️ ' + phaseName + ' removed. Use the + button to restore days.', 2800);
+}
+
+/* ── REMOVE ENTIRE STOP (legacy entry points kept for other callers) ── */
 function _removeStopFromRow(stopId, phaseName) {
-  var stop = getStop(stopId);
-  var displayName = stop ? (stop.name || phaseName) : phaseName;
-  if (!confirm('Remove "' + displayName + '" from your trip?\n\nYou can restore it later from the Audit Log tab.')) return;
-  removeStopFromTrip(stopId, phaseName);
+  /* Legacy: now just opens the action sheet */
+  _dayRowAction(stopId, phaseName);
 }
 
 function removeStopFromTrip(stopId, phaseName) {
+  /* Called from Audit Log "restore" or direct programmatic use — single confirm */
   var phaseDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
   if (phaseDays.length === 0) { showToast('Stop not found', 1600); return; }
-  /* Confirm */
-  if (!confirm('Remove "' + phaseName + '" from your trip? This hides all ' + phaseDays.length + ' days at this stop. You can restore it by adding days back with the + button.')) return;
-  if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
-  /* Set phaseExtraDays to -(phaseDays.length - 1) so only 1 day remains hidden in minimum logic
-     Actually we want to hide ALL days, so we set a special flag: removedStop */
-  if (!appState.removedStops) appState.removedStops = {};
-  appState.removedStops[stopId] = true;
-  /* Also set phaseExtraDays to max negative to collapse days via existing logic */
-  appState.phaseExtraDays[stopId] = -(phaseDays.length);
-  saveState(appState);
-  renderSchedule(); refreshMainMap();
-  showToast('🗑️ ' + phaseName + ' removed from schedule. Use + to restore days.', 2800);
+  if (!confirm('Remove "' + phaseName + '" from your trip? This hides all ' + phaseDays.length + ' days. You can restore it from the Audit Log.')) return;
+  _doRemoveStop(stopId, phaseName);
 }
 
 function restoreStopToTrip(stopId) {
@@ -7637,9 +7690,9 @@ function renderSchedule() {
     html += '<div style="display:flex;gap:4px;">';
     if (stop && stop.id !== 15) {
       html += '<button onclick="showStopForecastModal(' + stop.id + ')" title="Forecast" style="background:var(--blue-l);border:1px solid var(--border);border-radius:100px;padding:4px 8px;font-size:.72rem;cursor:pointer;color:var(--blue);font-family:var(--font);">&#127780;&#65039;</button>';
-      /* Trash: remove this stop from trip (soft-delete; restorable from Audit Log) */
+      /* Day-row action button — opens action sheet (remove 1 day / remove whole stop) */
       var _safeRowPhase = (d.phase || '').replace(/'/g, "\\'");
-      html += '<button onclick="event.stopPropagation();_removeStopFromRow(' + d.stopId + ',\'' + _safeRowPhase + '\')" title="Remove stop from trip" style="background:#fff0ef;border:1px solid #fca5a5;border-radius:100px;padding:4px 8px;font-size:.7rem;cursor:pointer;color:#dc2626;font-family:var(--font);display:flex;align-items:center;" onmouseenter="this.style.background=\'#fee2e2\'" onmouseleave="this.style.background=\'#fff0ef\'"><i class="fa-solid fa-trash-can"></i></button>';
+      html += '<button onclick="event.stopPropagation();_dayRowAction(' + d.stopId + ',\'' + _safeRowPhase + '\')" title="Adjust days at this stop" style="background:#fff0ef;border:1px solid #fca5a5;border-radius:100px;padding:4px 8px;font-size:.7rem;cursor:pointer;color:#dc2626;font-family:var(--font);display:flex;align-items:center;gap:3px;" onmouseenter="this.style.background=\'#fee2e2\'" onmouseleave="this.style.background=\'#fff0ef\'"><i class="fa-solid fa-trash-can"></i></button>';
     }
     html += '</div>';
     html += '<span id="wx-d-' + d.day + '" class="wx-chip wx-loading" style="text-align:right;">&#9729;&#65039;</span>';
