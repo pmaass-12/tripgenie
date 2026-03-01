@@ -2932,7 +2932,7 @@
       <div style="font-size:.72rem;opacity:.8;">Your AI road-trip assistant — ask anything!</div>
     </div>
     <button id="tg-voice-toggle" onclick="_tgToggleVoiceMode()" title="Toggle voice readback (reads Genie's responses aloud)" style="background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:6px 12px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);">🔇 Voice</button>
-    <button id="tg-hf-btn" onclick="_tgToggleHandsFree()" title="Hands-free: speak → Genie replies → auto-listens" style="background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.25);color:#fff;border-radius:100px;padding:6px 11px;font-size:.88rem;font-weight:700;cursor:pointer;font-family:var(--font);">🎙️</button>
+    <button id="tg-hf-btn" onclick="_tgToggleHandsFree()" title="Hands-free: speak → Genie replies → auto-listens" style="background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.25);color:#fff;border-radius:100px;padding:7px 12px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px;"><svg id="tg-hf-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 18" width="20" height="16" fill="currentColor" style="display:block;flex-shrink:0;"><rect x="0" y="6" width="3" height="6" rx="1.5"/><rect x="4.75" y="2.5" width="3" height="13" rx="1.5"/><rect x="9.5" y="0" width="3" height="18" rx="1.5"/><rect x="14.25" y="3" width="3" height="12" rx="1.5"/><rect x="19" y="6" width="3" height="6" rx="1.5"/></svg></button>
     <button onclick="clearTripGenieHistory()" title="Clear conversation memory" style="background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.25);color:rgba(255,255,255,.8);border-radius:100px;padding:6px 10px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);">🗑️</button>
     <button onclick="closeTripGenie()" style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:100px;padding:6px 14px;font-size:.85rem;font-weight:800;cursor:pointer;font-family:var(--font);">&#215; Close</button>
   </div>
@@ -7389,6 +7389,73 @@ function _refreshAll(silent) {
     try { _clearAndRebuildMapMarkers(window.mainMap); } catch(e) {}
   }, 150);
   if (!silent) showToast('Views refreshed ↻', 1400);
+}
+
+/* ── RECALCULATE DRIVE MILES ──────────────────────────────────────
+   For each drive day in TRIP_DAYS, calls OSRM to get real road
+   distance and duration between the departure stop and arrival stop.
+   Updates d.miles and d.driveHours in-place, then saves + refreshes.
+   Uses a small delay between calls to avoid rate-limiting.            */
+async function _recalcDriveMiles(silent) {
+  var days  = (appState && appState.customTripData && appState.customTripData.days)  || TRIP_DAYS;
+  var stops = (appState && appState.customTripData && appState.customTripData.stops) || TRIP_STOPS;
+  var homeId = _homeId || 15;
+
+  if (!silent) showToast('⏳ Calculating real drive distances…', 3000);
+
+  /* Build legs: { fromStopId, toStopId, dayIdx } for each drive day */
+  var legs = [];
+  var prevStopId = homeId;
+  days.forEach(function(d, i) {
+    if (d.driveDay && String(d.stopId) !== String(prevStopId)) {
+      legs.push({ fromId: prevStopId, toId: d.stopId, dayIdx: i });
+    }
+    prevStopId = d.stopId;
+  });
+
+  var updated = 0, failed = 0;
+  for (var li = 0; li < legs.length; li++) {
+    var leg     = legs[li];
+    var fromSt  = stops.find(function(s) { return String(s.id) === String(leg.fromId); });
+    var toSt    = stops.find(function(s) { return String(s.id) === String(leg.toId); });
+    if (!fromSt || !toSt || !fromSt.lat || !fromSt.lng || !toSt.lat || !toSt.lng) { failed++; continue; }
+    try {
+      /* OSRM: overview=false → returns only distance + duration, no geometry */
+      var osrmUrl = 'https://router.project-osrm.org/route/v1/driving/'
+        + fromSt.lng.toFixed(5) + ',' + fromSt.lat.toFixed(5) + ';'
+        + toSt.lng.toFixed(5)   + ',' + toSt.lat.toFixed(5)
+        + '?overview=false';
+      var resp = await fetch(osrmUrl);
+      var data = await resp.json();
+      if (data.routes && data.routes[0]) {
+        var meters = data.routes[0].distance;
+        var secs   = data.routes[0].duration;
+        var miles  = Math.round(meters / 1609.344);
+        var hrs    = Math.round(secs / 3600 * 4) / 4; /* nearest ¼ hour */
+        days[leg.dayIdx].miles      = miles;
+        days[leg.dayIdx].driveHours = hrs;
+        updated++;
+      } else { failed++; }
+    } catch(e) { failed++; }
+    /* Brief pause between calls — OSRM public instance has soft rate limits */
+    if (li < legs.length - 1) await new Promise(function(res) { setTimeout(res, 180); });
+  }
+
+  if (updated > 0) {
+    /* Keep customTripData.days in sync */
+    if (appState.customTripData) appState.customTripData.days = days;
+    saveState(appState);
+    _refreshAll(true);
+    var _newTotal = days.filter(function(d) { return d.driveDay; })
+                       .reduce(function(s, d) { return s + (d.miles || 0); }, 0);
+    if (appState.customTripData) appState.customTripData.totalMiles = _newTotal;
+    CONFIG.totalMiles = _newTotal;
+    saveState(appState);
+    _refreshAll(true);
+    showToast('✅ Updated ' + updated + ' drive legs — ' + _newTotal.toLocaleString() + ' mi total' + (failed ? ' (' + failed + ' failed)' : ''), 3500);
+  } else {
+    showToast('⚠️ Could not reach routing service — try again later', 2500);
+  }
 }
 
 /* ── DAY ROW ACTION SHEET ─────────────────────────────────────────
@@ -15047,6 +15114,11 @@ function renderHealthCheckTab() {
     + '✓ Activity time order &nbsp;·&nbsp; ✓ Start date sync &nbsp;·&nbsp; ✓ Restaurant preferences &nbsp;·&nbsp; ✓ Weather &amp; AI cache'
     + '</div>';
   html += '<button onclick="refreshTripPlan()" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:var(--radius-s);padding:14px;font-size:.95rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:8px;"><i class="fa-solid fa-stethoscope"></i> Run Health Check &amp; Fix Issues</button>';
+  html += '<div style="margin-top:10px;padding:12px 14px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-s);">';
+  html += '<div style="font-size:.78rem;font-weight:700;color:var(--text-2);margin-bottom:6px;"><i class="fa-solid fa-route"></i> Recalculate Drive Miles</div>';
+  html += '<div style="font-size:.75rem;color:var(--text-3);line-height:1.5;margin-bottom:10px;">Calls real road routing for each drive leg and updates drive day mileage. Run this if your total miles looks wrong (e.g. shows 2,000 mi instead of 8,000+ mi).</div>';
+  html += '<button onclick="_recalcDriveMiles()" style="width:100%;background:var(--orange);color:#fff;border:none;border-radius:var(--radius-s);padding:12px;font-size:.9rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:8px;"><i class="fa-solid fa-calculator"></i> Recalculate Drive Miles</button>';
+  html += '</div>';
   html += '</div></div>';
   html += '</div>';
   el.innerHTML = html;
@@ -16534,6 +16606,17 @@ function refreshTripPlan() {
     fixCount++;
   } else if (_computedMiles > 0) {
     issues.push({ type:'info', msg: 'Total miles \u2713 ' + _computedMiles.toLocaleString() + ' mi across ' + days.filter(function(d){return d.driveDay && d.miles;}).length + ' drive days' });
+  }
+
+  /* ── 12c. Drive days with 0 miles — auto-trigger real routing recalc ──── */
+  var _zeroDriveDays = days.filter(function(d) { return d.driveDay && (!d.miles || d.miles === 0); });
+  if (_zeroDriveDays.length > 2) {
+    issues.push({ type:'fix', msg: _zeroDriveDays.length + ' drive days have 0 miles — running real road distance calculation via OSRM to fix mileage accuracy. This may take 30–60 seconds.' });
+    fixCount++;
+    /* Kick off async recalc — runs in background while health check report renders */
+    setTimeout(function() { _recalcDriveMiles(true); }, 500);
+  } else if (_zeroDriveDays.length > 0) {
+    issues.push({ type:'warn', msg: _zeroDriveDays.length + ' drive day(s) have 0 miles recorded. Go to Trip Settings → Health Check → Recalculate Drive Miles to fix.' });
   }
 
   /* ── APPLY FIXES ─────────────────────────────────────────────────────────── */
@@ -18383,8 +18466,9 @@ function _tgUpdateVoiceUI() {
     voiceBtn.style.borderColor = on ? 'rgba(255,255,255,.7)'  : 'rgba(255,255,255,.3)';
   }
   if (hfBtn) {
-    hfBtn.innerHTML         = _tgHandsFree ? '🔴 Live' : '🎙️';
-    hfBtn.style.background  = _tgHandsFree ? 'rgba(231,76,60,.45)' : 'rgba(255,255,255,.1)';
+    var _waveIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 18" width="20" height="16" fill="currentColor" style="display:block;flex-shrink:0;"><rect x="0" y="6" width="3" height="6" rx="1.5"/><rect x="4.75" y="2.5" width="3" height="13" rx="1.5"/><rect x="9.5" y="0" width="3" height="18" rx="1.5"/><rect x="14.25" y="3" width="3" height="12" rx="1.5"/><rect x="19" y="6" width="3" height="6" rx="1.5"/></svg>';
+    hfBtn.innerHTML         = _tgHandsFree ? _waveIcon + '<span style="font-size:.78rem;">Live</span>' : _waveIcon;
+    hfBtn.style.background  = _tgHandsFree ? 'rgba(231,76,60,.55)' : 'rgba(255,255,255,.1)';
     hfBtn.style.borderColor = _tgHandsFree ? '#e74c3c' : 'rgba(255,255,255,.25)';
     hfBtn.title = _tgHandsFree ? 'Hands-free active — tap to stop' : 'Hands-free: speak → Genie replies → auto-listens';
   }
