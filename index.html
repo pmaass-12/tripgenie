@@ -4711,6 +4711,93 @@ function _tripHomeStop() {
   }
   return null;
 }
+/* ── STATE INFERENCE + NORMALISER (global) ───────────────────────── */
+/* Returns the 2-letter state/province for a stop.
+   1) Normalises whatever is in stop.state (handles "California", "Tn", "TX").
+   2) Falls back to a known national-parks / major-cities lookup when state is absent. */
+var _KNOWN_STOP_STATES = {
+  /* National Parks & landmarks */
+  'Petrified National Forest':'AZ','Petrified Forest National Park':'AZ',
+  'Grand Canyon':'AZ','Grand Canyon National Park':'AZ','Sedona':'AZ',
+  'Zion National Park':'UT','Bryce Canyon':'UT','Bryce Canyon National Park':'UT',
+  'Moab':'UT','Arches National Park':'UT','Canyonlands National Park':'UT',
+  'Joshua Tree':'CA','Joshua Tree National Park':'CA',
+  'Big Sur':'CA','Death Valley':'CA','Death Valley National Park':'CA',
+  'Yosemite':'CA','Yosemite National Park':'CA','Sequoia National Park':'CA',
+  'Malibu':'CA','Carmel':'CA','Monterey':'CA','Santa Barbara':'CA',
+  'Great Smoky Mountains':'TN','Great Smoky Mountains National Park':'TN',
+  'Shenandoah':'VA','Shenandoah National Park':'VA',
+  'White Sands':'NM','White Sands National Park':'NM','Carlsbad Caverns':'NM',
+  'Big Bend National Park':'TX',
+  'Yellowstone':'WY','Yellowstone National Park':'WY',
+  'Grand Teton':'WY','Grand Teton National Park':'WY',
+  'Glacier National Park':'MT',
+  'Rocky Mountain National Park':'CO',
+  'Mount Rushmore':'SD','Badlands National Park':'SD',
+  'Olympic National Park':'WA','Mount Rainier':'WA',
+  'Crater Lake':'OR','Crater Lake National Park':'OR',
+  'Acadia National Park':'ME',
+  'Everglades National Park':'FL',
+  /* Major cities commonly entered without state */
+  'Memphis':'TN','Nashville':'TN','Knoxville':'TN','Chattanooga':'TN',
+  'Atlanta':'GA','Savannah':'GA','Augusta':'GA',
+  'Charleston':'SC','Columbia':'SC',
+  'Charlotte':'NC','Raleigh':'NC','Asheville':'NC','Durham':'NC',
+  'Richmond':'VA','Virginia Beach':'VA','Roanoke':'VA',
+  'New Orleans':'LA','Baton Rouge':'LA','Shreveport':'LA',
+  'Houston':'TX','San Antonio':'TX','Dallas':'TX','El Paso':'TX','Fort Worth':'TX',
+  'Oklahoma City':'OK','Tulsa':'OK',
+  'Little Rock':'AR','Fayetteville':'AR',
+  'Jackson':'MS','Biloxi':'MS',
+  'Birmingham':'AL','Montgomery':'AL','Mobile':'AL',
+  'Louisville':'KY','Lexington':'KY',
+  'Indianapolis':'IN','Fort Wayne':'IN',
+  'Columbus':'OH','Cleveland':'OH','Cincinnati':'OH','Toledo':'OH',
+  'Detroit':'MI','Grand Rapids':'MI','Lansing':'MI',
+  'Chicago':'IL','Springfield':'IL',
+  'Milwaukee':'WI','Madison':'WI',
+  'Minneapolis':'MN','Saint Paul':'MN','Duluth':'MN',
+  'Kansas City':'MO','St. Louis':'MO','Saint Louis':'MO',
+  'Omaha':'NE','Lincoln':'NE',
+  'Wichita':'KS',
+  'Sioux Falls':'SD','Rapid City':'SD',
+  'Fargo':'ND','Bismarck':'ND',
+  'Denver':'CO','Colorado Springs':'CO','Boulder':'CO',
+  'Albuquerque':'NM','Santa Fe':'NM','Las Cruces':'NM',
+  'Phoenix':'AZ','Tucson':'AZ','Scottsdale':'AZ','Mesa':'AZ','Flagstaff':'AZ',
+  'Salt Lake City':'UT','Provo':'UT','Ogden':'UT',
+  'Las Vegas':'NV','Reno':'NV',
+  'Los Angeles':'CA','San Francisco':'CA','San Diego':'CA','Sacramento':'CA',
+  'Santa Monica':'CA','Oakland':'CA','San Jose':'CA','Fresno':'CA',
+  'Portland':'OR','Salem':'OR','Eugene':'OR','Bend':'OR',
+  'Seattle':'WA','Spokane':'WA','Tacoma':'WA',
+  'Boise':'ID','Idaho Falls':'ID',
+  'Missoula':'MT','Great Falls':'MT','Billings':'MT',
+  'Cheyenne':'WY','Casper':'WY',
+  'Anchorage':'AK','Juneau':'AK','Fairbanks':'AK',
+  'Honolulu':'HI',
+  'Pittsburgh':'PA','Philadelphia':'PA','Allentown':'PA','Erie':'PA',
+  'Baltimore':'MD','Annapolis':'MD',
+  'Washington DC':'DC','Washington':'DC',
+  'New York':'NY','Buffalo':'NY','Rochester':'NY','Albany':'NY',
+  'Boston':'MA','Worcester':'MA','Springfield MA':'MA',
+  'Providence':'RI',
+  'Hartford':'CT','New Haven':'CT','Bridgeport':'CT',
+  'Manchester':'NH','Concord':'NH',
+  'Burlington':'VT','Montpelier':'VT',
+  'Portland ME':'ME','Bangor':'ME',
+  'Wilmington':'DE',
+  'Atlantic City':'NJ','Newark':'NJ','Trenton':'NJ',
+  'Miami':'FL','Tampa':'FL','Orlando':'FL','Jacksonville':'FL','Tallahassee':'FL',
+};
+function _inferStopState(stop) {
+  if (!stop) return '';
+  /* If stop has a state, normalise it */
+  if (stop.state) return _normState(stop.state);
+  /* No state — try the known lookup by stop name */
+  return _KNOWN_STOP_STATES[stop.name] || '';
+}
+
 /* ── STATE / PROVINCE NORMALISER (global) ─────────────────────────── */
 var _STATE_ABBR_MAP = {
   'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR','California':'CA',
@@ -4740,8 +4827,8 @@ function _normState(st) {
 
 function _sn(stop) {
   if (!stop) return '';
-  if (!stop.state) return stop.name || '';
-  var normSt = _normState(stop.state);
+  var normSt = _inferStopState(stop); // normalises + falls back to known-places lookup
+  if (!normSt) return stop.name || '';
   var suffix = ', ' + normSt;
   if ((stop.name || '').slice(-suffix.length) === suffix) return stop.name;
   return (stop.name || '') + suffix;
@@ -4757,9 +4844,10 @@ function _stopCityDisplay(stop) {
   if (!stop) return '';
   var overrides = appState.stopCityNames || {};
   var city = overrides[stop.id] ? overrides[stop.id] : null;
-  var statePart = stop.state ? ', ' + _normState(stop.state) : (stop.country ? ', ' + stop.country : '');
+  var infSt = _inferStopState(stop);
+  var statePart = infSt ? ', ' + infSt : (stop.country ? ', ' + stop.country : '');
   if (city) return city + statePart;
-  // No override — use stop name + state
+  // No override — use stop name + inferred state
   return _sn(stop);
 }
 
@@ -5872,7 +5960,8 @@ function renderStopNavigator() {
     }
     var stayMeta = (typeof _getStayMeta === 'function') ? _getStayMeta(stopId) : { icon:'🏕️' };
     var name    = stop ? (stop.name || stop.phase || ('Stop ' + (idx+1))) : ('Stop ' + (idx+1));
-    var state   = stop && stop.state ? ', ' + stop.state : '';
+    var _navSt  = stop ? _inferStopState(stop) : '';
+    var state   = _navSt ? ', ' + _navSt : '';
     var num     = idx + 1;
     /* Waypoints get a diamond badge instead of a numbered orange circle */
     var badgeHtml = isWaypoint

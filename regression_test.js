@@ -200,8 +200,11 @@ test('_sn: normal stop → "City, ST"', () => {
 test('_sn: stop where name already has state → no double state', () => {
   assertEqual(_sn({ name:'Warwick, NY', state:'NY' }), 'Warwick, NY');
 });
-test('_sn: stop with no state → just name', () => {
-  assertEqual(_sn({ name:'Nashville' }), 'Nashville');
+test('_sn: stop with unknown name + no state → just name', () => {
+  assertEqual(_sn({ name:'Smallville' }), 'Smallville'); // not in known-states lookup
+});
+test('_sn: stop with known city name but no state → infers state', () => {
+  assertEqual(_sn({ name:'Nashville' }), 'Nashville, TN'); // inferred via _KNOWN_STOP_STATES
 });
 test('_sn: null stop → empty string', () => {
   assertEqual(_sn(null), '');
