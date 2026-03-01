@@ -2520,6 +2520,7 @@
         <span style="background:var(--orange);color:#fff;border-radius:100px;padding:4px 11px;font-size:.72rem;font-weight:800;white-space:nowrap;font-family:var(--font);"><i class="fa-solid fa-sliders"></i><span class="hdr-mode-label"> Planning</span></span>
       </div>
       <button onclick="openHelpSearch()" title="Search the app — ask anything" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:100px;padding:5px 11px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-magnifying-glass"></i><span class="hdr-help-label"> Help</span></button>
+      <button id="refresh-btn" onclick="_refreshAll()" title="Refresh all views (schedule, map, dashboard)" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:.9rem;cursor:pointer;line-height:1;display:flex;align-items:center;" aria-label="Refresh"><i class="fa-solid fa-rotate-right"></i></button>
       <button id="dark-mode-btn" onclick="toggleDarkMode()" title="Toggle dark/light mode" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:1rem;cursor:pointer;line-height:1;display:flex;align-items:center;">🌙</button>
       <button id="debug-console-btn" onclick="_dbgOpen()" title="Debug console" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:.85rem;cursor:pointer;line-height:1;display:flex;align-items:center;position:relative;"><i class="fa-solid fa-terminal"></i><span id="debug-err-badge" style="display:none;position:absolute;top:-3px;right:-3px;background:#e53e3e;color:#fff;border-radius:50%;width:14px;height:14px;font-size:.6rem;font-weight:900;align-items:center;justify-content:center;line-height:1;"></span></button>
       <button class="logout-btn" id="logout-btn" title="Logout">
@@ -7358,7 +7359,8 @@ function _cycleToStayType(stopId, targetType) {
 function addPhaseDay(stopId) {
   if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
   appState.phaseExtraDays[stopId] = (appState.phaseExtraDays[stopId] || 0) + 1;
-  saveState(appState); renderSchedule(); renderStopNavigator();
+  saveState(appState);
+  _refreshAll();
   showToast('Extra day added!', 1600);
 }
 function removePhaseDay(stopId) {
@@ -7368,9 +7370,24 @@ function removePhaseDay(stopId) {
   var cur = appState.phaseExtraDays[stopId] || 0;
   if (cur <= minAllowed) { showToast('Stop is already a 0-day waypoint!', 1800); return; }
   appState.phaseExtraDays[stopId] = cur - 1;
-  saveState(appState); renderSchedule(); renderStopNavigator();
+  saveState(appState);
+  _refreshAll();
   var newVal = appState.phaseExtraDays[stopId];
   showToast(newVal < 0 ? 'Day hidden from schedule' : 'Extra day removed', 1600);
+}
+
+/* ── _refreshAll ────────────────────────────────────────────────────────────
+   One-stop refresh: keeps Schedule, Route Map, Dashboard, and Stop Navigator
+   all in sync after any day or stop change.  Called automatically by
+   addPhaseDay / removePhaseDay, and available via the ↻ header button.     */
+function _refreshAll(silent) {
+  try { renderSchedule(); }       catch(e) {}
+  try { renderStopNavigator(); }  catch(e) {}
+  try { renderDashboard(); }      catch(e) {}
+  if (window.mainMap) setTimeout(function() {
+    try { _clearAndRebuildMapMarkers(window.mainMap); } catch(e) {}
+  }, 150);
+  if (!silent) showToast('Views refreshed ↻', 1400);
 }
 
 /* ── DAY ROW ACTION SHEET ─────────────────────────────────────────
