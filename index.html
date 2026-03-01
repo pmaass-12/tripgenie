@@ -4711,15 +4711,80 @@ function _tripHomeStop() {
   }
   return null;
 }
+/* ── STATE / PROVINCE NORMALISER (global) ─────────────────────────── */
+var _STATE_ABBR_MAP = {
+  'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR','California':'CA',
+  'Colorado':'CO','Connecticut':'CT','Delaware':'DE','Florida':'FL','Georgia':'GA',
+  'Hawaii':'HI','Idaho':'ID','Illinois':'IL','Indiana':'IN','Iowa':'IA',
+  'Kansas':'KS','Kentucky':'KY','Louisiana':'LA','Maine':'ME','Maryland':'MD',
+  'Massachusetts':'MA','Michigan':'MI','Minnesota':'MN','Mississippi':'MS',
+  'Missouri':'MO','Montana':'MT','Nebraska':'NE','Nevada':'NV',
+  'New Hampshire':'NH','New Jersey':'NJ','New Mexico':'NM','New York':'NY',
+  'North Carolina':'NC','North Dakota':'ND','Ohio':'OH','Oklahoma':'OK',
+  'Oregon':'OR','Pennsylvania':'PA','Rhode Island':'RI','South Carolina':'SC',
+  'South Dakota':'SD','Tennessee':'TN','Texas':'TX','Utah':'UT','Vermont':'VT',
+  'Virginia':'VA','Washington':'WA','West Virginia':'WV','Wisconsin':'WI','Wyoming':'WY',
+  /* Canadian provinces */
+  'Alberta':'AB','British Columbia':'BC','Manitoba':'MB','New Brunswick':'NB',
+  'Newfoundland and Labrador':'NL','Newfoundland':'NL','Nova Scotia':'NS',
+  'Ontario':'ON','Prince Edward Island':'PE','Quebec':'QC','Saskatchewan':'SK',
+  'Northwest Territories':'NT','Nunavut':'NU','Yukon':'YT'
+};
+function _normState(st) {
+  if (!st) return '';
+  var tr = st.trim();
+  var up = tr.toUpperCase();
+  if (up.length <= 3) return up;               // already an abbreviation (2–3 chars)
+  return _STATE_ABBR_MAP[tr] || tr;             // map full name → abbr, or keep as-is
+}
+
 function _sn(stop) {
   if (!stop) return '';
   if (!stop.state) return stop.name || '';
-  var suffix = ', ' + stop.state;
+  var normSt = _normState(stop.state);
+  var suffix = ', ' + normSt;
   if ((stop.name || '').slice(-suffix.length) === suffix) return stop.name;
   return (stop.name || '') + suffix;
 }
 function _snE(stop) {
   return stop ? ((stop.emoji ? stop.emoji + ' ' : '') + _sn(stop)) : '';
+}
+
+/* ── STOP CITY NAME OVERRIDE ──────────────────────────────────────── */
+/* Returns the city display for a stop — e.g. "Myers Flat, CA".
+   Falls back to stop.name + state if no override set. */
+function _stopCityDisplay(stop) {
+  if (!stop) return '';
+  var overrides = appState.stopCityNames || {};
+  var city = overrides[stop.id] ? overrides[stop.id] : null;
+  var statePart = stop.state ? ', ' + _normState(stop.state) : (stop.country ? ', ' + stop.country : '');
+  if (city) return city + statePart;
+  // No override — use stop name + state
+  return _sn(stop);
+}
+
+function editStopCityName(stopId) {
+  var stop = getStop(stopId);
+  if (!stop) return;
+  if (!appState.stopCityNames) appState.stopCityNames = {};
+  var current = appState.stopCityNames[stopId] || '';
+  var newCity = prompt(
+    'Enter the actual city/town name for "' + stop.name + '":\n' +
+    '(This shows in day cards. The stop name stays in the route planner.)\n\n' +
+    'State will be added automatically from stop data.\n' +
+    'Leave blank to reset to default.',
+    current
+  );
+  if (newCity === null) return; // cancelled
+  if (newCity.trim()) {
+    appState.stopCityNames[stopId] = newCity.trim();
+    showToast('📍 City name set to "' + newCity.trim() + '"', 1800);
+  } else {
+    delete appState.stopCityNames[stopId];
+    showToast('City name reset to default', 1600);
+  }
+  saveState(appState);
+  renderSchedule();
 }
 function _tripStartCity() {
   var home = _tripHomeStop();
@@ -6714,11 +6779,17 @@ function phaseHeaderHtml(phase, firstDay) {
   var _iBtn  = 'background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:8px;width:26px;height:26px;font-size:.62rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;';
   var _iBtnD = 'background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.18);border-radius:8px;width:26px;height:26px;font-size:.62rem;cursor:default;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;';
 
+  var _cityDisp = pStop ? _stopCityDisplay(pStop) : '';
+  var _hasOverride = pStop && appState.stopCityNames && appState.stopCityNames[pStop.id];
   return '<div style="display:flex;align-items:center;gap:0;padding:11px 16px;background:var(--blue);color:#fff;border-radius:10px;margin:18px 0 6px;flex-wrap:wrap;row-gap:8px;">'
 
     /* ── Center: name + meta ── */
     + '<div style="flex:1;min-width:160px;">'
+    + '<div style="display:flex;align-items:center;gap:6px;">'
     + '<div style="font-weight:900;font-size:1.08rem;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;">' + _displayPhase + '</div>'
+    + '<button onclick="event.stopPropagation();editStopCityName(' + (pStop ? pStop.id : firstDay.stopId) + ')" title="Edit city/town name shown in day cards" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;padding:1px 6px;font-size:.65rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" >' + (_hasOverride ? '📍' : '✏️') + '</button>'
+    + '</div>'
+    + (_hasOverride ? '<div style="font-size:.72rem;opacity:.75;font-weight:600;margin-top:1px;">📍 ' + _cityDisp + '</div>' : '')
     + '<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
     + '<span style="font-size:.75rem;opacity:.7;font-weight:600;">' + (totalNights === 0 ? 'transit stop' : totalNights + ' night' + (totalNights !== 1 ? 's' : '')) + (extras > 0 ? ' <span style="opacity:.7">(+' + extras + ')</span>' : '') + '</span>'
     + '<span style="opacity:.35;font-size:.7rem;">·</span>'
@@ -6751,8 +6822,8 @@ function phaseHeaderHtml(phase, firstDay) {
     + '<button onclick="event.stopPropagation();addPhaseDay(' + firstDay.stopId + ')" style="background:none;border:none;color:#fff;width:28px;height:28px;font-size:1rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s;" title="Add a day">&#43;</button>'
     + '</div>'
 
-    /* Remove (destructive — subtle) */
-    + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + _safePhase + '\')" style="background:rgba(220,60,50,.25);border:1px solid rgba(255,90,80,.3);color:rgba(255,180,170,.9);border-radius:8px;padding:5px 10px;font-size:.72rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;" title="Remove this stop">&#128465;&#65039;</button>'
+    /* Remove (destructive — pill style matching white-row trash) */
+    + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + _safePhase + '\')" style="background:rgba(220,60,50,.3);border:1px solid rgba(255,120,110,.4);color:#fff;border-radius:100px;padding:4px 10px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;display:inline-flex;align-items:center;gap:4px;" title="Remove this stop"><i class="fa-solid fa-trash-can"></i></button>'
 
     + '</div>'
     + '</div>';
@@ -6962,7 +7033,10 @@ function _renderPauseScheduleBlock(pd, nights) {
     + (pd.flightOut ? '<span style="opacity:.4;font-size:.7rem;">·</span><span style="font-size:.73rem;opacity:.8;">✈ Out: ' + pd.flightOut + (pd.flightRet ? ' · In: ' + pd.flightRet : '') + '</span>' : '')
     + '</div>'
     + '</div>'
-    + '<span style="font-size:.7rem;font-weight:800;letter-spacing:.06em;opacity:.6;text-transform:uppercase;background:rgba(255,255,255,.15);border-radius:100px;padding:2px 9px;border:1px solid rgba(255,255,255,.25);flex-shrink:0;">PAUSE</span>'
+    + '<div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">'
+    + '<span style="font-size:.7rem;font-weight:800;letter-spacing:.06em;opacity:.6;text-transform:uppercase;background:rgba(255,255,255,.15);border-radius:100px;padding:2px 9px;border:1px solid rgba(255,255,255,.25);">PAUSE</span>'
+    + '<button onclick="event.stopPropagation();deletePauseDay(\'' + pd.id + '\')" style="background:rgba(180,30,20,.35);border:1px solid rgba(255,140,130,.4);color:#fff;border-radius:100px;padding:4px 10px;font-size:.7rem;cursor:pointer;font-family:var(--font);display:inline-flex;align-items:center;gap:4px;" title="Remove this pause"><i class="fa-solid fa-trash-can"></i></button>'
+    + '</div>'
     + '</div>';
 }
 
@@ -7084,7 +7158,7 @@ function renderSchedule() {
     if (stop && stop.emoji) html += '<span style="font-size:.95rem">' + stop.emoji + '</span>';
     html += '<span style="font-weight:700;font-size:1rem;color:var(--text);line-height:1.3;">' + (d.driveDay ? _getDriveDayTitle(d) : (d.title || d.name || 'Explore ' + (d.phase || 'day'))) + '</span>';
     if (isToday) html += '<span style="background:var(--orange);color:#fff;font-size:.68rem;font-weight:800;padding:2px 8px;border-radius:100px;text-transform:uppercase;">Today</span>';
-    if (_isOverflow) html += '<span style="background:#c62828;color:#fff;font-size:.65rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;">🔺 Over Schedule</span>';
+    if (_isOverflow && d.sleepType !== 'home') html += '<span style="background:#c62828;color:#fff;font-size:.65rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;">🔺 Over Schedule</span>';
     html += '</div>';
 
     // Meta row (date no longer here since it is in the badge)
@@ -7111,6 +7185,13 @@ function renderSchedule() {
       }
     } else if (!d.driveDay) {
       html += '<span style="font-size:.75rem;color:var(--green);font-weight:600;"><i class="fa-solid fa-campground"></i> Explore day</span>';
+    }
+    // City display (shows city/town name if override set, or stop name+state)
+    if (stop && d.sleepType !== 'home') {
+      var _cityLabel = _stopCityDisplay(stop);
+      if (_cityLabel && _cityLabel !== (stop.name || '')) {
+        html += '<span style="font-size:.72rem;color:var(--text-2);"><i class="fa-solid fa-location-dot" style="font-size:.65rem;opacity:.7;"></i> ' + _cityLabel + '</span>';
+      }
     }
     // Sleep
     html += '<span style="font-size:.75rem;color:var(--text-2);">' + sleepIcon(d.sleepType) + ' ' + sleep + '</span>';
@@ -8703,14 +8784,7 @@ function renderTripStats() {
     (stop.activities || []).forEach(function(act) { _classify(act, stop.name + (stop.state ? ', ' + stop.state : '')); });
   });
 
-  // States & destinations — normalize to 2-letter uppercase abbreviation
-  var _stateAbbrMap = { 'Alabama':'AL','Alaska':'AK','Arizona':'AZ','Arkansas':'AR','California':'CA','Colorado':'CO','Connecticut':'CT','Delaware':'DE','Florida':'FL','Georgia':'GA','Hawaii':'HI','Idaho':'ID','Illinois':'IL','Indiana':'IN','Iowa':'IA','Kansas':'KS','Kentucky':'KY','Louisiana':'LA','Maine':'ME','Maryland':'MD','Massachusetts':'MA','Michigan':'MI','Minnesota':'MN','Mississippi':'MS','Missouri':'MO','Montana':'MT','Nebraska':'NE','Nevada':'NV','New Hampshire':'NH','New Jersey':'NJ','New Mexico':'NM','New York':'NY','North Carolina':'NC','North Dakota':'ND','Ohio':'OH','Oklahoma':'OK','Oregon':'OR','Pennsylvania':'PA','Rhode Island':'RI','South Carolina':'SC','South Dakota':'SD','Tennessee':'TN','Texas':'TX','Utah':'UT','Vermont':'VT','Virginia':'VA','Washington':'WA','West Virginia':'WV','Wisconsin':'WI','Wyoming':'WY' };
-  function _normState(st) {
-    if (!st) return '';
-    var up = st.trim().toUpperCase();
-    if (up.length === 2) return up;  // already an abbreviation
-    return _stateAbbrMap[st.trim()] || up; // map full name → abbr
-  }
+  // States & destinations — normalize to 2-letter uppercase abbreviation (uses global _normState)
   var stateSet = {}, destList = [];
   activeStops.forEach(function(s) {
     if (s.state) stateSet[_normState(s.state)] = true;
@@ -19918,26 +19992,61 @@ function _maybeLaunchTutorial() {
 }
 
 /* ── DARK MODE ──────────────────────────────────────────────────── */
-function _initDarkMode() {
-  var pref = appState.darkMode; // 'dark', 'light', or undefined (auto)
-  if (pref === 'dark') {
+/* Modes: 'dark' = always dark, 'light' = always light,
+          'auto-night' = dark 8pm–7am, light otherwise,
+          undefined/null = follow OS system preference */
+
+function _isNightHour() {
+  var h = new Date().getHours();
+  return h >= 20 || h < 7; // 8:00 PM – 6:59 AM
+}
+
+function _applyAutoNight() {
+  if (_isNightHour()) {
     document.body.classList.add('dark-mode');
     document.body.classList.remove('light-mode');
-    _updateDarkBtn(true);
-  } else if (pref === 'light') {
-    document.body.classList.add('light-mode');
-    document.body.classList.remove('dark-mode');
-    _updateDarkBtn(false);
   } else {
-    // Auto — follow system preference; update button based on what the system chose
-    var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-    _updateDarkBtn(sysDark);
+    document.body.classList.remove('dark-mode');
+    document.body.classList.remove('light-mode');
   }
 }
 
-function _updateDarkBtn(isDark) {
+function _initDarkMode() {
+  var pref = appState.darkMode;
+  if (pref === 'dark') {
+    document.body.classList.add('dark-mode');
+    document.body.classList.remove('light-mode');
+    _updateDarkBtn('dark');
+  } else if (pref === 'light') {
+    document.body.classList.add('light-mode');
+    document.body.classList.remove('dark-mode');
+    _updateDarkBtn('light');
+  } else if (pref === 'auto-night') {
+    _applyAutoNight();
+    _updateDarkBtn('auto-night');
+    /* Check every minute so the switch happens automatically */
+    if (!window._nightModeInterval) {
+      window._nightModeInterval = setInterval(function() {
+        if (appState.darkMode === 'auto-night') { _applyAutoNight(); _updateDarkBtn('auto-night'); }
+      }, 60000);
+    }
+  } else {
+    // Follow OS preference
+    var sysDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    _updateDarkBtn(sysDark ? 'dark' : 'light');
+  }
+}
+
+function _updateDarkBtn(mode) {
   var btn = document.getElementById('dark-mode-btn');
-  if (btn) btn.textContent = isDark ? '☀️' : '🌙';
+  if (!btn) return;
+  if (mode === 'dark' || mode === true) {
+    btn.textContent = '☀️'; btn.title = 'Always dark — click for auto-night';
+  } else if (mode === 'auto-night') {
+    btn.textContent = '🌓'; btn.title = 'Auto-night (dark 8pm–7am) — click for light';
+  } else {
+    btn.textContent = '🌙'; btn.title = 'Light mode — click for dark';
+  }
 }
 
 /* ── IN-APP DEBUG CONSOLE ─────────────────────────────────────────── */
@@ -20005,20 +20114,29 @@ function _updateDarkBtn(isDark) {
 /* ─────────────────────────────────────────────────────────────────── */
 
 function toggleDarkMode() {
-  var isDark = document.body.classList.contains('dark-mode')
-    || (!document.body.classList.contains('light-mode') && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
-  if (isDark) {
-    // Switch to light
-    document.body.classList.remove('dark-mode');
-    document.body.classList.add('light-mode');
-    appState.darkMode = 'light';
-    _updateDarkBtn(false);
-  } else {
-    // Switch to dark
+  /* Cycle: light → dark → auto-night → light */
+  var cur = appState.darkMode || 'light';
+  var next;
+  if (cur === 'light') next = 'dark';
+  else if (cur === 'dark') next = 'auto-night';
+  else next = 'light'; // auto-night or anything else → light
+  appState.darkMode = next;
+  if (next === 'dark') {
     document.body.classList.add('dark-mode');
     document.body.classList.remove('light-mode');
-    appState.darkMode = 'dark';
-    _updateDarkBtn(true);
+    _updateDarkBtn('dark');
+  } else if (next === 'auto-night') {
+    _applyAutoNight();
+    _updateDarkBtn('auto-night');
+    if (!window._nightModeInterval) {
+      window._nightModeInterval = setInterval(function() {
+        if (appState.darkMode === 'auto-night') { _applyAutoNight(); _updateDarkBtn('auto-night'); }
+      }, 60000);
+    }
+  } else {
+    document.body.classList.remove('dark-mode');
+    document.body.classList.add('light-mode');
+    _updateDarkBtn('light');
   }
   saveState(appState);
 }

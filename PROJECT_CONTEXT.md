@@ -209,6 +209,16 @@ tripgenie/
   - **TripGenie / PauseGenie Gemini proxy fix**: Both `getTripGenieSuggestions()` and `getPauseGenieSuggestions()` were calling the Gemini API directly with `GEMINI_KEY` (always empty `''`), causing "No Gemini key" errors. Fixed both to use `GEMINI_URL` (the Netlify proxy) with proper request body format. `getTripGenieSuggestions` also had a stale `key` variable reference removed.
   - **Stops tab in Driving mode**: `_smSeg('stops')` called `renderStops()` which targets `#stops-content` (the regular planner div) but the driving mode shows `#sm-stops-content`. Fixed by copying innerHTML from `#stops-content` to `#sm-stops-content` after rendering.
 
+---
+
+- Session 16 (2026-03-01):
+  - **Over Schedule badge suppressed on home days**: `renderSchedule()` now checks `d.sleepType !== 'home'` before rendering the red "🔺 Over Schedule" badge. Home days (sleepType='home') never show this warning since the trip is complete.
+  - **Global `_STATE_ABBR_MAP` + `_normState()`**: Moved state/province normalization from local scope inside `renderTripStats()` to global scope before `_sn()`. Now normalizes "California"→"CA", "Tn"→"TN", etc. everywhere. Includes Canadian provinces (AB, BC, ON, QC…). `_sn(stop)` updated to call `_normState(stop.state)` so all stop name display is consistent.
+  - **Stop city name editor**: Added `_stopCityDisplay(stop)` and `editStopCityName(stopId)` functions. Stored in `appState.stopCityNames = { [stopId]: "Myers Flat" }`. Blue phase headers now show a ✏️ button (turns 📍 after override set) to set the city/town name. Day card meta shows a `📍 City, ST` chip when override is active. Destination name (e.g. "Humboldt Redwoods") stays in blue header; city name appears in individual day cards.
+  - **Auto dark mode at night**: 3-state toggle: light → dark → auto-night → light. Button cycles with icons: 🌙 / ☀️ / 🌓 with tooltip. `_applyAutoNight()` sets dark-mode class when hour is 20–6 (8pm–7am), removes it during daytime. `_nightModeInterval` runs every 60s when in auto-night mode so switch happens automatically. State saved as `appState.darkMode = 'auto-night'`.
+  - **Pause delete button**: `_renderPauseScheduleBlock()` now includes a trash can button (🗑️ pill style) inline in the orange pause bar. Calls existing `deletePauseDay(pd.id)`.
+  - **Blue-bar trash button style**: Updated the remove-stop button in `phaseHeaderHtml` from square-ish emoji style to pill shape matching white row trash: `border-radius:100px`, Font Awesome `fa-trash-can` icon, white text on semi-transparent red.
+
 ## Suggested Next Steps
 - **0-day waypoint stops**: User wants stops with 0 nights for driving waypoints (fuel, Walmart overnight, route planning) — not yet built
 - Push to GitHub (git push) when network is available — commits pending from sessions 8+
