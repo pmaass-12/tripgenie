@@ -2099,7 +2099,7 @@
           onkeydown="if(event.key==='Enter')doLogin()" />
         <button type="button" onclick="_toggleShowPassword()" id="pw-eye-btn"
           style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-3);cursor:pointer;font-size:1rem;padding:4px;line-height:1;">
-          <i class="fa-regular fa-eye" id="pw-eye-icon"></i>
+          <i class="fa-solid fa-eye" id="pw-eye-icon"></i>
         </button>
       </div>
       <!-- Forgot password -->
@@ -3825,7 +3825,7 @@ function _toggleShowPassword() {
   if (!inp) return;
   var showing = inp.type === 'text';
   inp.type = showing ? 'password' : 'text';
-  if (icon) { icon.className = showing ? 'fa-regular fa-eye' : 'fa-regular fa-eye-slash'; }
+  if (icon) { icon.className = showing ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash'; }
 }
 
 function _showProfilePicker() {
@@ -3877,22 +3877,41 @@ function _confirmCustomProfile() {
 }
 
 function _applyProfile(name, color) {
-  // Save profile linked to this Supabase user
+  // Persist profile keyed to Supabase user id (or 'guest' for legacy)
   try {
     localStorage.setItem('rv_profile_' + (_sbUser && _sbUser.id || 'guest'), JSON.stringify({ name: name, color: color }));
   } catch(e) {}
 
-  // Hide picker
+  // Hide picker overlay
   var ov = document.getElementById('profile-picker-overlay');
   if (ov) ov.style.display = 'none';
 
-  // Set globals used by the rest of the app
+  // Set shared globals
   _userName = name;
   window._loginProfile = name;
-  _saveSession('family', name);
 
-  // Enter app
-  _showMyTrips();
+  if (_sbUser) {
+    // ── Supabase path: go to My Trips dashboard ───────────────────
+    _saveSession('family', name);
+    _showMyTrips();
+  } else {
+    // ── Legacy password path: launch app directly ─────────────────
+    var mode = _legacyAuthMode || 'family';
+    _authed  = true;
+    _isFriend = mode === 'friends';
+    _isViewer = mode === 'viewer';
+    _saveSession(mode, name);
+    document.getElementById('login-screen').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    if (mode === 'viewer') {
+      loadFromCloud(function() { initApp(); _updateHeaderProfile(); applyViewerMode(); });
+    } else if (mode === 'friends') {
+      loadFromCloud(function() { initApp(); applyFriendMode(); });
+    } else {
+      showToast('&#9729;&#65039; Loading your trip data…', 1800);
+      loadFromCloud(function() { initApp(); _updateHeaderProfile(); if (_userName) { _setSyncStatus('&#9729;', 'Hi ' + _userName + '!', 'rgba(255,255,255,.7)'); setTimeout(function(){ _setSyncStatus('&#9729;','Saved (' + _userName + ')','rgba(255,255,255,.45)'); }, 2500); } });
+    }
+  }
 }
 
 function _setLoginMode(mode) {
@@ -3978,49 +3997,21 @@ async function doLogin() {
   _doLegacyLogin(passVal);
 }
 
+var _legacyAuthMode = null; // 'family' | 'viewer' | 'friends' — set before showing profile picker
+
 function _doLegacyLogin(passVal) {
   if (!passVal) passVal = (document.getElementById('password-input') || {}).value || '';
   if (passVal === CONFIG.password) {
-    // Profile required for family login
-    if (!window._loginProfile) {
-      var err = document.getElementById('login-error');
-      err.textContent = 'Please pick who you are first! 👆';
-      setTimeout(function() { err.textContent = ''; }, 3000);
-      // Highlight the profile row
-      var profRow = document.querySelector('.login-profiles-row');
-      if (profRow) { profRow.style.animation = 'none'; profRow.offsetHeight; profRow.style.animation = 'pulse-border .5s 2'; }
-      return;
-    }
-    _authed = true;
-    _isFriend = false;
-    _isViewer = false;
-    _userName = window._loginProfile || '';
-    _saveSession('family', _userName);
-    document.getElementById('login-screen').classList.add('hidden');
-    document.getElementById('app').classList.remove('hidden');
-    showToast('&#9729;&#65039; Loading your trip data…', 1800);
-    loadFromCloud(function() { initApp(); _updateHeaderProfile(); if (_userName) { _setSyncStatus('&#9729;', 'Hi ' + _userName + '!', 'rgba(255,255,255,.7)'); setTimeout(function(){ _setSyncStatus('&#9729;','Saved (' + _userName + ')','rgba(255,255,255,.45)'); }, 2500); } });
+    _legacyAuthMode = 'family';
+    _showProfilePicker(); // show picker; _applyProfile will launch app when done
   } else if (passVal === CONFIG.viewerPassword) {
-    _authed = true;
-    _isFriend = false;
-    _isViewer = true;
-    _userName = window._loginProfile || '';
-    _saveSession('viewer', _userName);
-    document.getElementById('login-screen').classList.add('hidden');
-    document.getElementById('app').classList.remove('hidden');
-    loadFromCloud(function() { initApp(); _updateHeaderProfile(); applyViewerMode(); });
+    _legacyAuthMode = 'viewer';
+    _showProfilePicker();
   } else if (passVal === CONFIG.friendsPassword) {
-    _authed = true;
-    _isFriend = true;
-    _isViewer = false;
-    _saveSession('friend', '');
-    document.getElementById('login-screen').classList.add('hidden');
-    document.getElementById('app').classList.remove('hidden');
-    loadFromCloud(function() { initApp(); applyFriendMode(); });
+    _legacyAuthMode = 'friends';
+    _showProfilePicker();
   } else {
-    var err = document.getElementById('login-error');
-    err.textContent = 'Wrong password — try again.';
-    setTimeout(function() { err.textContent = ''; }, 3000);
+    _showLoginError('Wrong password — try again.');
     document.getElementById('password-input').value = '';
     document.getElementById('password-input').focus();
   }
@@ -4509,31 +4500,40 @@ function _initVersionCheck() {
 /* ── PAGE LOAD STARTUP ──────────────────────────────────────────── */
 (function() {
   _initVersionCheck();
-  // Pre-login: update login screen with saved trip dates from localStorage
-  // so the login page shows accurate trip info even before the user logs in
+  // Pre-login: update login screen dates/title from CONFIG (always accurate)
+  // then override with any saved custom trip data from localStorage.
   (function() {
     try {
-      var raw = localStorage.getItem('rv_state');
-      if (!raw) return;
-      var saved = JSON.parse(raw);
-      var ct = saved && saved.customTripData;
-      var ts = saved && saved.tripSettings;
+      function _ldf2(d) {
+        return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
+      }
       var nameEl  = document.getElementById('login-trip-title');
       var subEl   = document.getElementById('login-trip-sub');
       var datesEl = document.getElementById('login-trip-dates');
       if (!datesEl) return;
-      function _ldf2(d) {
-        return new Date(d + 'T12:00:00').toLocaleDateString('en-US', { month:'short', day:'numeric' });
-      }
-      var start, end, totalDays, name;
-      if (ct && ct.days && ct.days.length) {
-        start = ct.days[0].date;
-        end   = ct.days[ct.days.length - 1].date;
-        totalDays = ct.days.length;
-        name  = ct.tripName;
-      } else if (ts) {
-        start = ts.startDate; end = ts.endDate; totalDays = ts.totalDays; name = ts.tripName;
-      }
+
+      // Start from CONFIG as the always-accurate baseline
+      var start = CONFIG.startDate, end = CONFIG.endDate;
+      var totalDays = CONFIG.totalDays || 46;
+      var name = CONFIG.tripName || '';
+
+      // Override with saved state if it has customised dates/name
+      try {
+        var saved = JSON.parse(localStorage.getItem('rv_state') || '{}');
+        var ct = saved.customTripData;
+        var ts = saved.tripSettings;
+        if (ct && ct.days && ct.days.length) {
+          start = ct.days[0].date;
+          end   = ct.days[ct.days.length - 1].date;
+          totalDays = ct.days.length;
+          if (ct.tripName) name = ct.tripName;
+        } else if (ts && ts.startDate) {
+          start = ts.startDate; end = ts.endDate;
+          totalDays = ts.totalDays || totalDays;
+          if (ts.tripName) name = ts.tripName;
+        }
+      } catch(e2) {}
+
       if (start && end) {
         var year = start.slice(0, 4);
         datesEl.textContent = _ldf2(start) + ' – ' + _ldf2(end) + ', ' + year;
