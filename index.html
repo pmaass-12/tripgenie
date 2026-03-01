@@ -2933,7 +2933,6 @@
       <div style="font-weight:900;font-size:1.05rem;letter-spacing:-.01em;">TripGenie</div>
       <div style="font-size:.72rem;opacity:.8;">Your AI road-trip assistant — ask anything!</div>
     </div>
-    <button id="tg-voice-toggle" onclick="_tgToggleVoiceMode()" title="Toggle voice readback (reads Genie's responses aloud)" style="background:rgba(255,255,255,.15);border:1.5px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:6px 12px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);">🔇 Voice</button>
     <button id="tg-hf-btn" onclick="_tgToggleHandsFree()" title="Hands-free: speak → Genie replies → auto-listens" style="background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.25);color:#fff;border-radius:100px;padding:7px 12px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px;"><svg id="tg-hf-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 18" width="20" height="16" fill="currentColor" style="display:block;flex-shrink:0;"><rect x="0" y="6" width="3" height="6" rx="1.5"/><rect x="4.75" y="2.5" width="3" height="13" rx="1.5"/><rect x="9.5" y="0" width="3" height="18" rx="1.5"/><rect x="14.25" y="3" width="3" height="12" rx="1.5"/><rect x="19" y="6" width="3" height="6" rx="1.5"/></svg></button>
     <button onclick="clearTripGenieHistory()" title="Clear conversation memory" style="background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.25);color:rgba(255,255,255,.8);border-radius:100px;padding:6px 10px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);">🗑️</button>
     <button onclick="closeTripGenie()" style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:100px;padding:6px 14px;font-size:.85rem;font-weight:800;cursor:pointer;font-family:var(--font);">&#215; Close</button>
@@ -18553,14 +18552,18 @@ var _TG_MAX_SAVED = 60;   // max messages to keep in persistent memory
      → auto-sends → Genie replies → speaks → loops. Tap 🎙️ again to stop.
    Interruption: tapping mic while Genie is speaking pauses audio immediately.
    ──────────────────────────────────────────────────────────────── */
-var _tgVoiceMode   = false;   /* read responses aloud */
+var _tgVoiceMode   = true;    /* read responses aloud — always on with ElevenLabs */
 var _tgHandsFree   = false;   /* full hands-free auto-listen loop */
 var _tgRecognition = null;    /* active SpeechRecognition instance */
 var _tgAudioEl     = null;    /* <audio> element for ElevenLabs playback */
 var _tgPlayingEL   = false;   /* EL audio currently playing */
+var _elDisabled    = false;   /* set true after a 401 to stop retrying bad key */
 
 /* ── ElevenLabs config from Trip Settings ── */
-function _elKey()   { return (appState && appState.tripSettings && appState.tripSettings.elApiKey)  || ''; }
+function _elKey()   {
+  if (_elDisabled) return ''; /* key was rejected this session — fall back to Web Speech */
+  return (appState && appState.tripSettings && appState.tripSettings.elApiKey) || '';
+}
 function _elVoice() { return (appState && appState.tripSettings && appState.tripSettings.elVoiceId) || 'EXAVITQu4vr4xnSDxMaL'; }
 
 /* ── voice readback toggle ── */
@@ -18595,14 +18598,7 @@ function _tgToggleHandsFree() {
 
 /* ── sync header button visuals ── */
 function _tgUpdateVoiceUI() {
-  var voiceBtn = document.getElementById('tg-voice-toggle');
-  var hfBtn    = document.getElementById('tg-hf-btn');
-  if (voiceBtn) {
-    var on = _tgVoiceMode || _tgHandsFree;
-    voiceBtn.innerHTML         = on ? '🔊 Voice' : '🔇 Voice';
-    voiceBtn.style.background  = on ? 'rgba(255,255,255,.35)' : 'rgba(255,255,255,.15)';
-    voiceBtn.style.borderColor = on ? 'rgba(255,255,255,.7)'  : 'rgba(255,255,255,.3)';
-  }
+  var hfBtn = document.getElementById('tg-hf-btn');
   if (hfBtn) {
     var _waveIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 18" width="20" height="16" fill="currentColor" style="display:block;flex-shrink:0;"><rect x="0" y="6" width="3" height="6" rx="1.5"/><rect x="4.75" y="2.5" width="3" height="13" rx="1.5"/><rect x="9.5" y="0" width="3" height="18" rx="1.5"/><rect x="14.25" y="3" width="3" height="12" rx="1.5"/><rect x="19" y="6" width="3" height="6" rx="1.5"/></svg>';
     hfBtn.innerHTML         = _tgHandsFree ? _waveIcon + '<span style="font-size:.78rem;">Live</span>' : _waveIcon;
@@ -18650,7 +18646,14 @@ async function _tgSpeakEL(text) {
         })
       }
     );
-    if (!resp.ok) throw new Error('EL ' + resp.status);
+    if (!resp.ok) {
+      if (resp.status === 401) {
+        /* Invalid or expired key — disable EL for this session so we stop retrying */
+        _elDisabled = true;
+        showToast('❌ ElevenLabs key invalid — using device voice. Go to Trip Settings → ElevenLabs to fix.', 5000);
+      }
+      throw new Error('EL ' + resp.status);
+    }
     var blob = await resp.blob();
     var url  = URL.createObjectURL(blob);
     if (!_tgAudioEl) { _tgAudioEl = document.createElement('audio'); document.body.appendChild(_tgAudioEl); }
