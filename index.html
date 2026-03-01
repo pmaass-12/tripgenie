@@ -3768,13 +3768,34 @@ function enterTestMode() {
   _authed = true;
   _isFriend = false;
   _realAppState = appState;
+  /* Copy the trip plan structure from real appState so the test view
+     shows the user's actual trip, not the blank default.
+     Mutable activity state (arrivals, journal, etc.) is zeroed out. */
   appState = {
+    /* ── trip structure (carry over from real data) ── */
+    activeTrip:       _realAppState.activeTrip       || 'default',
+    customTripData:   _realAppState.customTripData   ? JSON.parse(JSON.stringify(_realAppState.customTripData)) : null,
+    tripSettings:     _realAppState.tripSettings     ? JSON.parse(JSON.stringify(_realAppState.tripSettings))   : {},
+    drivingPrefs:     _realAppState.drivingPrefs     ? JSON.parse(JSON.stringify(_realAppState.drivingPrefs))   : {},
+    stayType:         _realAppState.stayType         ? JSON.parse(JSON.stringify(_realAppState.stayType))       : {},
+    stopCityNames:    _realAppState.stopCityNames    ? JSON.parse(JSON.stringify(_realAppState.stopCityNames))  : {},
+    phaseExtraDays:   _realAppState.phaseExtraDays   ? JSON.parse(JSON.stringify(_realAppState.phaseExtraDays)) : {},
+    removedStops:     _realAppState.removedStops     ? JSON.parse(JSON.stringify(_realAppState.removedStops))   : {},
+    dayOverrides:     _realAppState.dayOverrides     ? JSON.parse(JSON.stringify(_realAppState.dayOverrides))   : {},
+    sleepOverrides:   _realAppState.sleepOverrides   ? JSON.parse(JSON.stringify(_realAppState.sleepOverrides)) : {},
+    darkMode:         _realAppState.darkMode         || 'light',
+    restaurantPrefs:  _realAppState.restaurantPrefs  ? JSON.parse(JSON.stringify(_realAppState.restaurantPrefs)) : [],
+    pcBgImage:        _realAppState.pcBgImage        || null,
+    rvProfile:        _realAppState.rvProfile        ? JSON.parse(JSON.stringify(_realAppState.rvProfile))      : {},
+    mapboxToken:      _realAppState.mapboxToken      || '',
+    /* ── mutable activity state (zeroed — nothing to save/overwrite) ── */
     arrivals:{}, departures:{}, dayNotes:{}, planned:{}, weather:{},
-    drivers:{}, sleepOverrides:{}, phaseExtraDays:{}, removedStops:{},
+    drivers:{},
     listChecked:{ todo:{}, pack:{} }, listHidden:{ todo:{}, pack:{} },
     customListItems:{ todo:[], pack:[] }, listSortOrder:{ todo:[], pack:[] },
     bookingStatus:{}, customBookings:[], savedPostcards:[], journal:{},
-    listsSubTab:'todo', pcBgImage: (_realAppState && _realAppState.pcBgImage) || null,
+    listsSubTab:'todo',
+    /* ── sample decisions so the Decisions tab has content to test ── */
     aiSuggestions: [
       { id:'test1', title:'Leave Ozarks a day early', detail:'You arrived ahead of schedule. Shorten Ozarks by 1 day to gain buffer time before Texas.', impact:'Gains 1 buffer day', affectedDays:[7,8], sourceDay:7, triggerType:'depart', status:'pending', created: new Date().toISOString() },
       { id:'test2', title:'Add a night in Memphis', detail:'You have extra time — Memphis BBQ + Beale Street is an easy add between Ozarks and Texas.', impact:'Adds Memphis detour', affectedDays:[10,11], sourceDay:7, triggerType:'depart', status:'pending', created: new Date().toISOString() },
@@ -3791,7 +3812,7 @@ function enterTestMode() {
   initApp();
   updateAdjBadge();
   updateDecisionsBadge();
-  showToast('🧪 Test Mode — explore freely, nothing will be saved!', 4000);
+  showToast('🧪 Test Mode — your real trip loaded (read-only, nothing will be saved)', 4500);
 }
 
 function exitTestMode() {
