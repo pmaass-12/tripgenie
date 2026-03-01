@@ -667,8 +667,9 @@
       /* Mode toggle: icon only */
       .hdr-mode-label { display: none !important; }
 
-      /* Help button: icon only */
-      .hdr-help-label { display: none !important; }
+      /* Help + Refresh: icon only on small screens */
+      .hdr-help-label    { display: none !important; }
+      .hdr-refresh-label { display: none !important; }
 
       /* Header padding */
       #app-header { padding: 0 14px; min-height: 52px; }
@@ -2520,7 +2521,7 @@
         <span style="background:var(--orange);color:#fff;border-radius:100px;padding:4px 11px;font-size:.72rem;font-weight:800;white-space:nowrap;font-family:var(--font);"><i class="fa-solid fa-sliders"></i><span class="hdr-mode-label"> Planning</span></span>
       </div>
       <button onclick="openHelpSearch()" title="Search the app — ask anything" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:100px;padding:5px 11px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-magnifying-glass"></i><span class="hdr-help-label"> Help</span></button>
-      <button id="refresh-btn" onclick="_refreshAll()" title="Refresh all views (schedule, map, dashboard)" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:.9rem;cursor:pointer;line-height:1;display:flex;align-items:center;" aria-label="Refresh"><i class="fa-solid fa-rotate-right"></i></button>
+      <button id="refresh-btn" onclick="_refreshAll()" title="Refresh all views — syncs schedule, map, dashboard" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:800;cursor:pointer;line-height:1;display:flex;align-items:center;gap:5px;font-family:var(--font);" aria-label="Refresh"><i class="fa-solid fa-rotate-right"></i><span class="hdr-refresh-label"> Refresh</span></button>
       <button id="dark-mode-btn" onclick="toggleDarkMode()" title="Toggle dark/light mode" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:1rem;cursor:pointer;line-height:1;display:flex;align-items:center;">🌙</button>
       <button id="debug-console-btn" onclick="_dbgOpen()" title="Debug console" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:.85rem;cursor:pointer;line-height:1;display:flex;align-items:center;position:relative;"><i class="fa-solid fa-terminal"></i><span id="debug-err-badge" style="display:none;position:absolute;top:-3px;right:-3px;background:#e53e3e;color:#fff;border-radius:50%;width:14px;height:14px;font-size:.6rem;font-weight:900;align-items:center;justify-content:center;line-height:1;"></span></button>
       <button class="logout-btn" id="logout-btn" title="Logout">
@@ -7701,9 +7702,10 @@ function renderSchedule() {
     });
   }
 
-  // Header row
+  // Header row — count only actual trip days (exclude post-arrival home days)
+  var _tripDayCount = TRIP_DAYS.filter(function(d) { return !(d.sleepType === 'home' && !d.driveDay); }).length;
   html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">'
-    + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-calendar-days"></i> 46-Day Schedule</h2>'
+    + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-calendar-days"></i> ' + _tripDayCount + '-Day Schedule</h2>'
     + '<button onclick="openAddDest()" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:7px 14px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px;">&#128205; Add Destination</button>'
     + '</div>'
 
@@ -7729,6 +7731,12 @@ function renderSchedule() {
 
   for (var i = 0; i < _sortedDays.length; i++) {
     var d        = _sortedDays[i];
+
+    /* ── Skip post-arrival home days — they aren't trip days ──────────────
+       The drive-home day (driveDay:true, sleepType:'home') shows normally.
+       The days after (driveDay:false, sleepType:'home') are just home life
+       and should not appear in the schedule at all.                       */
+    if (d.sleepType === 'home' && !d.driveDay) continue;
 
     /* Inject pause blocks that start at or before this day's original date */
     while (_schPausePtrIdx < _schPauses.length && _schPauses[_schPausePtrIdx].startDate <= d.date) {
