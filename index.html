@@ -3006,16 +3006,9 @@
         <button onclick="closeDayDetail()" style="background:rgba(0,0,0,.2);border:none;color:#fff;font-size:1.1rem;width:32px;height:32px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">&#215;</button>
       </div>
 
-      <!-- Row 2: AI quick-access (horizontal scroll, no wrap) -->
-      <div id="ddm-tg-row" style="display:flex;gap:6px;margin-top:12px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch;">
-        <button onclick="if(window._ddmCurrentStop){openAreaInfo((window._ddmCurrentStop.name||'')+(window._ddmCurrentStop.state?', '+window._ddmCurrentStop.state:''),window._ddmCurrentStop.id);}" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">🗺️ Area Guide</button>
-        <button onclick="if(window._ddmCurrentStop){_openActivitiesNearHere(window._ddmCurrentStop);}" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">🎯 Activities Near Here</button>
-        <button onclick="if(window._ddmCurrentStop){_openRestaurantsNearHere(window._ddmCurrentStop);}" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">🍽️ Restaurants Near Here</button>
-        <button onclick="openTripGenieAboutStop('What should we know before arriving here? Any tips or heads-up?')" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">💡 Pro tips</button>
-      </div>
-
-      <!-- Row 3: Action buttons — compact pill row -->
-      <div style="display:flex;gap:7px;margin-top:10px;flex-wrap:wrap;">
+      <!-- Row 2: Area Guide + action buttons on one clean row -->
+      <div style="display:flex;gap:7px;margin-top:12px;flex-wrap:wrap;align-items:center;">
+        <button onclick="if(window._ddmCurrentStop){openAreaInfo((window._ddmCurrentStop.name||'')+(window._ddmCurrentStop.state?', '+window._ddmCurrentStop.state:''),window._ddmCurrentStop.id);}" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:6px 13px;font-size:.73rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;">🗺️ Area Guide</button>
         <button id="ddm-arrive-btn"
           onclick="recordArrival()"
           onmousedown="startLongPress('arrive')" onmouseup="cancelLongPress()" onmouseleave="cancelLongPress()"
@@ -3030,11 +3023,8 @@
           style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:100px;padding:6px 13px;font-size:.73rem;font-weight:800;cursor:pointer;font-family:var(--font);user-select:none;-webkit-user-select:none;display:flex;align-items:center;gap:5px;white-space:nowrap;">
           &#128666; We Left
         </button>
-        <button id="ddm-music-btn"
-          onclick="openLocalMusic()"
-          style="background:rgba(29,185,84,.3);border:1.5px solid rgba(29,185,84,.55);color:#fff;border-radius:100px;padding:6px 13px;font-size:.73rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:5px;white-space:nowrap;">
-          &#127926; Local Music
-        </button>
+        <!-- ddm-music-btn kept hidden so JS refs don't break -->
+        <button id="ddm-music-btn" style="display:none;" onclick="openLocalMusic()"></button>
       </div>
 
       <!-- Hint line -->
@@ -7266,7 +7256,18 @@ var _STAY_TYPES = [
   { v:'airbnb',     icon:'🏠',  label:'Vacation Rental' }
 ];
 function _getStayType(stopId) {
-  return (appState.stayType && appState.stayType[stopId]) || 'campground';
+  /* User override takes priority */
+  if (appState.stayType && appState.stayType[stopId]) return appState.stayType[stopId];
+  /* Derive a smart default from the first day's sleepType in TRIP_DAYS */
+  var firstDay = TRIP_DAYS.find(function(d) { return d.stopId === stopId; });
+  if (firstDay) {
+    var st = firstDay.sleepType || '';
+    if (st === 'hotel' || st === 'motel')        return 'hotel';
+    if (st === 'cabin' || st === 'glamping')     return 'cabin';
+    if (st === 'airbnb' || st === 'vrbo')        return 'airbnb';
+    /* walmart / boondocking / rv_park all → campground/rv context */
+  }
+  return 'campground';
 }
 function _getStayMeta(stopId) {
   var t = _getStayType(stopId);
@@ -13772,10 +13773,11 @@ function openCampInfo(dayNum) {
   _aimResetPhotoStrip();
   document.getElementById('ai-info-modal').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
-  fetchAimPhotos(campName + ' campground ' + loc);
-  fetchCampInfo(campName, loc, d.stopId);
+  fetchAimPhotos(campName + ' ' + _sMeta.label.toLowerCase() + ' ' + loc);
+  fetchCampInfo(campName, loc, d.stopId, _loadingLabel);
 }
-function fetchCampInfo(campName, location, stopId) {
+function fetchCampInfo(campName, location, stopId, _typeLabel) {
+  _typeLabel = _typeLabel || 'info'; /* e.g. "lodging info", "campground info" */
   var _campAmps    = (appState.tripSettings && appState.tripSettings.rvAmps) ? appState.tripSettings.rvAmps + '-amp' : '50-amp';
   var _hotelChain  = (appState.tripSettings && appState.tripSettings.hotelChain) ? appState.tripSettings.hotelChain.trim() : '';
   var _stayCtx     = (typeof _getStayContext === 'function' && stopId) ? _getStayContext(stopId) : '';
@@ -13830,7 +13832,7 @@ function fetchCampInfo(campName, location, stopId) {
   .then(function(data) {
     var text = '';
     try { text = data.candidates[0].content.parts[0].text || ''; } catch(e) {}
-    if (!text) { document.getElementById('aim-body').innerHTML = '<div style="color:var(--red);padding:16px;">Could not load campground info.</div>'; return; }
+    if (!text) { document.getElementById('aim-body').innerHTML = '<div style="color:var(--red);padding:16px;">Could not load ' + (_typeLabel||'info') + '.</div>'; return; }
     text = text.replace(/```json\s*/gi,'').replace(/```\s*/g,'');
     var addrEl = document.getElementById('aim-address-link'); var addrTxt = document.getElementById('aim-address-text');
     var phoneEl = document.getElementById('aim-phone'); var phoneTxt = document.getElementById('aim-phone-text');
@@ -13862,7 +13864,7 @@ function fetchCampInfo(campName, location, stopId) {
     document.getElementById('aim-body').innerHTML = h4||'<p style="color:var(--text-2);">No info available.</p>';
     if(campFactsText) _renderAimFacts(campFactsText);
   })
-  .catch(function(){ document.getElementById('aim-body').innerHTML='<div style="color:var(--red);padding:16px;">Error loading campground info.</div>'; });
+  .catch(function(){ document.getElementById('aim-body').innerHTML='<div style="color:var(--red);padding:16px;">Error loading ' + (_typeLabel||'info') + '.</div>'; });
 }
 
 /* ── EVENTS NEAR A STOP ──────────────────────────────────────────── */
