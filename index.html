@@ -5270,6 +5270,9 @@ function _loadStopWeather(stopId) {
     if (!data.daily || !data.daily.time) return;
     for (var di = 0; di < data.daily.time.length; di++) {
       var tripDate = data.daily.time[di].replace('2025-', '2026-');
+      /* Don't overwrite a live forecast entry with last-year historical data */
+      var _ex = appState.weather[stopId][tripDate];
+      if (_ex && _ex.type === 'forecast') continue;
       appState.weather[stopId][tripDate] = {
         high: Math.round(data.daily.temperature_2m_max[di]),
         low:  Math.round(data.daily.temperature_2m_min[di]),
@@ -5332,19 +5335,42 @@ function _loadStopWeatherSilent(stopId, callback) {
   if (!appState.weather) appState.weather = {};
   if (!appState.weather[stopId]) appState.weather[stopId] = {};
   var stopDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
-  if (!stopDays.length) { showToast('No days scheduled for this stop yet.', 2200); return; }
+  if (!stopDays.length) { if (callback) callback(); return; }
   var firstDate = stopDays[0].date;
   var lastDate  = stopDays[stopDays.length - 1].date;
+
+  /* ── Step 1: Historical archive (last year's actuals as a baseline) ─────
+     IMPORTANT: Never overwrite a live forecast entry with historical data.  */
   var archStart = firstDate.replace('2026-', '2025-');
   var archEnd   = lastDate.replace('2026-', '2025-');
   var archUrl = 'https://archive-api.open-meteo.com/v1/archive?latitude=' + stop.lat
     + '&longitude=' + stop.lng
     + '&start_date=' + archStart + '&end_date=' + archEnd
     + '&daily=temperature_2m_max,temperature_2m_min,weathercode&temperature_unit=fahrenheit&timezone=auto';
+
+  /* ── Step 2: Live 16-day forecast — always attempt for upcoming dates ── */
+  var today = new Date();
+  var cutoff = new Date(today); cutoff.setDate(cutoff.getDate() + 16);
+  var cutoffStr = cutoff.toISOString().slice(0,10);
+  var _withinForecastWindow = firstDate <= cutoffStr;
+
+  function _afterBothDone() {
+    saveState(appState);
+    renderStops();
+    if (typeof renderSchedule === 'function') renderSchedule();
+    if (callback) callback();
+  }
+
+  var _archDone = false, _fcDone = !_withinForecastWindow;
+  function _checkDone() { if (_archDone && _fcDone) _afterBothDone(); }
+
   fetch(archUrl).then(function(r){return r.json();}).then(function(data){
     if (data.daily && data.daily.time) {
       for (var di = 0; di < data.daily.time.length; di++) {
         var tripDate = data.daily.time[di].replace('2025-', '2026-');
+        /* Don't overwrite live forecast data with historical */
+        var existing = appState.weather[stopId][tripDate];
+        if (existing && existing.type === 'forecast') continue;
         appState.weather[stopId][tripDate] = {
           high: Math.round(data.daily.temperature_2m_max[di]),
           low:  Math.round(data.daily.temperature_2m_min[di]),
@@ -5353,15 +5379,34 @@ function _loadStopWeatherSilent(stopId, callback) {
         };
       }
     }
-    saveState(appState);
-    renderStops();
-    // Also refresh the schedule's blue phase-header weather bar
-    if (typeof renderSchedule === 'function') renderSchedule();
-    if (callback) callback();
+    _archDone = true; _checkDone();
   }).catch(function(){
-    showToast('⚠️ Could not load weather data. Check your connection.', 2800);
-    if (callback) callback(); // still open modal with whatever data we have
+    _archDone = true; _checkDone();
   });
+
+  if (_withinForecastWindow) {
+    var fUrl = 'https://api.open-meteo.com/v1/forecast?latitude=' + stop.lat
+      + '&longitude=' + stop.lng
+      + '&daily=temperature_2m_max,temperature_2m_min,weathercode'
+      + '&temperature_unit=fahrenheit&timezone=auto&forecast_days=16';
+    fetch(fUrl).then(function(r){return r.json();}).then(function(data){
+      if (data.daily && data.daily.time) {
+        for (var di = 0; di < data.daily.time.length; di++) {
+          var fDate = data.daily.time[di];
+          if (fDate >= firstDate && fDate <= lastDate) {
+            /* Live forecast always wins — overwrite historical */
+            appState.weather[stopId][fDate] = {
+              high: Math.round(data.daily.temperature_2m_max[di]),
+              low:  Math.round(data.daily.temperature_2m_min[di]),
+              code: data.daily.weathercode ? data.daily.weathercode[di] : null,
+              type: 'forecast'
+            };
+          }
+        }
+      }
+      _fcDone = true; _checkDone();
+    }).catch(function(){ _fcDone = true; _checkDone(); });
+  }
 }
 
 function _renderForecastModal(stopId, isRefreshing) {
