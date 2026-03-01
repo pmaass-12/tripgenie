@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-01 (Session 18, third context)
+2026-03-01 (Session 18, fifth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -291,6 +291,13 @@ tripgenie/
   - **`_tripDayCount` updated**: Header now shows `_dispCounter` (total visible days) instead of the old `TRIP_DAYS.filter()` count, so "X-Day Schedule" matches the sequential numbers shown.
   - **ElevenLabs test — 2-step validation**: `_tsTestElVoice()` now first validates the API key via `/v1/user` endpoint (lightweight, no characters consumed). Clear 401 error message: "❌ Invalid key — go to elevenlabs.io → Profile → API Keys and copy a fresh key". Checks remaining character quota — if < 100 chars left, warns instead of attempting TTS. Key length sanity check (< 20 chars rejects immediately). Step 2 is the actual TTS POST with specific 401 message for that layer too.
   - **Health check 12d — schedule date gaps**: New check in `refreshTripPlan()` computes which days are visible (mirrors renderSchedule's skipDayNums logic, with drive-day protection). Walks visible days in date order checking for calendar holes. If any gap > 1 day is found, warns with dates and gap count. Passes with "✓ All N visible days are consecutive" when clean.
+
+- Session 18 continued (2026-03-01, fifth context):
+  - **TripGenie input row redesign**: Waveform hands-free button moved from drawer header to input row (alongside upload, mic, send). Upload button changed from 📷 camera emoji to Font Awesome `fa-arrow-up-from-bracket` icon. File input `accept` expanded to `image/*,application/pdf`. Photo preview strip updated with `tg-pdf-icon` (📄 emoji), `tg-attach-label`, `tg-attach-sub` elements.
+  - **PDF support in TripGenie**: `handleTripGeniePhoto()` detects `application/pdf` MIME type. PDF attachment shows 📄 icon + filename in the preview strip instead of an image thumbnail. `_tgFileName` variable stores the original filename for display. `removeTripGeniePhoto()` clears both thumb and PDF icon. `askTripGenie()` shows a purple pill chip "📄 filename.pdf" in the user bubble for PDFs (instead of image preview). Gemini inline_data already accepted PDFs — no API change needed.
+  - **Waveform button CSS class-based styling**: `#tg-hf-btn.tg-icon-btn` styled purple (background:#f0e8ff, color:#7B2FBE). Active state via `.hf-active` class (background:#7B2FBE, color:#fff, box-shadow). `_tgUpdateVoiceUI()` now uses `classList.add/remove('hf-active')` instead of inline style manipulation.
+  - **ElevenLabs runtime 401 handling**: `_elDisabled` session flag; on first 401, disables EL for the session and shows toast directing user to Trip Settings → ElevenLabs. `_elKey()` returns `''` when `_elDisabled=true`, auto-routing to Web Speech fallback. Voice toggle removed from TG header; `_tgVoiceMode = true` by default.
+  - **ElevenLabs API key permissions**: Only "Text to Speech → Access" needed. All other endpoint permissions (Speech to Speech, STT, Sound Effects, Music, etc.) can remain "No Access".
 
 - Session 18 continued (2026-03-01, fourth context):
   - **Option A drive separator in schedule**: Drive days no longer render as full cards. `_renderDriveSepA()` renders an orange road-ribbon separator: dashed orange lines + centered pill with 🚐 + "City A → City B" + "Day X · Mon Mar 3 · 445 mi · ~7h". No driver name. Tappable → opens day detail. Long drive shows ⚠ Split button; split-resolved shows ✓ Split badge. Past drives shown grey.
