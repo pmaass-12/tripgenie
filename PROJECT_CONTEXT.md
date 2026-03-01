@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-01 (Session 16 continued)
+2026-03-01 (Session 17)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -126,6 +126,14 @@ tripgenie/
     - Orange "Print PDF" button added to Map tab header (line 2385) next to Refresh button, using `--orange` and `--orange-l` design tokens
   - **Template literal syntax fix**: Escaped `</script>` tag inside print function's template literal as `<\/script>` (line 5642) to prevent regex parsing issues in regression test suite
   - **All 110 regression tests passing** — no snapshot regeneration needed
+
+- Session 17 (2026-03-01):
+  - **Removed hardcoded Fredericksburg ghost stop**: Day 43 in TRIP_DAYS changed from a Walmart-Fredericksburg transit overnight (stopId:15, sleepType:'walmart') to a direct final drive home (sleep:'HOME!', sleepType:'home', 450mi/7h, title:'Blue Ridge → Warwick, NY — Welcome Home!'). Day 44 changed to a home rest day with unique title 'Home — First Day Back'. Day 45 stays 'Home — Unpack, Rest, Relive Memories'. Root cause: Day 43 had stopId:15 (same as home stop) with sleepType:'walmart', making it un-deletable from the navigator since the home stop cannot be removed.
+  - **Health Check 3c added**: New auto-fix detects any day where stopId===homeId but sleepType is 'walmart'/'boondock'/'rest_area' — a transit overnight piggybacking on the home stop. Fix combines miles from that day + next home drive day into one final drive home, and converts the now-redundant next drive day to a rest day. Origin name derived from previous phase.
+  - **Print map: Leaflet tiles replacing SVG grid**: `printTripPlan()` now uses a real Leaflet map (unpkg CDN) instead of a hand-drawn SVG schematic. Stop markers use numbered blue/green divIcons, route drawn as orange dashed polyline. Print is triggered after 4s (with a 2s early-check if tiles load fast) to give tiles time to render. Map CSS references `#print-map` div. Old SVG projection code (`_mMinLat`, `_mMaxLat`, `_prj()`, `_svgParts`) removed.
+  - **Print stop names fixed**: `_mapStops` now stores `displayName` using `_stopCityDisplay(stop)` (which calls `_inferStopState()` for consistent 2-letter state codes). Both the Leaflet legend and the stop section headers now use this normalized name instead of raw `stop.name + stop.state`.
+  - **Total miles health check (HC 12b)**: New check in `refreshTripPlan()` computes the actual sum of all drive-day miles from the live TRIP_DAYS array and compares with CONFIG.totalMiles. If different by >5% (or >100mi), auto-fixes `CONFIG.totalMiles`, `customTripData.totalMiles`, and the displayed value. This fixes the "2,402 est. miles" display bug in the Print PDF header.
+  - **Regression tests**: 111/111 passing.
 
 ## Known Issues / In Progress
 - Multiple mockup versions exist — needs consolidation decision (which is canonical?)

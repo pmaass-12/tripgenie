@@ -3512,8 +3512,8 @@ var TRIP_DAYS = [
   { day:41, date:'2026-04-09', stopId:14, driveDay:false, miles:0,   driveHours:0,   driver:'Melissa', sleep:'Blue Ridge Parkway KOA',         sleepType:'rv_park',    springBreak:false, phase:'Blue Ridge Mountains',  title:'Blue Ridge Parkway — Mabry Mill & Natural Bridge' },
   { day:42, date:'2026-04-10', stopId:14, driveDay:false, miles:0,   driveHours:0,   driver:'Paul',    sleep:'Blue Ridge Parkway KOA',         sleepType:'rv_park',    springBreak:false, phase:'Blue Ridge Mountains',  title:'Blue Ridge — Cascades Falls & Roanoke City Market' },
   // === RETURN HOME ===
-  { day:43, date:'2026-04-11', stopId:15, driveDay:true,  miles:180, driveHours:3,   driver:'Melissa', sleep:'Walmart Fredericksburg, VA',     sleepType:'walmart',    springBreak:false, phase:'Heading Home',          title:'Blue Ridge → Fredericksburg, VA (Final Night Away)' },
-  { day:44, date:'2026-04-12', stopId:15, driveDay:true,  miles:270, driveHours:4,   driver:'Paul',    sleep:'HOME!',                          sleepType:'home',       springBreak:false, phase:'Heading Home',          title:'Fredericksburg → Warwick, NY — Welcome Home! 🎉' },
+  { day:43, date:'2026-04-11', stopId:15, driveDay:true,  miles:450, driveHours:7,   driver:'Paul',    sleep:'HOME!',                          sleepType:'home',       springBreak:false, phase:'Heading Home',          title:'Blue Ridge \u2192 Warwick, NY \u2014 Welcome Home! \uD83C\uDF89' },
+  { day:44, date:'2026-04-12', stopId:15, driveDay:false, miles:0,   driveHours:0,   driver:'Paul',    sleep:'HOME!',                          sleepType:'home',       springBreak:false, phase:'Home',                  title:'Home \u2014 First Day Back \u2014 Celebrate & Decompress' },
   { day:45, date:'2026-04-13', stopId:15, driveDay:false, miles:0,   driveHours:0,   driver:'Paul',    sleep:'HOME!',                          sleepType:'home',       springBreak:false, phase:'Home',                  title:'Home — Unpack, Rest, Relive Memories' },
   { day:46, date:'2026-04-14', stopId:15, driveDay:false, miles:0,   driveHours:0,   driver:'Paul',    sleep:'HOME!',                          sleepType:'home',       springBreak:false, phase:'Home',                  title:'Home — Share Your Story' },
 ];
@@ -6409,7 +6409,7 @@ function printTripPlan() {
     var firstDay = days[0];
     var lastStayDay = stayDays.length ? stayDays[stayDays.length - 1] : days[days.length - 1];
     var stayType = (typeof _getStayMeta === 'function') ? _getStayMeta(stopId) : { label: 'Campground' };
-    var stopName = stop ? (stop.name + (stop.state ? ', ' + stop.state : '')) : ('Stop ' + (idx+1));
+    var stopName = stop ? ((typeof _stopCityDisplay === 'function') ? _stopCityDisplay(stop) : (stop.name + (stop.state ? ', ' + stop.state : ''))) : ('Stop ' + (idx+1));
 
     stopsHtml += '<div class="stop-section">';
     stopsHtml += '<div class="stop-header">';
@@ -6481,42 +6481,28 @@ function printTripPlan() {
   var _mapStops = [];
   _orderedStopIds.forEach(function(id, idx) {
     var s = getStop(id);
-    if (s && s.lat && s.lng) _mapStops.push({ n: idx + 1, name: s.name, state: s.state || '', lat: s.lat, lng: s.lng, isHome: false });
+    if (s && s.lat && s.lng) {
+      var _dn = (typeof _stopCityDisplay === 'function') ? _stopCityDisplay(s) : (s.name + (s.state ? ', ' + s.state : ''));
+      _mapStops.push({ n: idx + 1, displayName: _dn, lat: s.lat, lng: s.lng, isHome: false });
+    }
   });
   var _hmStop = getStop(_homeId);
-  if (_hmStop && _hmStop.lat && _hmStop.lng) _mapStops.push({ n: 0, name: 'Home', state: _hmStop.state || '', lat: _hmStop.lat, lng: _hmStop.lng, isHome: true });
-
-  var _mLats = _mapStops.map(function(s) { return s.lat; });
-  var _mLngs = _mapStops.map(function(s) { return s.lng; });
-  var _mPad = 2;
-  var _mMinLat = Math.min.apply(null, _mLats) - _mPad, _mMaxLat = Math.max.apply(null, _mLats) + _mPad;
-  var _mMinLng = Math.min.apply(null, _mLngs) - _mPad, _mMaxLng = Math.max.apply(null, _mLngs) + _mPad;
-  var _svgW = 680, _svgH = 340, _svgPad = 22;
-  function _prj(lat, lng) {
-    return {
-      x: Math.round((_svgPad + (lng - _mMinLng) / (_mMaxLng - _mMinLng) * (_svgW - _svgPad * 2)) * 10) / 10,
-      y: Math.round((_svgPad + (_mMaxLat - lat) / (_mMaxLat - _mMinLat) * (_svgH - _svgPad * 2)) * 10) / 10
-    };
+  if (_hmStop && _hmStop.lat && _hmStop.lng) {
+    var _hmDn = (typeof _sn === 'function') ? _sn(_hmStop) : (_hmStop.name + (_hmStop.state ? ', ' + _hmStop.state : ''));
+    _mapStops.push({ n: 0, displayName: _hmDn, lat: _hmStop.lat, lng: _hmStop.lng, isHome: true });
   }
-  var _svgParts = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + _svgW + ' ' + _svgH + '" style="width:100%;height:auto;display:block;">'];
-  _svgParts.push('<rect width="' + _svgW + '" height="' + _svgH + '" fill="#dce9f5"/>');
-  var _gi, _gx, _gy;
-  for (_gi = 0; _gi <= 4; _gi++) { _gy = Math.round(_svgPad + _gi * (_svgH - _svgPad * 2) / 4); _svgParts.push('<line x1="' + _svgPad + '" y1="' + _gy + '" x2="' + (_svgW - _svgPad) + '" y2="' + _gy + '" stroke="#b8d0e8" stroke-width="0.5"/>'); }
-  for (_gi = 0; _gi <= 6; _gi++) { _gx = Math.round(_svgPad + _gi * (_svgW - _svgPad * 2) / 6); _svgParts.push('<line x1="' + _gx + '" y1="' + _svgPad + '" x2="' + _gx + '" y2="' + (_svgH - _svgPad) + '" stroke="#b8d0e8" stroke-width="0.5"/>'); }
-  _svgParts.push('<polyline points="' + _mapStops.map(function(s) { var p = _prj(s.lat, s.lng); return p.x + ',' + p.y; }).join(' ') + '" fill="none" stroke="#E8813A" stroke-width="2.5" stroke-dasharray="7 4" stroke-linecap="round" stroke-linejoin="round"/>');
-  _mapStops.forEach(function(s) {
-    var p = _prj(s.lat, s.lng), fill = s.isHome ? '#4a6741' : '#2C5F8A', lbl = s.isHome ? 'H' : String(s.n), fs = lbl.length > 1 ? '8' : '10';
-    _svgParts.push('<circle cx="' + p.x + '" cy="' + p.y + '" r="12" fill="' + fill + '" stroke="#fff" stroke-width="2.5"/>');
-    _svgParts.push('<text x="' + p.x + '" y="' + (p.y + 4) + '" text-anchor="middle" fill="#fff" font-size="' + fs + '" font-weight="bold" font-family="sans-serif">' + lbl + '</text>');
-  });
-  _svgParts.push('</svg>');
+  /* Leaflet map: serialize stops as JSON for inline script */
+  var _mapJson = JSON.stringify(_mapStops.map(function(s) {
+    return { n: s.n, lat: s.lat, lng: s.lng, isHome: s.isHome, name: s.displayName };
+  }));
+  var _mapDiv = '<div id="print-map" style="width:100%;height:340px;border-radius:10px;border:1px solid #c0d4e8;overflow:hidden;"></div>';
   var _legHtml = '<div class="legend-grid">';
   _mapStops.forEach(function(s) {
     var fill = s.isHome ? '#4a6741' : '#2C5F8A', lbl = s.isHome ? 'H' : String(s.n);
-    _legHtml += '<div class="legend-item"><div class="legend-num" style="background:' + fill + '">' + lbl + '</div><div class="legend-name">' + s.name + (s.state ? ', ' + s.state : '') + '</div></div>';
+    _legHtml += '<div class="legend-item"><div class="legend-num" style="background:' + fill + '">' + lbl + '</div><div class="legend-name">' + s.displayName + '</div></div>';
   });
   _legHtml += '</div>';
-  var _mapPageHtml = '<div class="map-page">' + _svgParts.join('') + '<div class="map-legend"><div class="map-legend-title">Route Stops</div>' + _legHtml + '</div></div>';
+  var _mapPageHtml = '<div class="map-page">' + _mapDiv + '<div class="map-legend"><div class="map-legend-title">Route Stops</div>' + _legHtml + '</div></div>';
 
   /* ─────────────────────────────────────────────────────────────
      STATS SECTION — replicate renderTripStats logic for print
@@ -6581,6 +6567,8 @@ function printTripPlan() {
 <head>
 <meta charset="UTF-8">
 <title>${tripName} — Trip Plan</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: #1a1a2e; background: #fff; font-size: 11pt; line-height: 1.5; }
@@ -6698,7 +6686,34 @@ function printTripPlan() {
   </div>
 </div>
 <script>
-  setTimeout(function() { window.print(); }, 800);
+  /* ── Initialize Leaflet route map ── */
+  var _stops = ${_mapJson};
+  if (typeof L !== 'undefined' && _stops.length > 0) {
+    try {
+      var _pm = L.map('print-map', { zoomControl:false, attributionControl:false, scrollWheelZoom:false, dragging:false, touchZoom:false, doubleClickZoom:false });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:18 }).addTo(_pm);
+      var _lls = _stops.map(function(s){ return [s.lat, s.lng]; });
+      L.polyline(_lls, { color:'#E8813A', weight:3, dashArray:'8,5', opacity:0.9 }).addTo(_pm);
+      _stops.forEach(function(s) {
+        var lbl = s.isHome ? 'H' : String(s.n);
+        var bg  = s.isHome ? '#4a6741' : '#2C5F8A';
+        var fs  = lbl.length > 1 ? '9px' : '11px';
+        var icon = L.divIcon({ className:'', iconSize:[26,26], iconAnchor:[13,13],
+          html:'<div style="background:'+bg+';color:#fff;width:26px;height:26px;border-radius:50%;border:2.5px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;font-size:'+fs+';font-weight:900;font-family:sans-serif;line-height:1;">'+lbl+'</div>' });
+        L.marker([s.lat, s.lng], { icon:icon }).addTo(_pm);
+      });
+      _pm.fitBounds(L.latLngBounds(_lls), { padding:[28,28] });
+    } catch(e) {}
+  }
+  /* Wait for tiles to load before printing (max 5 s) */
+  var _printed = false;
+  function _doPrint(){ if (!_printed){ _printed=true; window.print(); } }
+  setTimeout(_doPrint, 4000);
+  if (typeof L !== 'undefined') {
+    try { document.querySelector('#print-map .leaflet-tile-pane'); } catch(e){}
+    /* Fallback: if all tiles load faster, print sooner */
+    setTimeout(function(){ if(!_printed){ var t=document.querySelectorAll('.leaflet-tile-loaded'); if(t.length>4){ _doPrint(); } } }, 2000);
+  }
 <\/script>
 </body>
 </html>`;
@@ -15166,6 +15181,59 @@ function refreshTripPlan() {
     issues.push({ type:'info', msg: 'Day 1 ✓ Correctly marked as a drive day (departing from home)' });
   }
 
+  /* ── 3c. Transit overnight assigned to home stopId (un-deletable ghost stop) ── */
+  /* Detects days like "Walmart Fredericksburg" that share stopId with the home
+     stop — they can't be deleted from the navigator because the home stop can't
+     be removed. Fix: convert to a direct final drive home, merging miles.      */
+  var _transitAtHome = days.filter(function(d) {
+    return d.stopId === _homeId && (d.sleepType === 'walmart' || d.sleepType === 'boondock' || d.sleepType === 'rest_area');
+  });
+  if (_transitAtHome.length > 0) {
+    _transitAtHome.forEach(function(td) {
+      var idx = days.findIndex(function(d) { return d.day === td.day; });
+      if (idx < 0) return;
+      /* Find the next drive-home day (redundant after we fix this one) */
+      var nextDriveHomeIdx = -1;
+      for (var ni = idx + 1; ni < days.length; ni++) {
+        if (days[ni].driveDay && days[ni].stopId === _homeId && days[ni].sleepType === 'home') {
+          nextDriveHomeIdx = ni; break;
+        }
+      }
+      /* Combine miles/hours into this day to make it the final direct drive home */
+      var combinedMiles = (td.miles || 0) + (nextDriveHomeIdx >= 0 ? (days[nextDriveHomeIdx].miles || 0) : 0);
+      var combinedHours = (td.driveHours || 0) + (nextDriveHomeIdx >= 0 ? (days[nextDriveHomeIdx].driveHours || 0) : 0);
+      /* Derive origin name from the last different-phase day before this one */
+      var _originName = '';
+      for (var bi = idx - 1; bi >= 0; bi--) {
+        var _bPrev = days[bi];
+        if (!_bPrev || removedIds[_bPrev.stopId]) continue;
+        var _bPhase = _bPrev.phase || '';
+        if (_bPhase === (td.phase || '')) continue;
+        _originName = _bPhase || (stopMap[_bPrev.stopId] ? (stopMap[_bPrev.stopId].name + (stopMap[_bPrev.stopId].state ? ', ' + stopMap[_bPrev.stopId].state : '')) : '');
+        break;
+      }
+      var _hmName = _homeStop ? (_homeStop.name + (_homeStop.state ? ', ' + _homeStop.state : '')) : 'Home';
+      var _newTitle = _originName ? (_originName + ' \u2192 ' + _hmName + ' \u2014 Welcome Home! \uD83C\uDF89') : ('Drive to ' + _hmName + ' \u2014 Welcome Home! \uD83C\uDF89');
+      /* Fix this day: now the final direct drive home */
+      days[idx] = Object.assign({}, td, {
+        sleep: 'HOME!', sleepType: 'home',
+        miles: combinedMiles, driveHours: combinedHours,
+        title: _newTitle
+      });
+      /* Fix the next home drive day (now redundant): convert to a rest-at-home day */
+      if (nextDriveHomeIdx >= 0) {
+        days[nextDriveHomeIdx] = Object.assign({}, days[nextDriveHomeIdx], {
+          driveDay: false, miles: 0, driveHours: 0,
+          title: 'Home \u2014 Unpack, Rest, Relive Memories'
+        });
+      }
+      issues.push({ type:'fix', msg: 'Removed un-deletable transit overnight (' + td.sleep + ') at home stop — combined into one final drive home: ' + combinedMiles + ' mi, ' + combinedHours + 'h. Home leg is now a direct drive.' });
+      fixCount++;
+    });
+  } else {
+    issues.push({ type:'info', msg: 'Final drive home \u2713 No ghost transit-overnight stops found at home location' });
+  }
+
   /* ── 4. Orphaned days (stopId not in TRIP_STOPS) ─────────────────────── */
   var orphanDays = days.filter(function(d) { return !stopMap[d.stopId]; });
   if (orphanDays.length > 0) {
@@ -15252,10 +15320,23 @@ function refreshTripPlan() {
     issues.push({ type:'info', msg: 'Weather ✓ Temperature data loaded for all ' + activeStops.length + ' active stops' });
   }
 
+  /* ── 12b. Total miles sanity check ──────────────────────────────────────── */
+  var _computedMiles = days.filter(function(d) { return d.driveDay; }).reduce(function(s, d) { return s + (d.miles || 0); }, 0);
+  var _storedMiles   = CONFIG.totalMiles || 0;
+  if (_computedMiles > 0 && Math.abs(_computedMiles - _storedMiles) > Math.max(_storedMiles * 0.05, 100)) {
+    issues.push({ type:'fix', msg: 'Total miles updated: sum of all drive days is ' + _computedMiles.toLocaleString() + ' mi (was showing ' + _storedMiles.toLocaleString() + '). The Print PDF and dashboard header will now show the correct number.' });
+    fixCount++;
+  } else if (_computedMiles > 0) {
+    issues.push({ type:'info', msg: 'Total miles \u2713 ' + _computedMiles.toLocaleString() + ' mi across ' + days.filter(function(d){return d.driveDay && d.miles;}).length + ' drive days' });
+  }
+
   /* ── APPLY FIXES ─────────────────────────────────────────────────────────── */
   if (fixCount > 0) {
+    /* Always sync totalMiles from computed drive-day sum */
+    if (_computedMiles > 0) CONFIG.totalMiles = _computedMiles;
     if (appState.activeTrip === 'custom' && appState.customTripData) {
       appState.customTripData.days = days;
+      if (_computedMiles > 0) appState.customTripData.totalMiles = _computedMiles;
     } else {
       appState.customTripData = {
         tripName: (appState.tripSettings && appState.tripSettings.tripName) || _BUILTIN_TRIP.tripName || 'My Trip',
@@ -15264,7 +15345,7 @@ function refreshTripPlan() {
         startDate: CONFIG.startDate,
         endDate: CONFIG.endDate,
         totalDays: days.length,
-        totalMiles: CONFIG.totalMiles
+        totalMiles: _computedMiles || CONFIG.totalMiles
       };
       appState.activeTrip = 'custom';
     }
