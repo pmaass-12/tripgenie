@@ -55,6 +55,10 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (twenty-third context) — 2026-03-02
+
+- **Schedule drift warning banner (auto-sync)**: `renderSchedule()` now computes the sum of all `phaseExtraDays` values at render time. If non-zero, a small inline banner appears at the top of the Schedule content showing "Schedule ends [date] (+N days vs. base)" with a one-click **Reset Days** button. The button calls `_resetAllExtraDaysQuiet()` which clears `appState.phaseExtraDays`, saves, and calls `_refreshAll()` — updating Schedule, Agenda, Day Planner, Route Map, and Dashboard simultaneously. No confirm dialog on the banner reset (it's clearly labeled and reversible). The existing `_resetAllExtraDays()` in Health Check keeps its confirm dialog for safety. This keeps all views in sync without needing to visit Tools → Health Check.
+
 ### Session 18 (twenty-second context) — 2026-03-02
 
 - **Attractions panel stays open when clicking "+ Plan"**: Root cause was `planStopEvent` calling `renderStops()` (full DOM rebuild) whenever any plan button was clicked, then trying to restore panel state via `toggleStopAttractions()` (which is a toggle — could accidentally close if called on already-visible panel, or show spinner from fresh API call). Fix: if any attraction panel is currently open, skip the `renderStops()` call entirely — the button state was already updated in-place (lines 16401-16414). Also added `event.stopPropagation()` to the `+ Plan` button inside `loadStopAttractions` to prevent accidental propagation.
