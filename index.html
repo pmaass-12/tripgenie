@@ -4072,10 +4072,12 @@ function getDaySleep(day) {
 }
 
 /* ── CONFIG ──────────────────────────────────────────────────────── */
+// Passwords stored as SHA-256 hashes — never plaintext in source.
+// To regenerate: run  python3 -c "import hashlib; print(hashlib.sha256(b'yourpassword').hexdigest())"
 var CONFIG = {
-  password:        'rvtrip2026',    // Family password
-  friendsPassword: 'maassfriends', // Friends/limited view password
-  viewerPassword:  'readonly',     // Read-only full view (all tabs, no edits)
+  passwordHash:        'b8f44831a6ae364c5ae1b1edeab570ccd7e1fbbf0ce18479bae13ed7c1296023', // family
+  friendsPasswordHash: '39b14b5cc500ec7a1991c3131570cb73a8eba0d57271ebfac3a3536b1253995a', // friends
+  viewerPasswordHash:  '8171bacf32668a8f44b90087ad107ed63170f57154763ba7e44047bf9e5a7be3', // viewer
   startDate: '2026-02-28',
   endDate:   '2026-04-14',
   totalDays: 46,
@@ -4371,20 +4373,32 @@ async function doLogin() {
   }
 
   // ── Legacy password-only path (no email entered) ─────────────────
-  _doLegacyLogin(passVal);
+  await _doLegacyLogin(passVal);
 }
 
 var _legacyAuthMode = null; // 'family' | 'viewer' | 'friends' — set before showing profile picker
 
-function _doLegacyLogin(passVal) {
+/* Hash a string with SHA-256 using the browser's native SubtleCrypto API */
+async function _sha256(str) {
+  try {
+    var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(function(b){ return b.toString(16).padStart(2,'0'); }).join('');
+  } catch(e) {
+    // SubtleCrypto requires HTTPS; fall back to raw value if unavailable (local dev over http)
+    return str;
+  }
+}
+
+async function _doLegacyLogin(passVal) {
   if (!passVal) passVal = (document.getElementById('password-input') || {}).value || '';
-  if (passVal === CONFIG.password) {
+  var h = await _sha256(passVal);
+  if (h === CONFIG.passwordHash) {
     _legacyAuthMode = 'family';
     _showProfilePicker(); // show picker; _applyProfile will launch app when done
-  } else if (passVal === CONFIG.viewerPassword) {
+  } else if (h === CONFIG.viewerPasswordHash) {
     _legacyAuthMode = 'viewer';
     _showProfilePicker();
-  } else if (passVal === CONFIG.friendsPassword) {
+  } else if (h === CONFIG.friendsPasswordHash) {
     _legacyAuthMode = 'friends';
     _showProfilePicker();
   } else {

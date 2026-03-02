@@ -2,9 +2,7 @@
   publish = "."
   functions = "netlify/functions"
 
-[[headers]]
-  for = "/.netlify/functions/*"
-  [headers.values]
-    Access-Control-Allow-Origin = "*"
-    Access-Control-Allow-Methods = "POST, OPTIONS"
-    Access-Control-Allow-Headers = "Content-Type"
+# NOTE: CORS headers are intentionally NOT set globally here.
+# Each function handles its own CORS, with origin-specific checks,
+# so we never accidentally broadcast Access-Control-Allow-Origin: * for
+# authenticated or quota-protected endpoints.
