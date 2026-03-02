@@ -17318,73 +17318,96 @@ function loadWeather() {
   if (_weatherLoaded) return;
   _weatherLoaded = true;
   if (!appState.weather) appState.weather = {};
+  /* Session-level fetch-attempt tracker — prevents hammering the API on every
+     renderSchedule() call. Resets when the page reloads. */
+  if (!window._wxFetched) window._wxFetched = {};
 
   var today   = new Date();
   var cutoff  = new Date(today);
   cutoff.setDate(cutoff.getDate() + 16);
   var cutoffStr = cutoff.toISOString().slice(0, 10);
 
+  /* Collect stops that actually need fetching to stagger requests */
+  var stopsToFetch = [];
   TRIP_STOPS.forEach(function(stop) {
     var sid = stop.id;
     if (!appState.weather[sid]) appState.weather[sid] = {};
-
     var stopDays = TRIP_DAYS.filter(function(d) { return d.stopId === sid; });
     if (!stopDays.length) return;
     var firstDate = stopDays[0].date;
     var lastDate  = stopDays[stopDays.length - 1].date;
 
-    /* --- Archive: 2025 historical data for "typical" temps --- */
-    var archStart = firstDate.replace('2026-', '2025-');
-    var archEnd   = lastDate.replace('2026-', '2025-');
-    var archUrl   = 'https://archive-api.open-meteo.com/v1/archive?latitude=' + stop.lat
-      + '&longitude=' + stop.lng
-      + '&start_date=' + archStart + '&end_date=' + archEnd
-      + '&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto';
+    /* Skip if we already fetched this stop this session */
+    if (window._wxFetched[sid]) return;
 
-    fetch(archUrl)
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (!data.daily || !data.daily.time) return;
-        for (var di = 0; di < data.daily.time.length; di++) {
-          var tripDate = data.daily.time[di].replace('2025-', '2026-');
-          if (!appState.weather[sid][tripDate]) {
-            appState.weather[sid][tripDate] = {
-              high: Math.round(data.daily.temperature_2m_max[di]),
-              low:  Math.round(data.daily.temperature_2m_min[di]),
-              type: 'typical'
-            };
-          }
-        }
-        applyWeatherToSchedule();
-      })
-      .catch(function() {});
+    /* Skip if we already have cached data covering this stop's date range */
+    var cached = appState.weather[sid];
+    var hasCoverage = stopDays.some(function(d) { return cached[d.date]; });
+    if (hasCoverage) { window._wxFetched[sid] = true; return; }
 
-    /* --- Forecast: only for stops whose days are within 16-day window --- */
-    if (firstDate <= cutoffStr) {
-      var fUrl = 'https://api.open-meteo.com/v1/forecast?latitude=' + stop.lat
+    stopsToFetch.push({ stop: stop, sid: sid, firstDate: firstDate, lastDate: lastDate });
+  });
+
+  /* Stagger requests — 400 ms apart — to avoid rate-limit bursts */
+  stopsToFetch.forEach(function(item, idx) {
+    setTimeout(function() {
+      var stop = item.stop, sid = item.sid;
+      var firstDate = item.firstDate, lastDate = item.lastDate;
+      window._wxFetched[sid] = true; /* mark as attempted before fetch completes */
+
+      /* --- Archive: prior-year historical data for "typical" temps --- */
+      var archStart = firstDate.replace('2026-', '2025-');
+      var archEnd   = lastDate.replace('2026-', '2025-');
+      var archUrl   = 'https://archive-api.open-meteo.com/v1/archive?latitude=' + stop.lat
         + '&longitude=' + stop.lng
-        + '&daily=temperature_2m_max,temperature_2m_min,weathercode'
-        + '&temperature_unit=fahrenheit&timezone=auto&forecast_days=16';
+        + '&start_date=' + archStart + '&end_date=' + archEnd
+        + '&daily=temperature_2m_max,temperature_2m_min&temperature_unit=fahrenheit&timezone=auto';
 
-      fetch(fUrl)
+      fetch(archUrl)
         .then(function(r) { return r.json(); })
         .then(function(data) {
           if (!data.daily || !data.daily.time) return;
           for (var di = 0; di < data.daily.time.length; di++) {
-            var fDate = data.daily.time[di];
-            if (fDate >= firstDate && fDate <= lastDate) {
-              appState.weather[sid][fDate] = {
+            var tripDate = data.daily.time[di].replace('2025-', '2026-');
+            if (!appState.weather[sid][tripDate]) {
+              appState.weather[sid][tripDate] = {
                 high: Math.round(data.daily.temperature_2m_max[di]),
                 low:  Math.round(data.daily.temperature_2m_min[di]),
-                code: data.daily.weathercode ? data.daily.weathercode[di] : null,
-                type: 'forecast'
+                type: 'typical'
               };
             }
           }
           applyWeatherToSchedule();
         })
         .catch(function() {});
-    }
+
+      /* --- Forecast: only for stops within the 16-day window --- */
+      if (firstDate <= cutoffStr) {
+        var fUrl = 'https://api.open-meteo.com/v1/forecast?latitude=' + stop.lat
+          + '&longitude=' + stop.lng
+          + '&daily=temperature_2m_max,temperature_2m_min,weathercode'
+          + '&temperature_unit=fahrenheit&timezone=auto&forecast_days=16';
+
+        fetch(fUrl)
+          .then(function(r) { return r.json(); })
+          .then(function(data) {
+            if (!data.daily || !data.daily.time) return;
+            for (var di = 0; di < data.daily.time.length; di++) {
+              var fDate = data.daily.time[di];
+              if (fDate >= firstDate && fDate <= lastDate) {
+                appState.weather[sid][fDate] = {
+                  high: Math.round(data.daily.temperature_2m_max[di]),
+                  low:  Math.round(data.daily.temperature_2m_min[di]),
+                  code: data.daily.weathercode ? data.daily.weathercode[di] : null,
+                  type: 'forecast'
+                };
+              }
+            }
+            applyWeatherToSchedule();
+          })
+          .catch(function() {});
+      }
+    }, idx * 400); /* 400 ms stagger between each stop */
   });
 }
 
