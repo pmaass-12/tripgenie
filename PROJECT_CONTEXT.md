@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-02 (Session 18, eleventh context)
+2026-03-02 (Session 18, twelfth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,12 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 18 (twelfth context) — 2026-03-02
+- **AI attractions → Activities section + day modal (full fix)**: Root cause was two completely separate plan stores — `appState.plannedEvents` (AI) vs `appState.planned` (static). Fixed by: (a) `planStopEvent()` now writes AI attractions to `appState.customActivities[stopId]` and bridges to `appState.planned['p_stopId_a_combinedIdx']` so `getPlannedForStop()` picks them up; (b) `getPlannedForStop()` returns `customActivities: []` in result and scans the combined indices; (c) `renderDayTimeBlocks()` now includes `customActivities` in the `acts[]` array used to build day schedule — handles both drive day and explore day slots; (d) "Your Plan" banner in schedule cards also shows custom activities with ⭐ icon; (e) `tbbAiBtn` calls guarded with `idx != null` check so custom activities (idx=null) don't error.
+- **Postcard two-stacked portrait layout**: Redesigned from side-by-side landscape (1200×800) to two vertically stacked panels (1200×1406 total): TOP = full-bleed photo collage with location overlay (1200×700), dashed tear-here strip (6px), BOTTOM = classic postcard back at full 1200px width with larger fonts and proportions. Updated html2canvas dimensions to match. DOM root element height updated to 1406px.
+- **Voice mode animated waveform**: Added `tg-mic-btn` button (microphone icon, orange tint) to TripGenie input row. When `_tgSetMicState(true)` is called (listening), the button switches to 5 animated waveform bars via CSS `tg-bar-pulse` keyframes — each bar has staggered `animation-delay` for organic look. When not listening, shows static microphone icon. `tg-hf-btn` waveform SVG bars also animate (`tg-hf-bar` keyframes) when hands-free mode is active.
+- **Agenda 3 PM check-in floor**: `_ciT` calculation now floors to 3 PM if raw arrival + 45 min would be earlier. Agenda row also shows proper check-in time (floored) + "Arrive early" note when applicable.
 
 ### Session 18 (eleventh context) — 2026-03-02
 - **Postcard complete redesign**: Full rework to look like a real postcard — LEFT = photo collage (postcard front, fills full 560×800), RIGHT = classic postcard back with ornate "Post-Card" header (double-rule border, serif italic), dashed stamp box (RV emoji + FOREVER), ruled message lines, location caption overlay on photo, "KINDLY DELIVER TO:" with address lines, postmark circle, footer bar. Background now `#f9f8f4` (cream white). Fixed `backgroundColor: null` → `'#f9f8f4'` in html2canvas (was rendering transparent = black). Fixed broken bgStyle CSS syntax (`PC_BG_GRADIENT + ';background:...'` → `'background:' + PC_BG_GRADIENT`).

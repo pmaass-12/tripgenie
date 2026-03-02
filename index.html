@@ -1277,6 +1277,36 @@
     #tg-photo-btn { background:var(--orange-l);color:var(--orange-d); }
     #tg-hf-btn.tg-icon-btn { background:#f0e8ff;color:#7B2FBE;font-size:.85rem; }
     #tg-hf-btn.tg-icon-btn.hf-active { background:#7B2FBE;color:#fff;box-shadow:0 2px 8px rgba(123,47,190,.35); }
+    #tg-mic-btn { background:var(--orange-l);color:var(--orange-d); }
+    #tg-mic-btn.tg-listening { background:rgba(231,76,60,.18);color:#e74c3c;border:1.5px solid rgba(231,76,60,.55);box-shadow:0 0 0 4px rgba(231,76,60,.1); }
+    .tg-wave-bars { display:none;align-items:flex-end;gap:2.5px;height:18px; }
+    .tg-listening .tg-wave-bars { display:flex; }
+    .tg-listening .tg-mic-static { display:none; }
+    @keyframes tg-bar-pulse {
+      0%,100% { transform:scaleY(.35); }
+      50%      { transform:scaleY(1); }
+    }
+    .tg-wave-b {
+      width:3px;border-radius:2px;background:currentColor;
+      transform-origin:bottom;transform:scaleY(.35);
+    }
+    .tg-listening .tg-wave-b { animation:tg-bar-pulse .65s ease-in-out infinite; }
+    .tg-listening .tg-wave-b:nth-child(1) { animation-delay:0s;    height:12px; }
+    .tg-listening .tg-wave-b:nth-child(2) { animation-delay:.12s;  height:18px; }
+    .tg-listening .tg-wave-b:nth-child(3) { animation-delay:.24s;  height:10px; }
+    .tg-listening .tg-wave-b:nth-child(4) { animation-delay:.08s;  height:16px; }
+    .tg-listening .tg-wave-b:nth-child(5) { animation-delay:.18s;  height:8px; }
+    /* hf-active waveform icon pulse */
+    #tg-hf-btn.hf-active svg rect { animation:tg-hf-bar .8s ease-in-out infinite; transform-origin:bottom; }
+    #tg-hf-btn.hf-active svg rect:nth-child(1) { animation-delay:0s; }
+    #tg-hf-btn.hf-active svg rect:nth-child(2) { animation-delay:.1s; }
+    #tg-hf-btn.hf-active svg rect:nth-child(3) { animation-delay:.2s; }
+    #tg-hf-btn.hf-active svg rect:nth-child(4) { animation-delay:.15s; }
+    #tg-hf-btn.hf-active svg rect:nth-child(5) { animation-delay:.05s; }
+    @keyframes tg-hf-bar {
+      0%,100% { opacity:.5;transform:scaleY(.6); }
+      50%      { opacity:1;transform:scaleY(1.1); }
+    }
     #tg-send-btn {
       background:var(--orange);
       color:#fff;box-shadow:0 2px 8px rgba(232,129,58,.35);
@@ -3020,6 +3050,16 @@
       <!-- Booking Confirmations file picker (used by openBookingModal) -->
       <input type="file" id="bc-file-input" accept="image/*,application/pdf" style="display:none" onchange="_bcHandleFile(event)" />
       <button class="tg-icon-btn" id="tg-photo-btn" onclick="document.getElementById('tg-file-input').click()" title="Attach a photo or PDF"><i class="fa-solid fa-arrow-up-from-bracket"></i></button>
+      <button class="tg-icon-btn" id="tg-mic-btn" onclick="_tgStartVoice()" title="Voice input — tap to speak">
+        <span class="tg-mic-static"><i class="fa-solid fa-microphone"></i></span>
+        <span class="tg-wave-bars">
+          <span class="tg-wave-b" style="height:12px;"></span>
+          <span class="tg-wave-b" style="height:18px;"></span>
+          <span class="tg-wave-b" style="height:10px;"></span>
+          <span class="tg-wave-b" style="height:16px;"></span>
+          <span class="tg-wave-b" style="height:8px;"></span>
+        </span>
+      </button>
       <button class="tg-icon-btn" id="tg-hf-btn" onclick="_tgToggleHandsFree()" title="Hands-free: speak → Genie replies → auto-listens"><svg id="tg-hf-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 18" width="18" height="14" fill="currentColor"><rect x="0" y="6" width="3" height="6" rx="1.5"/><rect x="4.75" y="2.5" width="3" height="13" rx="1.5"/><rect x="9.5" y="0" width="3" height="18" rx="1.5"/><rect x="14.25" y="3" width="3" height="12" rx="1.5"/><rect x="19" y="6" width="3" height="6" rx="1.5"/></svg></button>
       <button class="tg-icon-btn" id="tg-send-btn" onclick="askTripGenie()" title="Send">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -3115,7 +3155,7 @@
 <!-- AI INFO MODAL -->
 <!-- TIME EDIT OVERLAY -->
 <!-- POSTCARD RENDER CANVAS (off-screen, used by html2canvas) -->
-<div id="postcard-render-root" style="position:fixed;left:-1300px;top:0;width:1200px;height:800px;overflow:hidden;pointer-events:none;z-index:-1;"></div>
+<div id="postcard-render-root" style="position:fixed;left:-1300px;top:0;width:1200px;height:1406px;overflow:hidden;pointer-events:none;z-index:-1;"></div>
 
 <!-- ADD DESTINATION MODAL -->
 <div id="add-dest-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:4000;display:flex;align-items:center;justify-content:center;padding:16px;" onclick="if(event.target===this)closeAddDest()">
@@ -4139,6 +4179,7 @@ function enterTestMode() {
     listChecked:{ todo:{}, pack:{} }, listHidden:{ todo:{}, pack:{} },
     customListItems:{ todo:[], pack:[] }, listSortOrder:{ todo:[], pack:[] },
     bookingStatus:{}, customBookings:[], savedPostcards:[], journal:{}, stopMinVisit:{},
+    customActivities:{}, aiActivityIdx:{},
     listsSubTab:'todo',
     /* ── sample decisions so the Decisions tab has content to test ── */
     aiSuggestions: [
@@ -8506,7 +8547,8 @@ function renderSchedule() {
     var stopForDay2 = getStop(d.stopId);
     if (stopForDay2 && typeof getPlannedForStop === 'function' && !_isTransit) {
       var dp = getPlannedForStop(d.stopId, d.day);
-      if (dp.activities.length > 0 || dp.restaurants.length > 0) {
+      var _dpCustActs = (appState.customActivities && appState.customActivities[d.stopId]) || [];
+      if (dp.activities.length > 0 || dp.restaurants.length > 0 || (dp.customActivities && dp.customActivities.length > 0)) {
         html += '<div style="padding:8px 12px 10px;border-top:1px solid var(--border);background:var(--green-l);">';
         html += '<div style="font-size:.7rem;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">&#9989; Your Plan for ' + stopForDay2.name + '</div>';
         html += '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
@@ -8515,6 +8557,10 @@ function renderSchedule() {
         for (var pla = 0; pla < dp.activities.length; pla++) {
           var plAct = sf2Acts[dp.activities[pla]];
           if (plAct) html += '<div style="background:#fff;border:1px solid #a8d5b8;border-radius:12px;font-size:.72rem;font-weight:600;color:var(--green);padding:3px 10px;">&#127939; ' + plAct.name + '</div>';
+        }
+        for (var plca = 0; plca < (dp.customActivities || []).length; plca++) {
+          var plCAct = _dpCustActs[dp.customActivities[plca]];
+          if (plCAct) html += '<div style="background:#fff;border:1px solid #a8d5b8;border-radius:12px;font-size:.72rem;font-weight:600;color:var(--green);padding:3px 10px;">&#11088; ' + plCAct.name + '</div>';
         }
         for (var plr = 0; plr < dp.restaurants.length; plr++) {
           var plRest = sf2Rests[dp.restaurants[plr]];
@@ -8903,21 +8949,30 @@ function closePlanPicker() {
   document.body.style.overflow = '';
 }
 function getPlannedForStop(stopId, forDay) {
-  var result = { activities: [], restaurants: [] };
+  var result = { activities: [], customActivities: [], restaurants: [] };
   if (!appState.planned) return result;
   var stop = getStop(stopId);
   if (!stop) return result;
   /* Find first day of this stop so old val===true items show only once */
   var stopDaysAll = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
   var firstStopDay = stopDaysAll.length ? stopDaysAll[0].day : null;
-  var stopActs  = stop.activities  || [];
-  var stopRests = stop.restaurants || [];
+  var stopActs    = stop.activities  || [];
+  var stopRests   = stop.restaurants || [];
+  var customActs  = (appState.customActivities && appState.customActivities[stopId]) || [];
   for (var ai = 0; ai < stopActs.length; ai++) {
     var val = appState.planned['p_' + stopId + '_a_' + ai];
     if (!val) continue;
     if (forDay == null) { result.activities.push(ai); continue; }
     /* val===true (legacy) → show only on first day of stop; otherwise match exact day */
     if (val === true ? forDay === firstStopDay : val === forDay) result.activities.push(ai);
+  }
+  /* Also surface custom (AI-planned) activities */
+  for (var ci = 0; ci < customActs.length; ci++) {
+    var cIdx = stopActs.length + ci;
+    var cval = appState.planned['p_' + stopId + '_a_' + cIdx];
+    if (!cval) continue;
+    if (forDay == null) { result.customActivities.push(ci); continue; }
+    if (cval === true ? forDay === firstStopDay : cval === forDay) result.customActivities.push(ci);
   }
   for (var ri = 0; ri < stopRests.length; ri++) {
     var valr = appState.planned['p_' + stopId + '_r_' + ri];
@@ -9083,9 +9138,14 @@ function renderStops() {
     // ACTIVITIES
     var stopActivities  = stop.activities  || [];
     var stopRestaurants = stop.restaurants || [];
+    var _customActs4Stop = (appState.customActivities && appState.customActivities[stop.id]) || [];
+    var _plannedCustom4Stop = _customActs4Stop.filter(function(ca, ci) {
+      var cIdx = stopActivities.length + ci;
+      return !!(appState.planned && appState.planned['p_' + stop.id + '_a_' + cIdx]);
+    });
     html += '<div style="font-weight:700;font-size:.78rem;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;"><i class="fa-solid fa-person-hiking"></i> Activities &amp; Things To Do</div>';
     html += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">';
-    if (!stopActivities.length) html += '<div style="font-size:.83rem;color:var(--text-2);padding:10px 0;">No activities listed yet for this stop.</div>';
+    if (!stopActivities.length && !_plannedCustom4Stop.length) html += '<div style="font-size:.83rem;color:var(--text-2);padding:10px 0;">No activities listed yet — tap <strong>Attractions</strong> below to discover &amp; plan!</div>';
 
     for (var ai = 0; ai < stopActivities.length; ai++) {
       var act = stopActivities[ai];
@@ -9128,6 +9188,23 @@ function renderStops() {
       html += '</div>';
       html += '</div></div>';
     }
+    /* Custom (AI-planned) activities */
+    _plannedCustom4Stop.forEach(function(ca) {
+      html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius-s);padding:11px 14px;">'
+        + '<div style="display:flex;align-items:flex-start;gap:10px;">'
+        + '<div style="flex:1;">'
+        + '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:5px;">'
+        + '<span style="font-weight:700;font-size:.875rem;">' + ca.name + '</span>'
+        + (ca.type ? '<span style="background:#6B6560;color:#fff;font-size:.63rem;font-weight:700;padding:2px 8px;border-radius:100px;">✨ ' + ca.type + '</span>' : '')
+        + (ca.duration ? '<span style="background:var(--bg);color:var(--text-2);font-size:.63rem;padding:2px 8px;border-radius:100px;border:1px solid var(--border);">⏱️ ' + ca.duration + '</span>' : '')
+        + '</div>'
+        + (ca.desc ? '<div style="font-size:.82rem;color:var(--text-2);line-height:1.5;margin-bottom:6px;">' + ca.desc + '</div>' : '')
+        + '</div>'
+        + '<div style="text-align:center;min-width:56px;display:flex;flex-direction:column;align-items:center;gap:6px;">'
+        + '<button onclick="event.stopPropagation();planStopEvent(\'' + ca._planKey + '\',\'' + ca.name.replace(/'/g,"\\'") + '\',' + stop.id + ')" style="background:var(--green);color:#fff;border:none;border-radius:100px;font-family:var(--font);font-size:.7rem;font-weight:800;padding:5px 8px;cursor:pointer;white-space:nowrap;">✅ Planned</button>'
+        + '</div>'
+        + '</div></div>';
+    });
     html += '</div>';
 
     // RESTAURANTS
@@ -10458,7 +10535,9 @@ function renderPlannerAgenda() {
       var _sbH  = _sbN>0 ? Math.round((_sbN*_agSbMins)/60*10)/10 : 0;
       var _totH = _drH + _sbH;
       var _arrT = _calAddHours(_dptH, _dptM, _totH);
-      var _ciT  = _calAddHours(_arrT.h, _arrT.m, 0.75);
+      var _ciTraw = _calAddHours(_arrT.h, _arrT.m, 0.75);
+      /* Enforce 3 PM check-in floor — same rule as the day detail modal */
+      var _ciT  = (_ciTraw.h < 15) ? { h: 15, m: 0 } : _ciTraw;
       var _aftT = _calAddHours(_ciT.h, _ciT.m, 0.5);
       var _drTitle = (typeof _getDriveDayTitle==='function') ? _getDriveDayTitle(d) : (d.title||'Drive day');
       var _slpIcon = d.sleepType==='rv_park'?'🏕':d.sleepType==='walmart'?'🛒':d.sleepType==='boondock'?'🏕':'⛺';
@@ -10490,11 +10569,14 @@ function renderPlannerAgenda() {
           + '<div style="' + _txt  + '"><strong>Welcome Home!</strong>'
           + '<div style="' + _sub  + '">Unpack, decompress, celebrate 🎉</div></div></div>';
       } else if (d.sleep) {
+        var _earlyArr = (_arrT.h < 15);
         html += '<div style="' + _row + '">'
-          + '<div style="' + _time + '">' + _calFmtTime(_arrT.h, _arrT.m) + '</div>'
+          + '<div style="' + _time + '">' + _calFmtTime(_ciT.h, _ciT.m) + '</div>'
           + '<div style="' + _ico  + '">' + _slpIcon + '</div>'
           + '<div style="' + _txt  + '"><strong>Arrive &amp; Check In</strong>'
-          + '<div style="' + _sub  + '">' + d.sleep + '</div></div></div>';
+          + '<div style="' + _sub  + '">'
+          + (_earlyArr ? 'Arrive ' + _calFmtTime(_arrT.h, _arrT.m) + ' · Check-in from 3:00 PM · ' : '')
+          + d.sleep + '</div></div></div>';
       }
 
       /* Afternoon explore if arriving before 5 PM */
@@ -12546,112 +12628,111 @@ function buildAndShowPostcardPreview() {
     msgHtml += '<p style="margin:0 0 12px;line-height:1.65;font-size:17px;color:#3a3020;">' + paragraphs[pi].replace(/\n/g, '<br>') + '</p>';
   }
 
-  // ── POSTCARD LAYOUT ─────────────────────────────────────────────
-  // Left half  = scenic photo (the "front" of the postcard)
-  // Right half = classic postcard back (Post-Card header, ruled lines, address, stamp)
+  // ── POSTCARD LAYOUT — TWO STACKED PORTRAIT PANELS ──────────────
+  // TOP (1200×700) = scenic photo collage — the "front" of the postcard
+  // DIVIDER (6px)  = decorative tear-here strip
+  // BOTTOM (1200×700) = classic postcard back — Post-Card header, ruled lines, address, stamp
+  // Total canvas: 1200 × 1406
+
+  // Build scaled photo collage for the top panel (1200×700)
+  var _fp = '', _fpW = 1200, _fpH = 700, _fpG = 8, _fpSty = 'object-fit:cover;display:block;';
+  if (photos.length === 0) {
+    _fp = '<div style="width:'+_fpW+'px;height:'+_fpH+'px;background:#e8e0d0;display:flex;align-items:center;justify-content:center;"><span style="font-size:6rem;opacity:.25;">&#128247;</span></div>';
+  } else if (photos.length === 1) {
+    _fp = '<img src="'+photos[0]+'" style="width:'+_fpW+'px;height:'+_fpH+'px;'+_fpSty+'" crossorigin="anonymous"/>';
+  } else if (photos.length === 2) {
+    var _fp2w = Math.floor((_fpW-_fpG)/2);
+    _fp = '<div style="display:flex;gap:'+_fpG+'px;width:'+_fpW+'px;height:'+_fpH+'px;">'
+      + '<img src="'+photos[0]+'" style="width:'+_fp2w+'px;height:'+_fpH+'px;'+_fpSty+'" crossorigin="anonymous"/>'
+      + '<img src="'+photos[1]+'" style="width:'+_fp2w+'px;height:'+_fpH+'px;'+_fpSty+'" crossorigin="anonymous"/>'
+      + '</div>';
+  } else if (photos.length === 3) {
+    var _fp3w = Math.floor((_fpW-_fpG)/2), _fp3ht = Math.round(_fpH*2/3), _fp3hb = _fpH-_fp3ht-_fpG;
+    _fp = '<div style="width:'+_fpW+'px;height:'+_fpH+'px;">'
+      + '<img src="'+photos[0]+'" style="width:'+_fpW+'px;height:'+_fp3ht+'px;margin-bottom:'+_fpG+'px;'+_fpSty+'" crossorigin="anonymous"/>'
+      + '<div style="display:flex;gap:'+_fpG+'px;">'
+      + '<img src="'+photos[1]+'" style="width:'+_fp3w+'px;height:'+_fp3hb+'px;'+_fpSty+'" crossorigin="anonymous"/>'
+      + '<img src="'+photos[2]+'" style="width:'+_fp3w+'px;height:'+_fp3hb+'px;'+_fpSty+'" crossorigin="anonymous"/>'
+      + '</div></div>';
+  } else {
+    var _fpGw = Math.floor((_fpW-_fpG)/2), _fpGh = Math.floor((_fpH-_fpG)/2);
+    _fp = '<div style="width:'+_fpW+'px;height:'+_fpH+'px;">'
+      + '<div style="display:flex;gap:'+_fpG+'px;margin-bottom:'+_fpG+'px;">'
+      + '<img src="'+photos[0]+'" style="width:'+_fpGw+'px;height:'+_fpGh+'px;'+_fpSty+'" crossorigin="anonymous"/>'
+      + '<img src="'+photos[1]+'" style="width:'+_fpGw+'px;height:'+_fpGh+'px;'+_fpSty+'" crossorigin="anonymous"/>'
+      + '</div><div style="display:flex;gap:'+_fpG+'px;">'
+      + '<img src="'+photos[2]+'" style="width:'+_fpGw+'px;height:'+_fpGh+'px;'+_fpSty+'" crossorigin="anonymous"/>'
+      + '<img src="'+photos[3]+'" style="width:'+_fpGw+'px;height:'+_fpGh+'px;'+_fpSty+'" crossorigin="anonymous"/>'
+      + '</div></div>';
+  }
+
   root.innerHTML =
-    '<div style="width:1200px;height:800px;background-color:#f9f8f4;position:relative;font-family:Georgia,serif;overflow:hidden;box-shadow:0 0 0 1px #d8d0c0;">'
+    '<div style="width:1200px;height:1406px;background-color:#f9f8f4;position:relative;font-family:Georgia,serif;overflow:hidden;">'
 
-    // ── LEFT: photo collage (postcard front) ────────────────────
-    + '<div style="position:absolute;top:0;left:0;width:560px;height:800px;overflow:hidden;">'
-    + '<div style="width:560px;height:800px;overflow:hidden;">' + (function(){
-        // Scale photoHtml to fill the 560×800 panel — replace _PW/440 refs with 560, _PH/700 with 800
-        // We rebuild a scaled version using the same photos array
-        var ph2 = '', pw2 = 560, ph2h = 800, gap2 = 8, iSty = 'object-fit:cover;display:block;';
-        if (photos.length === 0) {
-          ph2 = '<div style="width:'+pw2+'px;height:'+ph2h+'px;background:#e8e0d0;display:flex;align-items:center;justify-content:center;"><span style="font-size:5rem;opacity:.3;">&#128247;</span></div>';
-        } else if (photos.length === 1) {
-          ph2 = '<img src="'+photos[0]+'" style="width:'+pw2+'px;height:'+ph2h+'px;'+iSty+'" crossorigin="anonymous"/>';
-        } else if (photos.length === 2) {
-          var w2b = Math.floor((pw2-gap2)/2);
-          ph2 = '<div style="display:flex;gap:'+gap2+'px;width:'+pw2+'px;height:'+ph2h+'px;">'
-            + '<img src="'+photos[0]+'" style="width:'+w2b+'px;height:'+ph2h+'px;'+iSty+'" crossorigin="anonymous"/>'
-            + '<img src="'+photos[1]+'" style="width:'+w2b+'px;height:'+ph2h+'px;'+iSty+'" crossorigin="anonymous"/>'
-            + '</div>';
-        } else if (photos.length === 3) {
-          var w3b = Math.floor((pw2-gap2)/2), hTop = Math.round(ph2h*2/3), hBot = ph2h-hTop-gap2;
-          ph2 = '<div style="width:'+pw2+'px;height:'+ph2h+'px;">'
-            + '<img src="'+photos[0]+'" style="width:'+pw2+'px;height:'+hTop+'px;margin-bottom:'+gap2+'px;'+iSty+'" crossorigin="anonymous"/>'
-            + '<div style="display:flex;gap:'+gap2+'px;">'
-            + '<img src="'+photos[1]+'" style="width:'+w3b+'px;height:'+hBot+'px;'+iSty+'" crossorigin="anonymous"/>'
-            + '<img src="'+photos[2]+'" style="width:'+w3b+'px;height:'+hBot+'px;'+iSty+'" crossorigin="anonymous"/>'
-            + '</div></div>';
-        } else {
-          var wG2 = Math.floor((pw2-gap2)/2), hG2 = Math.floor((ph2h-gap2)/2);
-          ph2 = '<div style="width:'+pw2+'px;height:'+ph2h+'px;">'
-            + '<div style="display:flex;gap:'+gap2+'px;margin-bottom:'+gap2+'px;">'
-            + '<img src="'+photos[0]+'" style="width:'+wG2+'px;height:'+hG2+'px;'+iSty+'" crossorigin="anonymous"/>'
-            + '<img src="'+photos[1]+'" style="width:'+wG2+'px;height:'+hG2+'px;'+iSty+'" crossorigin="anonymous"/>'
-            + '</div><div style="display:flex;gap:'+gap2+'px;">'
-            + '<img src="'+photos[2]+'" style="width:'+wG2+'px;height:'+hG2+'px;'+iSty+'" crossorigin="anonymous"/>'
-            + '<img src="'+photos[3]+'" style="width:'+wG2+'px;height:'+hG2+'px;'+iSty+'" crossorigin="anonymous"/>'
-            + '</div></div>';
-        }
-        return ph2;
-      })() + '</div>'
-    // Location caption overlay at bottom of photo
-    + '<div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.55));padding:28px 20px 18px;color:#fff;font-family:Georgia,serif;">'
-    + '<div style="font-size:11px;letter-spacing:.18em;text-transform:uppercase;opacity:.85;margin-bottom:4px;">&#10022; Maass Family RV Adventure 2026 &#10022;</div>'
-    + '<div style="font-size:22px;font-weight:900;line-height:1.2;text-shadow:0 1px 6px rgba(0,0,0,.5);">' + loc + '</div>'
+    // ── TOP PANEL: photo "front" of postcard (1200×700) ──────────
+    + '<div style="position:absolute;top:0;left:0;width:1200px;height:700px;overflow:hidden;">'
+    + _fp
+    // Location overlay at bottom of photo
+    + '<div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.62));padding:36px 32px 22px;color:#fff;font-family:Georgia,serif;">'
+    + '<div style="font-size:12px;letter-spacing:.2em;text-transform:uppercase;opacity:.82;margin-bottom:5px;">&#10022; Maass Family RV Adventure 2026 &#10022;</div>'
+    + '<div style="font-size:28px;font-weight:900;line-height:1.2;text-shadow:0 2px 8px rgba(0,0,0,.55);">' + loc + '</div>'
     + '</div>'
     + '</div>'
 
-    // ── VERTICAL DIVIDER (main postcard center line) ────────────
-    + '<div style="position:absolute;top:16px;bottom:16px;left:560px;width:1px;background:#999;"></div>'
+    // ── TEAR-HERE DIVIDER (6px strip) ────────────────────────────
+    + '<div style="position:absolute;top:700px;left:0;width:1200px;height:6px;background:repeating-linear-gradient(90deg,#d0c8b8 0,#d0c8b8 8px,transparent 8px,transparent 14px);display:flex;align-items:center;justify-content:center;">'
+    + '<div style="background:#f9f8f4;padding:0 14px;font-size:8px;letter-spacing:.15em;text-transform:uppercase;color:#aaa;white-space:nowrap;">&#8212; &#9988; &#8212;</div>'
+    + '</div>'
 
-    // ── RIGHT: classic postcard back ────────────────────────────
-    + '<div style="position:absolute;top:0;left:561px;right:0;bottom:0;display:flex;flex-direction:column;">'
+    // ── BOTTOM PANEL: postcard back (1200×700) ───────────────────
+    + '<div style="position:absolute;top:706px;left:0;width:1200px;height:700px;background:#f9f8f4;display:flex;flex-direction:column;">'
 
-    // TOP: ornate "Post-Card" header + stamp box
-    + '<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:22px 22px 0 22px;flex-shrink:0;">'
-    + '<div style="flex:1;display:flex;align-items:center;justify-content:center;padding-right:12px;">'
-    + '<div style="font-family:\'Times New Roman\',Times,serif;font-size:30px;font-style:italic;font-weight:900;color:#111;border-top:3px double #222;border-bottom:3px double #222;padding:5px 22px;display:inline-block;letter-spacing:.03em;white-space:nowrap;">'
+    // Header row: Post-Card title (centered) + stamp box (top-right)
+    + '<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:26px 28px 0 28px;flex-shrink:0;">'
+    + '<div style="flex:1;display:flex;align-items:center;justify-content:center;padding-right:16px;">'
+    + '<div style="font-family:\'Times New Roman\',Times,serif;font-size:36px;font-style:italic;font-weight:900;color:#111;border-top:3px double #222;border-bottom:3px double #222;padding:6px 28px;display:inline-block;letter-spacing:.03em;white-space:nowrap;">'
     + 'Post&#8209;Card'
     + '</div>'
     + '</div>'
-    // Stamp box (dashed, with RV)
-    + '<div style="width:70px;height:82px;border:1.5px dashed #888;flex-shrink:0;position:relative;overflow:hidden;">'
+    // Stamp box
+    + '<div style="width:80px;height:96px;border:1.5px dashed #888;flex-shrink:0;position:relative;overflow:hidden;">'
     + '<div style="position:absolute;inset:4px;border:1px solid #ddd;display:flex;flex-direction:column;align-items:center;justify-content:center;">'
-    + '<div style="font-size:26px;line-height:1;">&#128663;</div>'
-    + '<div style="font-size:6px;font-weight:700;color:#888;letter-spacing:.05em;text-transform:uppercase;margin-top:4px;">FOREVER</div>'
+    + '<div style="font-size:30px;line-height:1;">&#128663;</div>'
+    + '<div style="font-size:7px;font-weight:700;color:#888;letter-spacing:.05em;text-transform:uppercase;margin-top:4px;">FOREVER</div>'
     + '</div>'
     + '</div>'
     + '</div>'
 
-    // Thin horizontal rule below header
-    + '<div style="height:1px;background:#bbb;margin:12px 22px 0 22px;flex-shrink:0;"></div>'
+    // Horizontal rule below header
+    + '<div style="height:1px;background:#bbb;margin:14px 28px 0 28px;flex-shrink:0;"></div>'
 
-    // MIDDLE: two-column layout (message | divider | address)
+    // Middle two-column area (message left, address right)
     + '<div style="flex:1;display:flex;min-height:0;">'
 
-    // Message area (left column of right panel)
-    + '<div style="flex:1;position:relative;padding:14px 14px 52px 22px;overflow:hidden;">'
-    // Ruled lines
-    + '<div style="position:absolute;left:22px;right:14px;top:14px;bottom:52px;background:repeating-linear-gradient(transparent,transparent 23px,rgba(0,0,0,.1) 23px,rgba(0,0,0,.1) 24px);pointer-events:none;"></div>'
-    // Message text
-    + '<div style="position:relative;font-size:13.5px;color:#1a1a1a;line-height:1.71;font-family:Georgia,serif;">' + msgHtml + '</div>'
-    // Signature pinned to bottom
-    + '<div style="position:absolute;bottom:14px;left:22px;right:14px;">'
-    + '<div style="font-size:11.5px;font-style:italic;color:#555;font-family:Georgia,serif;">With love, The Maass Family &#128663;</div>'
+    // Message column
+    + '<div style="flex:1;position:relative;padding:16px 16px 58px 28px;overflow:hidden;">'
+    + '<div style="position:absolute;left:28px;right:16px;top:16px;bottom:58px;background:repeating-linear-gradient(transparent,transparent 26px,rgba(0,0,0,.09) 26px,rgba(0,0,0,.09) 27px);pointer-events:none;"></div>'
+    + '<div style="position:relative;font-size:15px;color:#1a1a1a;line-height:1.73;font-family:Georgia,serif;">' + msgHtml + '</div>'
+    + '<div style="position:absolute;bottom:16px;left:28px;right:16px;">'
+    + '<div style="font-size:13px;font-style:italic;color:#555;font-family:Georgia,serif;">With love, The Maass Family &#128663;</div>'
     + '</div>'
     + '</div>'
 
     // Internal vertical divider
-    + '<div style="width:1px;background:#999;flex-shrink:0;margin:0;"></div>'
+    + '<div style="width:1px;background:#bbb;flex-shrink:0;margin:16px 0;"></div>'
 
-    // Address area (right column of right panel)
-    + '<div style="flex:1;padding:14px 22px 16px 16px;display:flex;flex-direction:column;">'
-    + '<div style="font-size:8.5px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:#333;margin-bottom:24px;">KINDLY DELIVER TO:</div>'
+    // Address column
+    + '<div style="width:380px;flex-shrink:0;padding:16px 28px 18px 20px;display:flex;flex-direction:column;">'
+    + '<div style="font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:#333;margin-bottom:28px;">KINDLY DELIVER TO:</div>'
     + (toName
-        ? '<div style="font-size:15px;font-weight:700;color:#111;font-family:Georgia,serif;margin-bottom:8px;">' + toName + '</div>'
+        ? '<div style="font-size:17px;font-weight:700;color:#111;font-family:Georgia,serif;margin-bottom:10px;">' + toName + '</div>'
           + (toAddress
-              ? '<div style="font-size:12.5px;color:#333;line-height:1.65;">' + toAddress.replace(/,\s*/g, '<br>') + '</div>'
-              : '<div><div style="border-bottom:1px solid #888;margin-bottom:22px;height:1px;"></div><div style="border-bottom:1px solid #888;margin-bottom:22px;height:1px;"></div><div style="border-bottom:1px solid #888;height:1px;"></div></div>')
-        : '<div><div style="border-bottom:1px solid #888;margin-bottom:22px;height:1px;"></div><div style="border-bottom:1px solid #888;margin-bottom:22px;height:1px;"></div><div style="border-bottom:1px solid #888;height:1px;"></div></div>')
-    // Postmark circle (bottom right of address area)
-    + '<div style="margin-top:auto;display:flex;justify-content:flex-end;">'
-    + '<div style="width:56px;height:56px;border-radius:50%;border:1.5px solid #999;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:rotate(-12deg);">'
-    + '<div style="font-size:6px;font-weight:700;color:#888;text-transform:uppercase;text-align:center;line-height:1.5;letter-spacing:.04em;">U.S.<br>MAIL<br>' + today.split(',')[0] + '</div>'
+              ? '<div style="font-size:14px;color:#333;line-height:1.7;">' + toAddress.replace(/,\s*/g, '<br>') + '</div>'
+              : '<div><div style="border-bottom:1px solid #999;margin-bottom:26px;height:1px;"></div><div style="border-bottom:1px solid #999;margin-bottom:26px;height:1px;"></div><div style="border-bottom:1px solid #999;height:1px;"></div></div>')
+        : '<div><div style="border-bottom:1px solid #999;margin-bottom:26px;height:1px;"></div><div style="border-bottom:1px solid #999;margin-bottom:26px;height:1px;"></div><div style="border-bottom:1px solid #999;height:1px;"></div></div>')
+    + '<div style="margin-top:auto;display:flex;justify-content:flex-end;padding-bottom:4px;">'
+    + '<div style="width:68px;height:68px;border-radius:50%;border:1.5px solid #999;display:flex;flex-direction:column;align-items:center;justify-content:center;transform:rotate(-12deg);flex-shrink:0;">'
+    + '<div style="font-size:7px;font-weight:700;color:#888;text-transform:uppercase;text-align:center;line-height:1.55;letter-spacing:.04em;">U.S.<br>MAIL<br>' + today.split(',')[0] + '</div>'
     + '</div>'
     + '</div>'
     + '</div>'
@@ -12659,12 +12740,12 @@ function buildAndShowPostcardPreview() {
     + '</div>' // middle 2-col
 
     // Footer bar
-    + '<div style="height:28px;border-top:1px solid rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
-    + '<div style="font-size:7.5px;color:#bbb;letter-spacing:.12em;text-transform:uppercase;">Maass Family RV Adventure 2026 · ' + today + '</div>'
+    + '<div style="height:32px;border-top:1px solid rgba(0,0,0,.1);display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+    + '<div style="font-size:8px;color:#bbb;letter-spacing:.12em;text-transform:uppercase;">Maass Family RV Adventure 2026 &middot; ' + today + '</div>'
     + '</div>'
 
-    + '</div>' // right panel
-    + '</div>'; // root
+    + '</div>' // bottom panel
+    + '</div>'; // root wrapper
 
   // Use html2canvas to capture it
   var previewArea = document.getElementById('pc-preview-area');
@@ -12692,11 +12773,11 @@ function buildAndShowPostcardPreview() {
   requestAnimationFrame(function() {
     requestAnimationFrame(function() {
       html2canvas(root, {
-        width: 1200, height: 800,
+        width: 1200, height: 1406,
         useCORS: true, allowTaint: true,
         backgroundColor: '#f9f8f4', scale: 1,
         scrollX: 0, scrollY: 0,
-        windowWidth: 1200, windowHeight: 800,
+        windowWidth: 1200, windowHeight: 1406,
         logging: false
       }).then(function(canvas) {
         // Restore root to off-screen
@@ -14249,7 +14330,7 @@ function renderDayTimeBlocks(d, stop) {
     }
   }
 
-  var planned = (stop && typeof getPlannedForStop === 'function') ? getPlannedForStop(stop.id, d.day) : { activities: [], restaurants: [] };
+  var planned = (stop && typeof getPlannedForStop === 'function') ? getPlannedForStop(stop.id, d.day) : { activities: [], customActivities: [], restaurants: [] };
 
   /* build sorted act list: planned first */
   var acts = [];
@@ -14259,6 +14340,12 @@ function renderDayTimeBlocks(d, stop) {
     for (var pai = 0; pai < planned.activities.length && acts.length < 3; pai++) {
       var pa = _stopActs[planned.activities[pai]];
       if (pa) acts.push({ item: pa, planned: true, idx: planned.activities[pai] });
+    }
+    /* custom AI-planned attractions */
+    var _custActs4Day = (appState.customActivities && appState.customActivities[stop.id]) || [];
+    for (var pci = 0; pci < (planned.customActivities || []).length && acts.length < 3; pci++) {
+      var pca = _custActs4Day[planned.customActivities[pci]];
+      if (pca) acts.push({ item: pca, planned: true, idx: null, isCustom: true });
     }
     for (var uai = 0; uai < _stopActs.length && acts.length < 3; uai++) {
       if (planned.activities.indexOf(uai) === -1) acts.push({ item: _stopActs[uai], planned: false, idx: uai });
@@ -14490,14 +14577,14 @@ function renderDayTimeBlocks(d, stop) {
       var pa0sub = ovSub('act0', (pa0.item.duration ? pa0.item.duration : '') + (pa0.item.desc ? ' \u00b7 ' + pa0.item.desc.substring(0, 100) + (pa0.item.desc.length > 100 ? '\u2026' : '') : ''));
       _items.push({ key:'act0', html: tbbRow(ovTime('act0', _fmtHour(_postActStart)),'&#127775;',
         ovTitle('act0', pa0.item.name), pa0sub, 'explore', pa0.planned,
-        stop ? tbbAiBtn('a', stop.id, pa0.idx) : '', '', 'act0') });
+        (stop && pa0.idx != null) ? tbbAiBtn('a', stop.id, pa0.idx) : '', '', 'act0') });
       /* Second activity if check-in leaves enough time */
       if (acts.length > 1 && _checkInH < 15.5) {
         var pa1 = acts[1];
         var pa1sub = ovSub('act1', (pa1.item.duration ? pa1.item.duration : '') + (pa1.item.desc ? ' \u00b7 ' + pa1.item.desc.substring(0, 100) + (pa1.item.desc.length > 100 ? '\u2026' : '') : ''));
         _items.push({ key:'act1', html: tbbRow(ovTime('act1', _fmtHour(_postActStart + 2)),'&#128506;',
           ovTitle('act1', pa1.item.name), pa1sub, 'explore', pa1.planned,
-          stop ? tbbAiBtn('a', stop.id, pa1.idx) : '', '', 'act1') });
+          (stop && pa1.idx != null) ? tbbAiBtn('a', stop.id, pa1.idx) : '', '', 'act1') });
       }
     }
 
@@ -14532,7 +14619,7 @@ function renderDayTimeBlocks(d, stop) {
     if (acts[0]) {
       var a0 = acts[0];
       var a0sub = ovSub('act0', (a0.item.duration ? a0.item.duration : '') + (a0.item.desc ? ' &middot; ' + a0.item.desc.substring(0,100) + (a0.item.desc.length > 100 ? '&hellip;' : '') : ''));
-      _items.push({ key:'act0', html: tbbRow(ovTime('act0', _fmtHour(9)),'&#127775;',ovTitle('act0',a0.item.name),a0sub,'explore',a0.planned,stop ? tbbAiBtn('a',stop.id,a0.idx) : '','','act0') });
+      _items.push({ key:'act0', html: tbbRow(ovTime('act0', _fmtHour(9)),'&#127775;',ovTitle('act0',a0.item.name),a0sub,'explore',a0.planned,(stop && a0.idx != null) ? tbbAiBtn('a',stop.id,a0.idx) : '','','act0') });
     } else if (stop) {
       _items.push({ key:'act0', html: tbbRow(ovTime('act0', _fmtHour(9)),'&#127775;',ovTitle('act0','Morning at '+stop.name),ovSub('act0','Explore the area'),'explore',false,'','','act0') });
     }
@@ -14546,7 +14633,7 @@ function renderDayTimeBlocks(d, stop) {
     if (acts.length > 1) {
       var a1 = acts[1];
       var a1sub = ovSub('act1', (a1.item.duration ? a1.item.duration : '') + (a1.item.desc ? ' &middot; ' + a1.item.desc.substring(0,100) + (a1.item.desc.length > 100 ? '&hellip;' : '') : ''));
-      _items.push({ key:'act1', html: tbbRow(ovTime('act1', _fmtHour(14)),'&#128506;',ovTitle('act1',a1.item.name),a1sub,'explore',a1.planned,stop ? tbbAiBtn('a',stop.id,a1.idx) : '','','act1') });
+      _items.push({ key:'act1', html: tbbRow(ovTime('act1', _fmtHour(14)),'&#128506;',ovTitle('act1',a1.item.name),a1sub,'explore',a1.planned,(stop && a1.idx != null) ? tbbAiBtn('a',stop.id,a1.idx) : '','','act1') });
     }
 
     if (dRest) {
@@ -15732,24 +15819,83 @@ function loadStopEvents(stopId) {
 }
 
 function planStopEvent(planId, evName, stopId) {
-  if (!appState.plannedEvents) appState.plannedEvents = {};
-  if (appState.plannedEvents[planId]) {
+  if (!appState.plannedEvents)    appState.plannedEvents    = {};
+  if (!appState.customActivities) appState.customActivities = {};
+  if (!appState.aiActivityIdx)    appState.aiActivityIdx    = {};
+  if (!appState.planned)          appState.planned          = {};
+
+  var isAttr   = (planId.indexOf('attr_') === 0);   /* TOP ATTRACTIONS button */
+  var removing = !!appState.plannedEvents[planId];
+
+  if (removing) {
     delete appState.plannedEvents[planId];
+    /* Also clean up the appState.planned entry for this attraction */
+    if (isAttr && appState.aiActivityIdx[planId] !== undefined) {
+      delete appState.planned['p_' + stopId + '_a_' + appState.aiActivityIdx[planId]];
+      /* Remove from customActivities list */
+      if (appState.customActivities[stopId]) {
+        appState.customActivities[stopId] = appState.customActivities[stopId].filter(function(a) {
+          return a._planKey !== planId;
+        });
+      }
+      delete appState.aiActivityIdx[planId];
+    }
     showToast('Removed from plan', 1600);
   } else {
     appState.plannedEvents[planId] = { name: evName, stopId: stopId, addedAt: Date.now() };
+
+    if (isAttr) {
+      /* Persist this AI attraction so Activities section + day modal can show it */
+      var attrIdx = parseInt((planId.match(/_(\d+)$/) || [0, 0])[1]);
+      var aiCache = (appState.aiAttractions && appState.aiAttractions[stopId]) || [];
+      var aiData  = aiCache[attrIdx] || {};
+
+      /* Add to customActivities if not already there */
+      if (!appState.customActivities[stopId]) appState.customActivities[stopId] = [];
+      var existInCustom = appState.customActivities[stopId].findIndex(function(a) { return a._planKey === planId; });
+      if (existInCustom === -1) {
+        appState.customActivities[stopId].push({
+          _planKey: planId, name: evName,
+          desc: aiData.desc || '', type: aiData.type || '',
+          duration: aiData.duration || '', kidRating: 4
+        });
+        existInCustom = appState.customActivities[stopId].length - 1;
+      }
+
+      /* Combined index = static activities count + custom index */
+      var stopObj    = getStop(stopId);
+      var staticLen  = (stopObj && stopObj.activities) ? stopObj.activities.length : 0;
+      var combinedIdx = staticLen + existInCustom;
+      appState.aiActivityIdx[planId] = combinedIdx;
+
+      /* Write to appState.planned so getPlannedForStop() and day modal pick it up */
+      var firstDay = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; })[0];
+      appState.planned['p_' + stopId + '_a_' + combinedIdx] = firstDay ? firstDay.day : true;
+    }
     showToast('✅ ' + evName + ' added to plan!', 2200);
   }
+
   saveState();
-  // Toggle the button appearance in-place
-  var btn = document.getElementById('ev-plan-btn-' + planId);
+
+  /* Update button appearance — handles both attr-plan-btn- and ev-plan-btn- prefixes */
+  var btn = document.getElementById((isAttr ? 'attr-plan-btn-' : 'ev-plan-btn-') + planId);
   if (btn) {
-    var isNowPlanned = !!appState.plannedEvents[planId];
-    btn.textContent = isNowPlanned ? '✅ Planned' : '+ Add to Plan';
-    btn.style.background = isNowPlanned ? 'var(--green)' : 'var(--orange-l)';
-    btn.style.color = isNowPlanned ? '#fff' : 'var(--orange)';
-    btn.style.borderColor = isNowPlanned ? 'var(--green)' : 'var(--orange)';
+    var isNow = !!appState.plannedEvents[planId];
+    if (isAttr) {
+      btn.style.background   = isNow ? 'var(--green)' : '#e8f5f0';
+      btn.style.color        = isNow ? '#fff' : '#1a7a5a';
+      btn.style.borderColor  = isNow ? 'var(--green)' : '#a8d8c8';
+      btn.textContent        = isNow ? '✅ Planned' : '+ Plan';
+    } else {
+      btn.textContent        = isNow ? '✅ Planned' : '+ Add to Plan';
+      btn.style.background   = isNow ? 'var(--green)' : 'var(--orange-l)';
+      btn.style.color        = isNow ? '#fff' : 'var(--orange)';
+      btn.style.borderColor  = isNow ? 'var(--green)' : 'var(--orange)';
+    }
   }
+
+  /* Re-render stops tab if visible so the activity appears immediately */
+  if (typeof renderStops === 'function' && document.getElementById('stops-content')) renderStops();
 }
 
 /* ── ATTRACTIONS NEAR A STOP ─────────────────────────────────────── */
@@ -15813,6 +15959,10 @@ function loadStopAttractions(stopId) {
     var count = 0;
     var typeEmojis = { 'national park':'🏔️', 'state park':'🌲', 'historic':'🏛️', 'museum':'🏛️', 'waterfall':'💧', 'scenic':'🚗', 'beach':'🏖️', 'lake':'🏞️', 'cave':'🦇', 'zoo':'🦁', 'aquarium':'🐠' };
 
+    /* Cache parsed attractions so planStopEvent can persist them */
+    if (!appState.aiAttractions) appState.aiAttractions = {};
+    appState.aiAttractions[stopId] = [];
+
     blocks.forEach(function(block) {
       var atName = (block.match(/ATTRACTION:\s*(.+)/i) || [])[1];
       var atType = (block.match(/TYPE:\s*(.+)/i) || [])[1];
@@ -15823,6 +15973,8 @@ function loadStopAttractions(stopId) {
       atType = (atType || '').trim();
       atDur  = (atDur  || '').trim();
       atInfo = (atInfo || '').trim();
+      /* Cache this attraction for later persistence when "Plan" is tapped */
+      appState.aiAttractions[stopId].push({ name: atName, type: atType, duration: atDur, desc: atInfo });
 
       var em = '🎯';
       var typeLower = atType.toLowerCase();
@@ -20826,17 +20978,23 @@ function _tgStartVoice() {
 
 function _tgSetMicState(listening) {
   var btn = document.getElementById('tg-mic-btn');
-  if (!btn) return;
-  if (listening) {
-    btn.innerHTML         = '🔴';
-    btn.style.background  = 'rgba(231,76,60,.35)';
-    btn.style.borderColor = '#e74c3c';
-    btn.title = _tgHandsFree ? 'Listening (hands-free) — tap to cancel' : 'Listening… tap to cancel';
-  } else {
-    btn.innerHTML         = '🎤';
-    btn.style.background  = '';
-    btn.style.borderColor = '';
-    btn.title = 'Voice input — tap to speak';
+  var hfBtn = document.getElementById('tg-hf-btn');
+  if (btn) {
+    if (listening) {
+      btn.classList.add('tg-listening');
+      btn.title = _tgHandsFree ? 'Listening (hands-free) — tap to cancel' : 'Listening… tap to cancel';
+    } else {
+      btn.classList.remove('tg-listening');
+      btn.title = 'Voice input — tap to speak';
+    }
+  }
+  /* Also pulse the hf-btn waveform bars when actively listening in hands-free mode */
+  if (hfBtn) {
+    if (listening && _tgHandsFree) {
+      hfBtn.classList.add('hf-listening');
+    } else {
+      hfBtn.classList.remove('hf-listening');
+    }
   }
 }
 
