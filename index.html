@@ -7938,8 +7938,8 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
 
   /* Depart chip */
   var _chipBg = _isBefore ? 'rgba(0,0,0,.15)' : 'rgba(255,255,255,.2)';
-  var _departChip = '<button onclick="event.stopPropagation();openDriveTimeModal(' + d.day + ')" '
-    + 'title="Tap to change departure time" '
+  var _departChip = '<button onclick="event.stopPropagation();openDriveTimeModal(' + d.day + ',null,' + (stop ? stop.id : 'null') + ',' + effectiveDate.getTime() + ')" '
+    + 'title="Tap to set departure date & time" '
     + 'style="display:inline-flex;align-items:center;gap:4px;background:' + _chipBg + ';border:1px solid rgba(255,255,255,.35);'
     + 'color:#fff;border-radius:100px;padding:2px 9px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;white-space:nowrap;">'
     + '<i class="fa-regular fa-clock" style="font-size:.65rem;"></i>\u00a0Depart\u00a0' + _departDisp
@@ -7990,14 +7990,55 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
 }
 
 
-function openDriveTimeModal(dayNum) {
+function openDriveTimeModal(dayNum, originStopId, destStopId, dateMs) {
   var d = getDay(dayNum);
   if (!d) return;
+
+  /* If originStopId not supplied, scan backward from dayNum to find it */
+  if (!originStopId) {
+    var _scanFrom = d.driveDay ? dayNum - 1 : dayNum;
+    for (var _s = _scanFrom; _s >= 1; _s--) {
+      var _sd = getDay(_s);
+      if (!_sd || _sd.driveDay) break;
+      if (!originStopId) originStopId = _sd.stopId;
+      else if (_sd.stopId !== originStopId) break;
+    }
+  }
+  /* If destStopId not supplied, use drive day's stopId or scan forward */
+  if (!destStopId) {
+    if (d.driveDay) { destStopId = d.stopId; }
+    else {
+      for (var _f = dayNum + 1; _f <= dayNum + 15; _f++) {
+        var _fd = getDay(_f);
+        if (_fd && _fd.stopId !== originStopId) { destStopId = _fd.stopId; break; }
+      }
+    }
+  }
+
+  var originStop = originStopId ? getStop(originStopId) : null;
+  var destStop   = destStopId   ? getStop(destStopId)   : null;
+  var _title = (originStop ? _sn(originStop) : '?') + ' \u2192 ' + (destStop ? _sn(destStop) : '?');
+
+  /* Departure date display */
+  var _dateLabel = '';
+  if (dateMs) {
+    var _dt = new Date(parseInt(dateMs, 10));
+    _dateLabel = _dt.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+  } else {
+    var _dt2 = new Date(d.date + 'T12:00:00');
+    _dateLabel = _dt2.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+  }
+
+  /* How many effective days at origin stop (to decide if ← is enabled) */
+  var _baseOriginDays = originStopId ? TRIP_DAYS.filter(function(td) { return td.stopId === originStopId; }).length : 2;
+  var _extraAtOrigin  = (originStopId && appState.phaseExtraDays && appState.phaseExtraDays[originStopId]) || 0;
+  var _canEarlier = (_baseOriginDays + _extraAtOrigin) > 1;
+
   /* Get current depart time */
   var _cur = (appState.dayOverrides && appState.dayOverrides[dayNum] && appState.dayOverrides[dayNum].departTime)
     || (appState.drivingPrefs && appState.drivingPrefs.departureTime)
     || '08:00';
-  var _title = _getDriveDayTitle(d);
+
   /* Build time options 5 AM – 11 PM in 30-min increments */
   var opts = '';
   for (var hh = 5; hh <= 23; hh++) {
@@ -8009,19 +8050,51 @@ function openDriveTimeModal(dayNum) {
       opts += '<option value="' + val + '"' + (val === _cur ? ' selected' : '') + '>' + lbl + '</option>';
     }
   }
+
+  var _shiftBtnBase = 'width:38px;height:38px;border-radius:50%;border:1.5px solid var(--border);background:#fff;font-size:1.2rem;font-weight:700;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1;font-family:var(--font);';
+  var _shiftBtnOff  = _shiftBtnBase + 'opacity:.3;pointer-events:none;';
+
   var html = '<div id="drive-time-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this)this.remove();">'
-    + '<div style="background:#fff;border-radius:18px;padding:24px;max-width:340px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.25);">'
-    + '<div style="font-size:1rem;font-weight:800;color:var(--text);margin-bottom:4px;">🚐 Departure Time</div>'
-    + '<div style="font-size:.8rem;color:var(--text-2);margin-bottom:16px;">' + _title + '</div>'
-    + '<select id="drive-time-sel" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);font-size:1rem;font-family:var(--font);color:var(--text);background:#fff;margin-bottom:16px;">' + opts + '</select>'
+    + '<div style="background:#fff;border-radius:18px;padding:24px;max-width:360px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.25);">'
+    + '<div style="font-size:1rem;font-weight:800;color:var(--text);margin-bottom:3px;">🚐 Departure</div>'
+    + '<div style="font-size:.8rem;color:var(--text-2);margin-bottom:18px;">' + _title + '</div>'
+
+    /* ── Departure Day section ── */
+    + '<div style="font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:6px;">Departure Day</div>'
+    + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+    + '<button onclick="event.stopPropagation();_shiftDepartureDate(' + (originStopId||'null') + ',-1)" style="' + (_canEarlier ? _shiftBtnBase : _shiftBtnOff) + '" title="Leave one day earlier">‹</button>'
+    + '<div style="flex:1;text-align:center;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:.92rem;font-weight:700;color:var(--text);">' + _dateLabel + '</div>'
+    + '<button onclick="event.stopPropagation();_shiftDepartureDate(' + (originStopId||'null') + ',1)" style="' + _shiftBtnBase + '" title="Leave one day later">›</button>'
+    + '</div>'
+    + '<div style="font-size:.72rem;color:var(--text-3);text-align:center;margin-bottom:16px;">← earlier &nbsp;|&nbsp; stay longer →</div>'
+
+    /* ── Departure Time section ── */
+    + '<div style="font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:6px;">Departure Time</div>'
+    + '<select id="drive-time-sel" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);font-size:1rem;font-family:var(--font);color:var(--text);background:#fff;margin-bottom:18px;">' + opts + '</select>'
+
     + '<div style="display:flex;gap:8px;">'
     + '<button onclick="document.getElementById(\'drive-time-modal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);border-radius:100px;font-size:.9rem;font-weight:700;cursor:pointer;font-family:var(--font);background:#fff;color:var(--text-2);">Cancel</button>'
-    + '<button onclick="_saveDriveTime(' + dayNum + ')" style="flex:2;padding:11px;background:var(--orange);border:none;border-radius:100px;font-size:.9rem;font-weight:800;cursor:pointer;font-family:var(--font);color:#fff;">Save</button>'
+    + '<button onclick="_saveDriveTime(' + dayNum + ')" style="flex:2;padding:11px;background:var(--orange);border:none;border-radius:100px;font-size:.9rem;font-weight:800;cursor:pointer;font-family:var(--font);color:#fff;">Save Time</button>'
     + '</div>'
     + '</div></div>';
+
   var el = document.createElement('div');
   el.innerHTML = html;
   document.body.appendChild(el.firstChild);
+}
+
+/* Shift departure date by one day (earlier or later) and refresh schedule */
+function _shiftDepartureDate(stopId, direction) {
+  if (!stopId) { showToast('Unable to determine stop — try the +/− buttons on the phase header', 2800); return; }
+  /* Close modal first so schedule re-render shows updated state */
+  var modal = document.getElementById('drive-time-modal');
+  if (modal) modal.remove();
+  if (direction > 0) {
+    addPhaseDay(stopId);   /* adds 1 explore day → departure shifts 1 day later */
+  } else {
+    removePhaseDay(stopId); /* removes 1 explore day → departure shifts 1 day earlier */
+  }
+  /* _refreshAll is called inside addPhaseDay / removePhaseDay */
 }
 
 function _saveDriveTime(dayNum) {
@@ -8193,7 +8266,7 @@ function _renderVirtualDriveSep(prevStop, destStop, d, effectiveDate, displayNum
   metaParts.push(_estHours + 'h\u00a0drive');
 
   var _chipBg = _isBefore ? 'rgba(0,0,0,.15)' : 'rgba(255,255,255,.2)';
-  var _departChip = '<button onclick="event.stopPropagation();openDriveTimeModal(' + d.day + ')" title="Tap to set departure time" '
+  var _departChip = '<button onclick="event.stopPropagation();openDriveTimeModal(' + d.day + ',' + prevStop.id + ',' + (destStop ? destStop.id : 'null') + ',' + effectiveDate.getTime() + ')" title="Tap to set departure date & time" '
     + 'style="display:inline-flex;align-items:center;gap:4px;background:' + _chipBg + ';border:1px solid rgba(255,255,255,.35);'
     + 'color:#fff;border-radius:100px;padding:2px 9px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;white-space:nowrap;">'
     + '<i class="fa-regular fa-clock" style="font-size:.65rem;"></i>\u00a0Depart\u00a0' + _departDisp + '</button>';
@@ -9407,7 +9480,9 @@ function _galleryUploadDone(added, dupes, input) {
   } else {
     showToast('📷 ' + added + ' photo' + (added > 1 ? 's' : '') + ' added to gallery', 2200);
   }
-  _renderGallery(); // refresh modal grid
+  _renderGallery(); // refresh gallery modal grid
+  // Also refresh the gallery tab if it's currently visible
+  try { renderGalleryTab(); } catch(e) {}
 }
 var _mediaRecorder   = null;
 var _audioChunks     = [];
@@ -10037,7 +10112,11 @@ function renderGalleryTab() {
 
   var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">'
     + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-images"></i> Photo Gallery</h2>'
+    + '<div style="display:flex;align-items:center;gap:8px;">'
     + '<span style="font-size:.8rem;color:var(--text-3);">' + allPhotos.length + ' photo' + (allPhotos.length !== 1 ? 's' : '') + '</span>'
+    + '<label for="gallery-tab-upload" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);">📤 Add Photos</label>'
+    + '<input type="file" id="gallery-tab-upload" accept="image/*,video/*" multiple style="display:none" onchange="_galleryUpload(this)">'
+    + '</div>'
     + '</div>';
 
   if (allPhotos.length === 0) {
@@ -10414,11 +10493,46 @@ function renderPlannerAgenda() {
   var el = document.getElementById('agenda-content');
   if (!el) return;
 
-  /* Build skip set (removed stops) */
+  /* Build skip set (removed stops + phaseExtraDays < 0 hidden explore days) */
   var _agRemoved = {};
   Object.keys(appState.removedStops || {}).forEach(function(id) { _agRemoved[id] = true; });
   var _agSkip = {};
   TRIP_DAYS.forEach(function(d) { if (_agRemoved[d.stopId]) _agSkip[d.day] = true; });
+
+  /* Also skip explore days hidden by phaseExtraDays < 0 (mirrors renderSchedule logic) */
+  if (appState.phaseExtraDays) {
+    var _agStopDayMap = {};
+    TRIP_DAYS.forEach(function(d) {
+      if (!_agStopDayMap[d.stopId]) _agStopDayMap[d.stopId] = [];
+      _agStopDayMap[d.stopId].push(d);
+    });
+    Object.keys(appState.phaseExtraDays).forEach(function(sid) {
+      var _agExtra = appState.phaseExtraDays[sid];
+      if (_agExtra < 0) {
+        var _agPDays = _agStopDayMap[sid] || [];
+        var _agIsWP  = Math.abs(_agExtra) >= _agPDays.length;
+        var _agSkipN = (_agRemoved[sid] || _agIsWP) ? _agPDays.length : Math.min(Math.abs(_agExtra), _agPDays.length - 1);
+        for (var _agSi = _agPDays.length - _agSkipN; _agSi < _agPDays.length; _agSi++) {
+          if (_agPDays[_agSi].driveDay) continue;
+          _agSkip[_agPDays[_agSi].day] = true;
+        }
+      }
+    });
+  }
+
+  /* Pre-compute cumulative phaseExtraDays offset per stop (same as renderSchedule's _schPhaseOffset).
+     When stop A has phaseExtraDays = +2, every stop after A shifts 2 days later; -1 shifts 1 day earlier. */
+  var _agPhaseOffset = {};
+  var _agPhaseCumOffset = 0;
+  var _agSeenStops = [];
+  TRIP_DAYS.forEach(function(d) {
+    if (_agSeenStops.indexOf(d.stopId) === -1) {
+      _agSeenStops.push(d.stopId);
+      _agPhaseOffset[d.stopId] = _agPhaseCumOffset;
+      var _agPhExtra = (appState.phaseExtraDays && appState.phaseExtraDays[d.stopId]) || 0;
+      _agPhaseCumOffset += _agPhExtra;
+    }
+  });
 
   /* Sort days chronologically */
   var _agSorted = TRIP_DAYS.slice().sort(function(a,b){
@@ -10469,7 +10583,8 @@ function renderPlannerAgenda() {
       _agCN += Math.max(0, Math.round((new Date(_agPauses[_agPI].endDate+'T00:00:00') - new Date(_agPauses[_agPI].startDate+'T00:00:00')) / 86400000));
       _agPI++;
     }
-    var _eMs  = new Date(d.date+'T00:00:00').getTime() + _agCN * 86400000;
+    var _agPhOff = _agPhaseOffset[d.stopId] || 0;
+    var _eMs  = new Date(d.date+'T00:00:00').getTime() + (_agCN + _agPhOff) * 86400000;
     var _eObj = new Date(_eMs);
     var _eStr = _eObj.toISOString().slice(0,10);
 
@@ -10884,6 +10999,8 @@ async function _initGuestMode(tripId) {
   var guestArrivals   = {};   // { stopId: { time: ISO } } — arrival check-ins
   var guestDepartures = {};   // { stopId: { time: ISO } } — departure check-outs
 
+  var guestRemovedIds = {};   // stops removed from the trip (don't show in friends view)
+
   if (tripId && tripId !== 'local') {
     // Supabase path — fetch trip data by ID
     try {
@@ -10895,8 +11012,9 @@ async function _initGuestMode(tripId) {
         if (rows[0].name) tripName = rows[0].name;
         var td = rows[0].trip_data || {};
         if (td.customTripData && td.customTripData.stops) stops = td.customTripData.stops;
-        if (td.arrivals)   guestArrivals   = td.arrivals;
-        if (td.departures) guestDepartures = td.departures;
+        if (td.arrivals)    guestArrivals    = td.arrivals;
+        if (td.departures)  guestDepartures  = td.departures;
+        if (td.removedStops) guestRemovedIds = td.removedStops;
       }
     } catch(e) {}
   }
@@ -10909,9 +11027,17 @@ async function _initGuestMode(tripId) {
   // For local path, read from the in-memory appState (works when Paul views ?friends=1 on his own device)
   if (!Object.keys(guestArrivals).length   && appState && appState.arrivals)   guestArrivals   = appState.arrivals;
   if (!Object.keys(guestDepartures).length && appState && appState.departures) guestDepartures = appState.departures;
+  // Apply local removedStops so deleted stops don't show
+  if (!Object.keys(guestRemovedIds).length && appState && appState.removedStops) guestRemovedIds = appState.removedStops;
 
-  // Filter out the home stop (last stop)
-  stops = stops.filter(function(s) { return !(s.sleepOptions && s.sleepOptions.length === 0) && s.name !== 'Home' && s.id < 15; });
+  // Filter out: home stop, stops explicitly removed, and stops with no sleep options (transit-only)
+  var _homeStop = _tripHomeStop ? _tripHomeStop() : null;
+  var _homeId   = _homeStop ? _homeStop.id : 15;
+  stops = stops.filter(function(s) {
+    if (s.id === _homeId || s.name === 'Home') return false;
+    if (guestRemovedIds && guestRemovedIds[s.id]) return false;
+    return true;
+  });
   _guestStops = stops;
 
   document.getElementById('guest-trip-name').textContent = tripName;
@@ -10935,7 +11061,9 @@ function _renderGuestStopsList(stops, tripId) {
     html += '<div class="guest-stop-card">';
     // Stop header
     html += '<div style="background:' + col + ';padding:14px 16px;display:flex;align-items:center;gap:12px;">';
-    html += '<div style="font-size:2.2rem;flex-shrink:0;line-height:1;">' + (stop.emoji || '📍') + '</div>';
+    /* Number badge — matches the map marker number */
+    html += '<div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.25);border:2px solid rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:.88rem;color:#fff;flex-shrink:0;line-height:1;">' + (idx+1) + '</div>';
+    html += '<div style="font-size:2rem;flex-shrink:0;line-height:1;">' + (stop.emoji || '📍') + '</div>';
     html += '<div style="flex:1;">';
     html += '<div style="font-weight:900;font-size:1rem;color:#fff;">' + stop.name + (stop.state ? ', ' + stop.state : '') + '</div>';
     if (stop.description) {
@@ -12667,10 +12795,11 @@ function buildAndShowPostcardPreview() {
   }
 
   root.innerHTML =
-    '<div style="width:1200px;height:1406px;background-color:#f9f8f4;position:relative;font-family:Georgia,serif;overflow:hidden;">'
+    /* Flex column — no absolute positioning on panels, so html2canvas captures all 1406px reliably */
+    '<div style="width:1200px;height:1406px;background-color:#f9f8f4;display:flex;flex-direction:column;font-family:Georgia,serif;overflow:hidden;">'
 
     // ── TOP PANEL: photo "front" of postcard (1200×700) ──────────
-    + '<div style="position:absolute;top:0;left:0;width:1200px;height:700px;overflow:hidden;">'
+    + '<div style="width:1200px;height:700px;flex-shrink:0;position:relative;overflow:hidden;">'
     + _fp
     // Location overlay at bottom of photo
     + '<div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.62));padding:36px 32px 22px;color:#fff;font-family:Georgia,serif;">'
@@ -12680,12 +12809,12 @@ function buildAndShowPostcardPreview() {
     + '</div>'
 
     // ── TEAR-HERE DIVIDER (6px strip) ────────────────────────────
-    + '<div style="position:absolute;top:700px;left:0;width:1200px;height:6px;background:repeating-linear-gradient(90deg,#d0c8b8 0,#d0c8b8 8px,transparent 8px,transparent 14px);display:flex;align-items:center;justify-content:center;">'
-    + '<div style="background:#f9f8f4;padding:0 14px;font-size:8px;letter-spacing:.15em;text-transform:uppercase;color:#aaa;white-space:nowrap;">&#8212; &#9988; &#8212;</div>'
+    + '<div style="width:1200px;height:6px;flex-shrink:0;background-color:#f9f8f4;background-image:repeating-linear-gradient(90deg,#d0c8b8 0,#d0c8b8 8px,transparent 8px,transparent 14px);display:flex;align-items:center;justify-content:center;">'
+    + '<div style="background-color:#f9f8f4;padding:0 14px;font-size:8px;letter-spacing:.15em;text-transform:uppercase;color:#aaa;white-space:nowrap;">&#8212; &#9988; &#8212;</div>'
     + '</div>'
 
     // ── BOTTOM PANEL: postcard back (1200×700) ───────────────────
-    + '<div style="position:absolute;top:706px;left:0;width:1200px;height:700px;background:#f9f8f4;display:flex;flex-direction:column;">'
+    + '<div style="width:1200px;height:700px;flex-shrink:0;background-color:#f9f8f4;display:flex;flex-direction:column;">'
 
     // Header row: Post-Card title (centered) + stamp box (top-right)
     + '<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:26px 28px 0 28px;flex-shrink:0;">'
@@ -12710,7 +12839,7 @@ function buildAndShowPostcardPreview() {
     + '<div style="flex:1;display:flex;min-height:0;">'
 
     // Message column
-    + '<div style="flex:1;position:relative;padding:16px 16px 58px 28px;overflow:hidden;">'
+    + '<div style="flex:1;position:relative;padding:16px 16px 58px 28px;overflow:hidden;background-color:#f9f8f4;">'
     + '<div style="position:absolute;left:28px;right:16px;top:16px;bottom:58px;background:repeating-linear-gradient(transparent,transparent 26px,rgba(0,0,0,.09) 26px,rgba(0,0,0,.09) 27px);pointer-events:none;"></div>'
     + '<div style="position:relative;font-size:15px;color:#1a1a1a;line-height:1.73;font-family:Georgia,serif;">' + msgHtml + '</div>'
     + '<div style="position:absolute;bottom:16px;left:28px;right:16px;">'
@@ -12722,7 +12851,7 @@ function buildAndShowPostcardPreview() {
     + '<div style="width:1px;background:#bbb;flex-shrink:0;margin:16px 0;"></div>'
 
     // Address column
-    + '<div style="width:380px;flex-shrink:0;padding:16px 28px 18px 20px;display:flex;flex-direction:column;">'
+    + '<div style="width:380px;flex-shrink:0;padding:16px 28px 18px 20px;display:flex;flex-direction:column;background-color:#f9f8f4;">'
     + '<div style="font-size:9px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:#333;margin-bottom:28px;">KINDLY DELIVER TO:</div>'
     + (toName
         ? '<div style="font-size:17px;font-weight:700;color:#111;font-family:Georgia,serif;margin-bottom:10px;">' + toName + '</div>'
@@ -18895,9 +19024,14 @@ function refreshTripPlan() {
   /* ── 12b. Total miles sanity check ──────────────────────────────────────── */
   var _computedMiles = days.filter(function(d) { return d.driveDay; }).reduce(function(s, d) { return s + (d.miles || 0); }, 0);
   var _storedMiles   = CONFIG.totalMiles || 0;
-  if (_computedMiles > 0 && Math.abs(_computedMiles - _storedMiles) > Math.max(_storedMiles * 0.05, 100)) {
+  var _milesDelta    = _computedMiles - _storedMiles;
+  if (_computedMiles > 0 && _milesDelta > Math.max(_storedMiles * 0.05, 100)) {
+    /* Computed is higher than stored — update to the more accurate sum */
     issues.push({ type:'fix', msg: 'Total miles updated: sum of all drive days is ' + _computedMiles.toLocaleString() + ' mi (was showing ' + _storedMiles.toLocaleString() + '). The Print PDF and dashboard header will now show the correct number.' });
     fixCount++;
+  } else if (_computedMiles > 0 && _milesDelta < -Math.max(_storedMiles * 0.05, 100)) {
+    /* Computed is lower than stored — likely some drive days have 0 miles; don't lower the total */
+    issues.push({ type:'info', msg: 'Total miles: stored ' + _storedMiles.toLocaleString() + ' mi, drive-day sum is ' + _computedMiles.toLocaleString() + ' mi (some legs may have 0 miles — run \u201cRecalculate Drive Miles\u201d to refresh).' });
   } else if (_computedMiles > 0) {
     issues.push({ type:'info', msg: 'Total miles \u2713 ' + _computedMiles.toLocaleString() + ' mi across ' + days.filter(function(d){return d.driveDay && d.miles;}).length + ' drive days' });
   }
@@ -18955,11 +19089,12 @@ function refreshTripPlan() {
 
   /* ── APPLY FIXES ─────────────────────────────────────────────────────────── */
   if (fixCount > 0) {
-    /* Always sync totalMiles from computed drive-day sum */
-    if (_computedMiles > 0) CONFIG.totalMiles = _computedMiles;
+    /* Only update totalMiles if computed sum is HIGHER than stored (never lower the total —
+       a lower computed sum just means some legs have 0 miles and haven't been recalculated yet) */
+    if (_computedMiles > 0 && _computedMiles > (_storedMiles || 0)) CONFIG.totalMiles = _computedMiles;
     if (appState.activeTrip === 'custom' && appState.customTripData) {
       appState.customTripData.days = days;
-      if (_computedMiles > 0) appState.customTripData.totalMiles = _computedMiles;
+      if (_computedMiles > 0 && _computedMiles > (appState.customTripData.totalMiles || 0)) appState.customTripData.totalMiles = _computedMiles;
     } else {
       appState.customTripData = {
         tripName: (appState.tripSettings && appState.tripSettings.tripName) || _BUILTIN_TRIP.tripName || 'My Trip',
@@ -18968,7 +19103,7 @@ function refreshTripPlan() {
         startDate: CONFIG.startDate,
         endDate: CONFIG.endDate,
         totalDays: days.length,
-        totalMiles: _computedMiles || CONFIG.totalMiles
+        totalMiles: Math.max(_computedMiles || 0, CONFIG.totalMiles || 0) || _computedMiles
       };
       appState.activeTrip = 'custom';
     }

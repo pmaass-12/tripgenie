@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-02 (Session 18, twelfth context)
+2026-03-02 (Session 18, thirteenth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,20 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 18 (thirteenth context) — 2026-03-02
+
+- **Departure date+time modal (complete)**: Rewrote `openDriveTimeModal(dayNum, originStopId, destStopId, dateMs)` — title now shows "City A → City B" format. Added departure DATE row with ← / → shift buttons (calls `_shiftDepartureDate` which delegates to `addPhaseDay`/`removePhaseDay`). Added `_shiftDepartureDate(stopId, direction)` function. Updated `_renderDriveSepA` and `_renderVirtualDriveSep` departure chip `onclick` to pass origin/dest stop IDs and current effective date.
+
+- **Health check miles never lowers fix**: Health check's "12b. Total miles sanity check" previously always overwrote `CONFIG.totalMiles` with the computed drive-day sum even when it was LOWER (e.g., some legs have 0 miles). Fixed: only triggers a "fix" and only updates stored totalMiles when `_computedMiles > _storedMiles`. If computed < stored, shows an informational note instead. Also fixed the "Always sync totalMiles" in the APPLY FIXES section to only update upward.
+
+- **Agenda date discrepancy fix (11-day gap)**: `renderPlannerAgenda()` was computing effective dates using only pause offsets (`_agCN`) but not `phaseExtraDays` cascade offsets. Added: (a) skip logic for hidden explore days (mirrors `renderSchedule`'s `skipDayNums`); (b) pre-computation of `_agPhaseOffset{}` (cumulative `phaseExtraDays` per stop in TRIP_DAYS order, same as `_schPhaseOffset`); (c) effective date now = `d.date + (_agCN + _agPhOff) * 86400000`.
+
+- **Postcard bottom panel black fix**: Switched outer postcard root from `position:relative` with absolutely-positioned panels (`top:706px`) to a flex column layout. This ensures html2canvas captures all 1406px reliably regardless of viewport height. Also added explicit `background-color:#f9f8f4` to message column and address column inner divs.
+
+- **Gallery upload fix**: Added "📤 Add Photos" upload button directly to the gallery TAB (was only in the gallery modal before). Added `renderGalleryTab()` call in `_galleryUploadDone` so the gallery tab refreshes after upload.
+
+- **Friends view fixes**: (a) `_initGuestMode` now filters out `removedStops` so deleted stops (e.g., OKC, KC) don't appear in the friends suggestion form. Applies to both local (`appState.removedStops`) and Supabase paths (`td.removedStops`). (b) `_renderGuestStopsList` now shows a numbered badge (idx+1) on each stop card header, matching the map marker numbers.
 
 ### Session 18 (twelfth context) — 2026-03-02
 - **AI attractions → Activities section + day modal (full fix)**: Root cause was two completely separate plan stores — `appState.plannedEvents` (AI) vs `appState.planned` (static). Fixed by: (a) `planStopEvent()` now writes AI attractions to `appState.customActivities[stopId]` and bridges to `appState.planned['p_stopId_a_combinedIdx']` so `getPlannedForStop()` picks them up; (b) `getPlannedForStop()` returns `customActivities: []` in result and scans the combined indices; (c) `renderDayTimeBlocks()` now includes `customActivities` in the `acts[]` array used to build day schedule — handles both drive day and explore day slots; (d) "Your Plan" banner in schedule cards also shows custom activities with ⭐ icon; (e) `tbbAiBtn` calls guarded with `idx != null` check so custom activities (idx=null) don't error.
