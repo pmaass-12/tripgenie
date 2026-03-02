@@ -17950,38 +17950,42 @@ async function _labsDirectCall(parkName, parkPhone, checkin, checkout, special, 
   var systemPrompt;
   if (isHotel) {
     systemPrompt = [
-      'You are an AI assistant calling on behalf of the Maass family to check room availability at a hotel.',
+      'Your name is Alex. You are the travel coordinator for Paul and Melissa Maass and their family.',
+      'You are calling a hotel to check availability and get details on their behalf.',
+      'Open the call naturally and warmly — something like: "Hi there! This is Alex, I\'m calling on behalf of Paul Maass. I\'m helping coordinate their family trip and wanted to check on room availability and a few details."',
+      'Do NOT say you are an AI, a bot, or an automated assistant. Speak naturally as a helpful human coordinator.',
       'Guests: ' + (cfg.adults || '2') + ' adults, ' + (cfg.kids || 'several children') + '.',
       cfg.hasPets ? 'Pets: ' + cfg.hasPets + '.' : 'No pets.',
       'Dates: check-in ' + checkin + ', check-out ' + checkout + '.',
-      special ? 'Special requests: ' + special : '',
-      'First ask: do they have availability for a family room — either two double/queen beds, or a king bed with a sofa bed?',
-      'If NOT available: say thank you, end the call. ' + statusInstruction,
+      special ? 'Special note: ' + special : '',
+      'Ask: do they have availability for a family room — two double/queen beds, or a king with a sofa bed — for those dates?',
+      'If NOT available: thank them warmly, end the call. ' + statusInstruction,
       'If available: ask the all-in nightly rate including all taxes and fees.',
-      'If the rate is over $150 per night all-in: politely decline, do not book, end the call. Say "BOOKING STATUS: OVER BUDGET" before hanging up.',
-      'If available and $150 or under: ask (1) "Is breakfast included?" (2) "What is your cancellation policy — how many days in advance do we need to cancel?"',
-      'Then proactively say: "To hold the reservation, Paul will call you right back within 5 minutes to provide a credit card number. Could I get the best direct number and a contact name for him to reach?" Confirm they will hold it.',
+      'If the rate is over $150 per night all-in: politely say that\'s a little over budget for the family, thank them, and end the call. Say "BOOKING STATUS: OVER BUDGET" before hanging up.',
+      'If available and within budget: ask (1) "Is breakfast included?" (2) "What is your cancellation policy — how many days in advance?"',
+      'Then say: "Paul is going to call you right back within about 5 minutes to give you his credit card and lock it in. Could you hold that room for him? And could I get the best direct number and a contact name so he reaches the right person?"',
       'Do NOT provide any card numbers under any circumstances.',
-      'Before hanging up, clearly summarize: room type, all-in rate, breakfast, cancellation policy, and direct callback number.',
-      statusInstruction,
-      'Be friendly and professional.'
+      'Before hanging up, warmly recap: room type, rate, breakfast, cancellation policy, and the callback number and contact name.',
+      statusInstruction
     ].filter(Boolean).join(' ');
   } else {
     systemPrompt = [
-      'You are an AI assistant calling on behalf of the Maass family to check availability and book a campground spot.',
-      'RV: ' + (cfg.rvName || 'Class A RV') + ', ' + (cfg.rvLen || '40') + ' ft, needs ' + (cfg.rvAmps || '50') + ' amp hookup.',
-      'Guests: ' + (cfg.adults || '2') + ' adults, ' + (cfg.kids || 'several children') + '.',
+      'Your name is Alex. You are the travel coordinator for Paul and Melissa Maass and their family.',
+      'You are calling a campground or RV park to check availability and get details on their behalf.',
+      'Open the call naturally and warmly — something like: "Hi there! This is Alex, I\'m calling on behalf of Paul Maass. I\'m helping coordinate their family RV trip and wanted to check on availability for a stay."',
+      'Do NOT say you are an AI, a bot, or an automated assistant. Speak naturally as a helpful human coordinator.',
+      'RV details: ' + (cfg.rvName || 'Class A motorhome') + ', ' + (cfg.rvLen || '40') + ' feet long, needs a ' + (cfg.rvAmps || '50') + '-amp hookup with full hookups if possible.',
+      'Guests: ' + (cfg.adults || '2') + ' adults, ' + (cfg.kids || 'several kids') + '.',
       cfg.hasPets ? 'Pets: ' + cfg.hasPets + '.' : 'No pets.',
-      cfg.extraCar ? 'Extra vehicle: ' + cfg.extraCar + '.' : '',
-      'First ask: do they have availability for check-in ' + checkin + ' through ' + checkout + ' for an RV with the above specs?',
-      'If NOT available: say thank you, end the call. ' + statusInstruction,
-      special ? 'Special requests: ' + special : '',
-      'If available: ask (1) "What is the total nightly rate including all taxes and fees?" (2) "Do you offer propane refills for RVs on site?" (3) "What is your cancellation policy — how many hours or days in advance?"',
-      'Then say: "Could you hold that spot for about 5 minutes? Paul is going to call you right back to give you his card number directly. Could I get the best number and a contact name for him to reach?" Confirm they will hold it.',
+      cfg.extraCar ? 'Extra tow vehicle: ' + cfg.extraCar + '.' : '',
+      'Ask: do they have availability for check-in ' + checkin + ' through ' + checkout + ' for an RV with those specs?',
+      'If NOT available: thank them warmly, end the call. ' + statusInstruction,
+      special ? 'Special note: ' + special : '',
+      'If available, get these details conversationally (not as a rapid-fire list): (1) the total nightly rate including all taxes and fees, (2) whether they offer on-site propane refills for RVs, (3) their cancellation policy — how many hours or days in advance.',
+      'Then say: "Paul is going to call you right back in about 5 minutes to give you his card and lock it in. Could you hold that spot? And what\'s the best direct number and a contact name so he reaches the right person?"',
       'Do NOT provide any card numbers under any circumstances.',
-      'Before hanging up, clearly summarize: all-in nightly rate, propane availability, cancellation policy, and direct callback number.',
-      statusInstruction,
-      'Be friendly, professional, and always confirm the hold before ending.'
+      'Before hanging up, warmly recap: nightly rate, propane situation, cancellation policy, and the callback number and contact name.',
+      statusInstruction
     ].filter(Boolean).join(' ');
   }
 
@@ -18249,20 +18253,27 @@ async function _labsTestCall() {
   saveState();
 
   var isHotel = (scenario === 'hotel');
-  var venueName = isHotel ? 'Test Hotel Front Desk' : 'Test Campground Office';
-  var today = new Date();
-  var ci = today.toISOString().slice(0,10);
-  var co = new Date(today.getTime() + 86400000).toISOString().slice(0,10);
+  var venueName = isHotel ? 'Blue Ridge Inn & Suites' : 'Blue Ridge RV Resort';
+  /* Use next Friday as check-in, 2 nights, so the test sounds like a real booking call */
+  var _today = new Date();
+  var _dow = _today.getDay(); /* 0=Sun … 6=Sat */
+  var _daysUntilFri = (_dow <= 5) ? (5 - _dow) : 6; /* days until next Friday (or this Friday if today is Fri) */
+  if (_daysUntilFri === 0) _daysUntilFri = 7; /* if today IS Friday, use next Friday */
+  var _ciDate = new Date(_today.getTime() + _daysUntilFri * 86400000);
+  var _coDate = new Date(_ciDate.getTime() + 2 * 86400000);
+  var _fmt = function(d) { return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
+  var ci = _fmt(_ciDate);
+  var co = _fmt(_coDate);
 
   if (statusEl) {
     statusEl.style.display = 'block';
     statusEl.style.background = '#fffbeb';
     statusEl.style.color = '#92400e';
-    statusEl.innerHTML = '📞 Calling <strong>' + testPhone + '</strong>\u2026 Answer and pretend you\'re the ' + (isHotel ? 'hotel front desk' : 'campground office') + '!';
+    statusEl.innerHTML = '📞 Calling <strong>' + testPhone + '</strong>\u2026 Answer and pretend you\'re the ' + (isHotel ? 'hotel front desk' : 'campground office') + '! Dates: ' + ci + ' → ' + co;
   }
 
   try {
-    await _labsDirectCall(venueName, testPhone, ci, co, 'TEST CALL — no real booking', isHotel, null);
+    await _labsDirectCall(venueName, testPhone, ci, co, '', isHotel, null);
   } catch(e) {
     if (statusEl) { statusEl.style.background = '#fff0f0'; statusEl.style.color = 'var(--red)'; statusEl.textContent = '\u274c Error: ' + (e.message || e); }
   }
