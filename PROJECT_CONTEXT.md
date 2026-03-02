@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-02 (Session 18, twenty-fifth context)
+2026-03-02 (Session 18, twenty-sixth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,18 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 18 (twenty-sixth context) — 2026-03-02
+
+- **"📞 Book via Agent" button on every Hotels & RV Parks card**: Each lodging card in `loadStopHotels` now has a blue "📞 Book via Agent" button. The Gemini prompt was updated to include a `PHONE:` field so phone numbers are parsed alongside name/type/price. Each card stores its data in `window._labsBookCards[]` (indexed by position) so the onclick can reference it safely. Phone number is shown inline next to the button.
+
+- **Quick-book modal (`_labsQuickBookModal`, `_labsQuickBookConfirm`)**: Clicking "Book via Agent" opens a focused modal showing the campground name, an editable phone number field (pre-filled from Gemini if available), and check-in/check-out dates. A warning is shown if ElevenLabs credentials aren't configured yet. "Start Booking Call" calls `_labsDirectCall` directly.
+
+- **Shared `_labsDirectCall(parkName, parkPhone, checkin, checkout, special)`**: Extracted common call-making logic so both the quick-book modal and the Labs form can trigger calls. Uses the same CC-handoff prompt. Requests browser notification permission before dialing.
+
+- **Improved CC handoff agent prompt**: Updated in both `_labsStartCall` and `_labsDirectCall`. Now says: "I need to place you on a brief hold — Paul will call you right back within a few minutes to provide the card and finalize everything. Could I get the best direct number and a contact name for him to reach?" — then ends politely. Also added "always get a direct callback number before ending" instruction.
+
+- **Browser notification alert (`_labsPollCallEnd`, `_labsNotifyCallBack`)**: After any call starts, `_labsPollCallEnd` polls the ElevenLabs conversation status API every 10 seconds (up to 15 min). When status is done/ended/completed, `_labsNotifyCallBack` fires: a 7-second in-app toast AND a browser `Notification` with `requireInteraction:true` (stays on screen until dismissed) showing the campground name and phone number. `_labsStartCall` success path also updated to use polling and improve its status message.
 
 ### Session 18 (twenty-fifth context) — 2026-03-02
 
