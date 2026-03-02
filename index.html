@@ -2863,7 +2863,7 @@
 
     <!-- PLANNER TAB (Schedule + Stops combined) -->
     <div class="tab-panel" id="tab-planner">
-      <div style="display:flex;gap:6px;margin-bottom:20px;padding-top:4px;flex-wrap:wrap;">
+      <div style="position:sticky;top:0;z-index:50;background:var(--bg);padding:6px 0 10px;margin-bottom:12px;display:flex;gap:6px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,.06);margin-left:-16px;margin-right:-16px;padding-left:16px;padding-right:16px;">
         <button id="plan-seg-schedule" onclick="_mainSeg('schedule')" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--orange);border-radius:50px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><i class="fa-solid fa-calendar-days"></i> Schedule</button>
         <button id="plan-seg-agenda" onclick="_mainSeg('agenda')" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;">📅 Agenda</button>
         <button id="plan-seg-stops" onclick="_mainSeg('stops')" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><i class="fa-solid fa-map-pin"></i> Day Planner</button>
