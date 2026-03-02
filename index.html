@@ -369,8 +369,13 @@
     #tab-planner {
       overflow: hidden !important;
       padding: 0 !important;
-      display: flex !important;
       flex-direction: column !important;
+    }
+    /* Must be explicit: #tab-planner needs flex layout when active,
+       but MUST honour display:none from .tab-panel when not active.
+       display:flex !important on the base rule was making it always visible. */
+    #tab-planner.active {
+      display: flex !important;
     }
     #planner-body {
       flex: 1;
@@ -17642,7 +17647,27 @@ function renderLabsTools() {
     + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Your mobile number (for reservation callback)</label>'
     + '<input id="labs-phone" type="tel" value="' + phone.replace(/"/g,'&quot;') + '" placeholder="(845) 555-1234" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:16px;">'
 
-    + '<button onclick="_labsSavePhoneBookingConfig()" style="width:100%;padding:11px;background:var(--blue);color:#fff;border:none;border-radius:100px;font-size:.88rem;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:20px;">💾 Save Profile</button>'
+    + '<button onclick="_labsSavePhoneBookingConfig()" style="width:100%;padding:11px;background:var(--blue);color:#fff;border:none;border-radius:100px;font-size:.88rem;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:16px;">💾 Save Profile</button>'
+
+    /* ── TEST MODE section ── */
+    + '<div style="border:2px dashed #f59e0b;border-radius:12px;padding:14px;margin-bottom:20px;background:#fffbeb;">'
+    + '<div style="display:flex;align-items:center;gap:7px;margin-bottom:8px;">'
+    + '<span style="font-size:1.1rem;">🧪</span>'
+    + '<div style="font-weight:900;font-size:.88rem;color:#92400e;">Test the Agent — Call Yourself</div>'
+    + '</div>'
+    + '<div style="font-size:.75rem;color:#78350f;line-height:1.55;margin-bottom:10px;">Enter your own phone number below. The agent will call you and you play the role of the campground or hotel front desk. Great for testing the script before using it for real.</div>'
+    + '<label style="font-size:.74rem;font-weight:700;color:#92400e;display:block;margin-bottom:3px;">Your phone number (will be called)</label>'
+    + '<input id="labs-test-phone" type="tel" value="' + ((cfg.testPhone || '').replace(/"/g,'&quot;')) + '" placeholder="(845) 555-1234" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid #f59e0b;border-radius:8px;font-size:.85rem;background:#fff;color:var(--text);font-family:var(--font);margin-bottom:10px;">'
+    + '<label style="font-size:.74rem;font-weight:700;color:#92400e;display:block;margin-bottom:4px;">Scenario to test</label>'
+    + '<div style="display:flex;gap:8px;margin-bottom:12px;">'
+    + '<label style="flex:1;display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid #f59e0b;border-radius:8px;cursor:pointer;background:#fff;font-size:.8rem;font-weight:700;">'
+    + '<input type="radio" name="labs-test-scenario" value="campground" ' + ((!cfg.testScenario || cfg.testScenario === 'campground') ? 'checked' : '') + '> 🏕️ Campground / RV Park</label>'
+    + '<label style="flex:1;display:flex;align-items:center;gap:6px;padding:8px 10px;border:1.5px solid #f59e0b;border-radius:8px;cursor:pointer;background:#fff;font-size:.8rem;font-weight:700;">'
+    + '<input type="radio" name="labs-test-scenario" value="hotel" ' + (cfg.testScenario === 'hotel' ? 'checked' : '') + '> 🏨 Hotel</label>'
+    + '</div>'
+    + '<div id="labs-test-status" style="display:none;border-radius:8px;padding:9px 12px;font-size:.79rem;margin-bottom:10px;"></div>'
+    + '<button onclick="_labsTestCall()" style="width:100%;padding:11px;background:linear-gradient(135deg,#f59e0b,#d97706);color:#fff;border:none;border-radius:100px;font-size:.88rem;font-weight:900;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:7px;"><i class="fa-solid fa-phone-volume"></i> 📞 Make Test Call</button>'
+    + '</div>'
 
     /* ── MAKE A CALL section ── */
     + '<div style="border-top:1px solid var(--border);padding-top:16px;">'
