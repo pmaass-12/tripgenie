@@ -2381,6 +2381,46 @@
     .ph-ideal-badge { display:none !important; }
     /* Day-number pill under date badge is redundant on mobile */
     .sc-day-pill { display:none; }
+
+    /* ── Planner sub-nav: horizontal scroll strip on mobile ─────────── */
+    .plan-nav {
+      flex-wrap: nowrap !important;
+      overflow-x: auto !important;
+      overflow-y: hidden !important;
+      -webkit-overflow-scrolling: touch !important;
+      scrollbar-width: none !important;
+      gap: 0 !important;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+      border-bottom: 2px solid var(--border) !important;
+      padding-bottom: 0 !important;
+    }
+    .plan-nav::-webkit-scrollbar { display: none; }
+    .plan-nav-btn {
+      flex: 0 0 auto !important;
+      min-width: 70px !important;
+      padding: 8px 4px 10px !important;
+      border-radius: 0 !important;
+      border: none !important;
+      border-bottom: 3px solid transparent !important;
+      background: transparent !important;
+      color: var(--text-3) !important;
+      font-size: .62rem !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      gap: 3px !important;
+      white-space: nowrap !important;
+      transition: color .15s, border-color .15s !important;
+    }
+    .plan-nav-btn .pnb-icon { font-size: 1.15rem !important; line-height: 1 !important; }
+    .plan-nav-btn .pnb-label { display: block !important; text-align: center !important; }
+    .plan-nav-btn.active-seg {
+      color: var(--orange) !important;
+      border-bottom-color: var(--orange) !important;
+      background: transparent !important;
+      font-weight: 800 !important;
+    }
   }
 
   /* Below-fold separator */
@@ -2961,12 +3001,12 @@
 
     <!-- PLANNER TAB (Schedule + Stops combined) -->
     <div class="tab-panel" id="tab-planner">
-      <div style="position:sticky;top:0;z-index:50;background:var(--bg);padding:10px 0 10px;margin-bottom:16px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:2px solid var(--border);margin-left:-16px;margin-right:-16px;padding-left:16px;padding-right:16px;">
-        <button id="plan-seg-schedule" onclick="_mainSeg('schedule')" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--orange);border-radius:50px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><i class="fa-solid fa-calendar-days"></i> Schedule</button>
-        <button id="plan-seg-agenda" onclick="_mainSeg('agenda')" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;">📅 Agenda</button>
-        <button id="plan-seg-stops" onclick="_mainSeg('stops')" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><i class="fa-solid fa-map-pin"></i> Day Planner</button>
-        <button id="plan-seg-stats" onclick="_mainSeg('stats')" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><i class="fa-solid fa-star"></i> Trip Stats</button>
-        <button id="plan-seg-friends" onclick="_mainSeg('friends')" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><i class="fa-solid fa-lightbulb"></i> Suggestions</button>
+      <div class="plan-nav" style="position:sticky;top:0;z-index:50;background:var(--bg);padding:10px 0 10px;margin-bottom:16px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:2px solid var(--border);margin-left:-16px;margin-right:-16px;padding-left:16px;padding-right:16px;">
+        <button id="plan-seg-schedule" onclick="_mainSeg('schedule')" class="plan-nav-btn active-seg" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--orange);border-radius:50px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-calendar-days"></i></span><span class="pnb-label"> Schedule</span></button>
+        <button id="plan-seg-agenda" onclick="_mainSeg('agenda')" class="plan-nav-btn" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon">📅</span><span class="pnb-label"> Agenda</span></button>
+        <button id="plan-seg-stops" onclick="_mainSeg('stops')" class="plan-nav-btn" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-map-pin"></i></span><span class="pnb-label"> Day Planner</span></button>
+        <button id="plan-seg-stats" onclick="_mainSeg('stats')" class="plan-nav-btn" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-star"></i></span><span class="pnb-label"> Trip Stats</span></button>
+        <button id="plan-seg-friends" onclick="_mainSeg('friends')" class="plan-nav-btn" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-lightbulb"></i></span><span class="pnb-label"> Suggestions</span></button>
       </div>
       <div id="schedule-content" style="display:block"></div>
       <div id="agenda-content" style="display:none"></div>
@@ -11181,9 +11221,9 @@ function _mainSeg(which) {
   var btnSta = document.getElementById('plan-seg-stats');
   var btnFrn = document.getElementById('plan-seg-friends');
   if (!schDiv || !stpDiv) return;
-  var _on  = function(b) { if (b) { b.style.background='var(--orange)'; b.style.borderColor='var(--orange)'; b.style.color='#fff'; } };
-  var _onP = function(b) { if (b) { b.style.background='#7B5EA7'; b.style.borderColor='#7B5EA7'; b.style.color='#fff'; } };
-  var _off = function(b) { if (b) { b.style.background='var(--card)'; b.style.borderColor='var(--border)'; b.style.color='var(--text-2)'; } };
+  var _on  = function(b) { if (b) { b.style.background='var(--orange)'; b.style.borderColor='var(--orange)'; b.style.color='#fff'; b.classList.add('active-seg'); } };
+  var _onP = function(b) { if (b) { b.style.background='#7B5EA7'; b.style.borderColor='#7B5EA7'; b.style.color='#fff'; b.classList.add('active-seg'); } };
+  var _off = function(b) { if (b) { b.style.background='var(--card)'; b.style.borderColor='var(--border)'; b.style.color='var(--text-2)'; b.classList.remove('active-seg'); } };
   schDiv.style.display = 'none';
   if (agdDiv) agdDiv.style.display = 'none';
   stpDiv.style.display = 'none';
@@ -16414,8 +16454,10 @@ function planStopEvent(planId, evName, stopId) {
     }
   }
 
-  /* Re-render stops tab if visible so the activity appears immediately.
-     Preserve which stop cards were expanded and which attraction panels were open. */
+  /* Re-render stops tab so the planned-count badge + activities list update.
+     EXCEPTION: if an attractions panel is currently open, skip the full re-render —
+     the button state was already updated in-place above and a DOM rebuild would
+     trigger a new Gemini API call causing the panel to flash a spinner. */
   if (typeof renderStops === 'function' && document.getElementById('stops-content')) {
     var _openStopIds = [], _openAttrIds = [];
     document.querySelectorAll('#stops-content [data-stop-id]').forEach(function(card) {
@@ -16427,17 +16469,14 @@ function planStopEvent(planId, evName, stopId) {
         if (ap && !ap.classList.contains('hidden')) _openAttrIds.push(sid);
       }
     });
+    /* Skip DOM rebuild if attractions panel is open — button already updated in-place */
+    if (_openAttrIds.length > 0) return;
     renderStops();
     /* Re-open previously expanded stop cards */
     _openStopIds.forEach(function(sid) {
       var det  = document.getElementById('stop-detail-' + sid);
       var chev = document.getElementById('stop-chevron-' + sid);
       if (det) { det.classList.remove('hidden'); if (chev) chev.textContent = '▲'; }
-    });
-    /* Re-open attraction panels — reset loaded flag so they reload with updated state */
-    _openAttrIds.forEach(function(sid) {
-      if (typeof _stopAttractionsLoaded !== 'undefined') delete _stopAttractionsLoaded[sid];
-      if (typeof toggleStopAttractions === 'function') toggleStopAttractions(sid);
     });
   }
 }
@@ -16536,7 +16575,7 @@ function loadStopAttractions(stopId) {
         + (atType ? '<div style="font-size:.74rem;color:#1a7a5a;font-weight:700;margin-bottom:1px;">📍 ' + atType + '</div>' : '')
         + (atDur  ? '<div style="font-size:.74rem;color:var(--orange);font-weight:600;margin-bottom:3px;">⏱️ ' + atDur + '</div>' : '')
         + (atInfo ? '<div style="font-size:.79rem;color:var(--text-2);line-height:1.45;margin-bottom:6px;">' + atInfo + '</div>' : '')
-        + '<button id="attr-plan-btn-' + planKey + '" onclick="planStopEvent(\'' + planKey + '\',\'' + atName.replace(/'/g, "\\'") + '\',' + stopId + ')" '
+        + '<button id="attr-plan-btn-' + planKey + '" onclick="event.stopPropagation();planStopEvent(\'' + planKey + '\',\'' + atName.replace(/'/g, "\\'") + '\',' + stopId + ')" '
         + 'style="background:' + (isPlanned ? 'var(--green)' : '#e8f5f0') + ';color:' + (isPlanned ? '#fff' : '#1a7a5a') + ';border:1px solid ' + (isPlanned ? 'var(--green)' : '#a8d8c8') + ';border-radius:100px;padding:4px 12px;font-size:.73rem;font-weight:800;cursor:pointer;font-family:var(--font);">'
         + (isPlanned ? '✅ Planned' : '+ Plan') + '</button>'
         + '</div></div>';
@@ -17597,9 +17636,69 @@ function renderHealthCheckTab() {
   html += '<div style="font-size:.75rem;color:var(--text-3);line-height:1.5;margin-bottom:10px;">Calls real road routing for each drive leg and updates drive day mileage. Run this if your total miles looks wrong (e.g. shows 2,000 mi instead of 8,000+ mi).</div>';
   html += '<button onclick="_recalcDriveMiles()" style="width:100%;background:var(--orange);color:#fff;border:none;border-radius:var(--radius-s);padding:12px;font-size:.9rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:8px;"><i class="fa-solid fa-calculator"></i> Recalculate Drive Miles</button>';
   html += '</div>';
+
+  /* ── Day Adjustment Diagnostic ─────────────────────────── */
+  html += '<div style="margin-top:10px;padding:12px 14px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-s);">';
+  html += '<div style="font-size:.78rem;font-weight:700;color:var(--text-2);margin-bottom:6px;"><i class="fa-solid fa-calendar-days"></i> Schedule Day Adjustments</div>';
+  var _hcTotalExtra = 0, _hcBreakdown = [];
+  if (appState.phaseExtraDays) {
+    Object.keys(appState.phaseExtraDays).forEach(function(sid) {
+      var ex = appState.phaseExtraDays[sid];
+      if (ex !== 0) {
+        var _hcStop = getStop(Number(sid));
+        _hcBreakdown.push({ sid: sid, ex: ex, name: _hcStop ? _sn(_hcStop) : ('Stop ' + sid) });
+        _hcTotalExtra += ex;
+      }
+    });
+  }
+  var _hcBaseEnd = CONFIG.endDate;
+  var _hcEffEnd  = new Date(new Date(_hcBaseEnd + 'T00:00:00').getTime() + _hcTotalExtra * 86400000);
+  var _hcEffEndStr = _hcEffEnd.getFullYear() + '-' + String(_hcEffEnd.getMonth()+1).padStart(2,'0') + '-' + String(_hcEffEnd.getDate()).padStart(2,'0');
+  if (_hcTotalExtra === 0) {
+    html += '<div style="font-size:.8rem;color:var(--green);">✅ No day adjustments — trip ends on base date ' + _hcBaseEnd + '</div>';
+  } else {
+    html += '<div style="font-size:.8rem;color:var(--text-2);margin-bottom:8px;">Net adjustment: <strong style="color:' + (_hcTotalExtra > 0 ? 'var(--orange)' : 'var(--green)') + '">' + (_hcTotalExtra > 0 ? '+' : '') + _hcTotalExtra + ' days</strong> → effective end date: <strong>' + _hcEffEndStr + '</strong> (base: ' + _hcBaseEnd + ')</div>';
+    if (_hcBreakdown.length) {
+      html += '<div style="font-size:.75rem;color:var(--text-3);line-height:1.7;margin-bottom:10px;background:var(--card);border-radius:8px;padding:8px 10px;">';
+      _hcBreakdown.forEach(function(eb) {
+        html += '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">'
+          + '<span>' + eb.name + ': <strong>' + (eb.ex > 0 ? '+' : '') + eb.ex + ' day' + (Math.abs(eb.ex) !== 1 ? 's' : '') + '</strong></span>'
+          + '<button onclick="_resetStopExtraDays(' + eb.sid + ')" style="background:var(--orange-l);border:1px solid var(--orange);color:var(--orange);border-radius:100px;padding:2px 9px;font-size:.68rem;font-weight:800;cursor:pointer;font-family:var(--font);">Reset to 0</button>'
+          + '</div>';
+      });
+      html += '</div>';
+    }
+    html += '<button onclick="_resetAllExtraDays()" style="width:100%;background:#dc3030;color:#fff;border:none;border-radius:var(--radius-s);padding:10px;font-size:.85rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:7px;"><i class="fa-solid fa-rotate-left"></i> Reset ALL Day Adjustments (→ ' + _hcBaseEnd + ')</button>';
+  }
+  html += '</div>';
+
   html += '</div></div>';
   html += '</div>';
   el.innerHTML = html;
+}
+
+function _resetStopExtraDays(stopId) {
+  if (!appState.phaseExtraDays) return;
+  var stop = getStop(stopId);
+  var name = stop ? _sn(stop) : ('stop ' + stopId);
+  delete appState.phaseExtraDays[stopId];
+  saveState(appState);
+  _refreshAll();
+  showToast('Day adjustments reset for ' + name, 2000);
+  renderHealthCheckTab();
+}
+
+function _resetAllExtraDays() {
+  var totalExtra = 0;
+  if (appState.phaseExtraDays) {
+    Object.keys(appState.phaseExtraDays).forEach(function(sid) { totalExtra += (appState.phaseExtraDays[sid] || 0); });
+  }
+  if (!confirm('Reset all schedule day adjustments (' + (totalExtra > 0 ? '+' : '') + totalExtra + ' days) to zero?\n\nTrip will revert to its base ' + CONFIG.totalDays + '-day schedule ending ' + CONFIG.endDate + '.\n\nThis will not remove stops — only the extra/removed day counts are cleared.')) return;
+  appState.phaseExtraDays = {};
+  saveState(appState);
+  _refreshAll();
+  showToast('✅ Schedule reset to base dates (ending ' + CONFIG.endDate + ')', 2800);
+  renderHealthCheckTab();
 }
 
 /* ════════════════════════════════════════════════════════════════════

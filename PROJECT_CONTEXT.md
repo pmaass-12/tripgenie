@@ -55,6 +55,14 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (twenty-second context) — 2026-03-02
+
+- **Attractions panel stays open when clicking "+ Plan"**: Root cause was `planStopEvent` calling `renderStops()` (full DOM rebuild) whenever any plan button was clicked, then trying to restore panel state via `toggleStopAttractions()` (which is a toggle — could accidentally close if called on already-visible panel, or show spinner from fresh API call). Fix: if any attraction panel is currently open, skip the `renderStops()` call entirely — the button state was already updated in-place (lines 16401-16414). Also added `event.stopPropagation()` to the `+ Plan` button inside `loadStopAttractions` to prevent accidental propagation.
+
+- **Health Check — Schedule Day Adjustments diagnostic**: Added a new "Schedule Day Adjustments" section to `renderHealthCheckTab()`. Shows: total net extra days, effective trip end date (base + adjustments), per-stop breakdown of non-zero `phaseExtraDays` with individual "Reset to 0" buttons, and a "Reset ALL Day Adjustments" button with confirmation. Two new functions: `_resetStopExtraDays(stopId)` and `_resetAllExtraDays()`. This gives Paul a way to see/fix why the Day Planner was showing April 26 instead of ~April 17 (accumulated phaseExtraDays).
+
+- **Mobile planner nav — horizontal scroll strip**: On mobile (≤640px), the 5 sub-nav buttons (Schedule / Agenda / Day Planner / Trip Stats / Suggestions) now form a horizontally scrollable tab strip instead of wrapping to multiple lines. Changes: added `class="plan-nav"` to container div and `class="plan-nav-btn"` to each button; restructured button content into `<span class="pnb-icon">` + `<span class="pnb-label">` for icon-above-label stacking; added CSS for `.plan-nav` (no-wrap, overflow-x:auto, scrollbar hidden) and `.plan-nav-btn` (flex column, 70px min-width, icon 1.15rem, label centered). Active tab shown by orange bottom border + `active-seg` class (toggled by updated `_mainSeg` `_on`/`_off`/`_onP` functions). Desktop appearance unchanged (media query only at ≤640px).
+
 ### Session 18 (twenty-first context) — 2026-03-02
 
 - **Drive separator × button moves to top-right on mobile**: Added `.ds-del` CSS class to the delete button in `_renderDriveSepA()`. On `@media(max-width:640px)`: `.ds-pill { position:relative }`, `.ds-del { position:absolute; top:8px; right:10px }`, `.ds-r1 { padding-right:36px }` — button floats to top-right corner without occupying Row 3 space.
