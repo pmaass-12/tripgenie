@@ -11566,7 +11566,7 @@ function _renderGuestStopsList(stops, tripId) {
     html += '<div style="width:30px;height:30px;border-radius:50%;background:rgba(255,255,255,.25);border:2px solid rgba(255,255,255,.55);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:.88rem;color:#fff;flex-shrink:0;line-height:1;">' + (idx+1) + '</div>';
     html += '<div style="font-size:2rem;flex-shrink:0;line-height:1;">' + (stop.emoji || '📍') + '</div>';
     html += '<div style="flex:1;">';
-    html += '<div style="font-weight:900;font-size:1rem;color:#fff;">' + stop.name + (stop.state ? ', ' + stop.state : '') + '</div>';
+    html += '<div style="font-weight:900;font-size:1rem;color:#fff;">' + _sn(stop) + '</div>';
     if (stop.description) {
       var shortDesc = stop.description.length > 110 ? stop.description.substring(0,110) + '…' : stop.description;
       html += '<div style="font-size:.76rem;color:rgba(255,255,255,.82);line-height:1.4;margin-top:3px;">' + shortDesc + '</div>';
@@ -11581,7 +11581,7 @@ function _renderGuestStopsList(stops, tripId) {
     html += '<button id="gf-voice-' + stop.id + '" class="guest-voice-btn" onclick="_guestVoice(' + stop.id + ')" title="Tap to speak your recommendation"><i class="fa-solid fa-microphone"></i></button>';
     html += '</div>';
     html += '<div id="gf-success-' + stop.id + '" style="display:none;background:#edfaf4;border:1.5px solid #3A8A5C;border-radius:8px;padding:10px 14px;font-size:.85rem;font-weight:700;color:#2d7a50;margin-bottom:8px;">✅ Recommendation sent! Thanks so much 🎉</div>';
-    html += '<button class="guest-submit-btn" onclick="_guestSubmit(' + stop.id + ',\'' + stop.name.replace(/'/g,"\\'") + '\')">';
+    html += '<button class="guest-submit-btn" onclick="_guestSubmit(' + stop.id + ',\'' + _sn(stop).replace(/'/g,"\\'") + '\')">';
     html += '<i class="fa-solid fa-paper-plane"></i> Send to the Maass Family</button>';
     html += '</div></div>';
   });
