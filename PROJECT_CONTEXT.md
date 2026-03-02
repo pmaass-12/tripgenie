@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-02 (Session 18, thirteenth context)
+2026-03-02 (Session 18, fourteenth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,14 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 18 (fifteenth context) — 2026-03-02
+
+- **Route map left-rail: dates removed**: `metaHtml` in `renderStopNavigator` now shows only nights count (e.g. "2n") instead of date ranges. Date ranges were unreliable when phaseExtraDays offsets were complex; the Agenda view is the authoritative date reference.
+
+- **Map popup "View Plans" button**: Added a second button "📅 View Plans" to the Leaflet map popup (below "AI Area Overview"). Calls `_jumpToStopPlans(stopId)` which closes the popup, switches to the Planner tab, activates the Schedule segment, then scrolls to the first schedule row for that stop using a multi-selector strategy.
+
+- **Left-rail stop click zooms map**: `nav-stop-item` divs now have an `onclick="_navFlyToStop(stopId,event)"` handler. Uses `map.flyTo([lat,lng], max(currentZoom,9))` for a smooth animated pan. Ignores clicks on buttons/icons inside the row and during drag operations (guarded by `_navDragging` flag set in `_navDragStart`/reset in `_navDragEnd`).
 
 ### Session 18 (fourteenth context) — 2026-03-02
 

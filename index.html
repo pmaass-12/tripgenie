@@ -6143,6 +6143,7 @@ function _fetchRoadRoute(waypoints, gen, callback) {
    ──────────────────────────────────────────────────────────────── */
 
 var _navDragSrcIdx = null;
+var _navDragging    = false;
 
 /* ── ADD STOP FROM MAP ─────────────────────────────────────────────── */
 var _mapAddStopLatLng = null;
@@ -6510,13 +6511,13 @@ function renderStopNavigator() {
       : '<div style="width:24px;height:24px;background:var(--orange);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:900;flex-shrink:0;">' + num + '</div>';
     var metaHtml = isWaypoint
       ? '<span style="background:var(--blue);color:#fff;border-radius:4px;padding:1px 5px;font-size:.65rem;font-weight:800;letter-spacing:.02em;">WAYPOINT</span>'
-      + (dateRange ? ' ' + dateRange : '')
-      : (dateRange || (nights + 'n'));
+      : (nights > 0 ? nights + 'n' : '');
     html += '<div class="nav-stop-item"'
       + (isWaypoint ? ' style="opacity:.85;border-style:dashed;"' : '')
       + ' draggable="true"'
       + ' data-nav-idx="' + idx + '"'
       + ' data-nav-stopid="' + stopId + '"'
+      + ' onclick="_navFlyToStop(' + stopId + ',event)"'
       + ' ondragstart="_navDragStart(event)"'
       + ' ondragover="_navDragOver(event)"'
       + ' ondrop="_navDrop(event)"'
@@ -6553,6 +6554,7 @@ function _navDeleteStop(stopId, stopName) {
 
 function _navDragStart(e) {
   _navDragSrcIdx = parseInt(e.currentTarget.dataset.navIdx);
+  _navDragging = true;
   e.currentTarget.classList.add('nav-dragging');
   e.dataTransfer.effectAllowed = 'move';
   e.dataTransfer.setData('text/plain', _navDragSrcIdx);
@@ -6583,6 +6585,19 @@ function _navDragEnd(e) {
   var items = document.querySelectorAll('.nav-stop-item');
   items.forEach(function(el) { el.classList.remove('nav-dragging', 'nav-drag-over'); });
   _navDragSrcIdx = null;
+  setTimeout(function() { _navDragging = false; }, 50);
+}
+
+/* Fly the main map to a stop when clicked in the left rail */
+function _navFlyToStop(stopId, evt) {
+  /* Ignore if this was part of a drag operation, or if a button/icon was the target */
+  if (_navDragging) return;
+  if (evt && evt.target && (evt.target.tagName === 'BUTTON' || evt.target.closest('button'))) return;
+  var stop = (TRIP_STOPS || []).find(function(s) { return s.id === stopId; });
+  if (!stop || !stop.lat || !stop.lng) return;
+  var map = window.mainMap;
+  if (!map) return;
+  map.flyTo([stop.lat, stop.lng], Math.max(map.getZoom(), 9), { duration: 0.8 });
 }
 
 /* Batch reorder: move the stop at fromIdx to toIdx in trip order.
@@ -6797,6 +6812,7 @@ function buildMapMarkers(mapObj) {
         ${stopDesc ? `<div style="font-size:.79rem;color:#444;line-height:1.5;margin-bottom:8px;">${stopDesc.substring(0, 110)}${stopDesc.length > 110 ? '…' : ''}</div>` : ''}
         ${topActs ? `<ul style="font-size:.76rem;padding-left:16px;margin:0 0 10px;">${topActs}</ul>` : ''}
         <button onclick="openMapStopInfo(${stop.id})" style="width:100%;background:#2C5F8A;color:#fff;border:none;border-radius:100px;padding:8px 12px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;gap:5px;margin-top:2px;">✨ AI Area Overview</button>
+        <button onclick="_jumpToStopPlans(${stop.id})" style="width:100%;background:var(--orange,#E8813A);color:#fff;border:none;border-radius:100px;padding:8px 12px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;gap:5px;margin-top:6px;">📅 View Plans</button>
       </div>`;
     L.marker([stop.lat, stop.lng], { icon })
       .addTo(mapObj)
@@ -6812,6 +6828,31 @@ function _clearAndRebuildMapMarkers(mapObj) {
   });
   toRemove.forEach(function(layer) { mapObj.removeLayer(layer); });
   buildMapMarkers(mapObj);
+}
+
+/* Jump from map popup → Day Planner, scrolled to the first day at this stop */
+function _jumpToStopPlans(stopId) {
+  /* Close any open Leaflet popup */
+  if (window.mainMap) window.mainMap.closePopup();
+  /* Switch to the Planner tab */
+  if (typeof switchTab === 'function') switchTab('planner');
+  /* Switch to the Schedule segment inside the planner */
+  if (typeof _mainSeg === 'function') _mainSeg('schedule');
+  /* Scroll to the first schedule row for this stop */
+  setTimeout(function() {
+    var el = document.querySelector('[data-stop-id="' + stopId + '"]')
+          || document.querySelector('.phase-header[data-stopid="' + stopId + '"]')
+          || document.getElementById('phase-' + stopId)
+          || document.getElementById('stop-anchor-' + stopId);
+    if (!el) {
+      /* Fallback: find any schedule day row whose stop matches */
+      var rows = document.querySelectorAll('.sched-day-row, .phase-block');
+      for (var i = 0; i < rows.length; i++) {
+        if ((rows[i].dataset.stopId || rows[i].dataset.stopid) == stopId) { el = rows[i]; break; }
+      }
+    }
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 320);
 }
 
 function initMainMap() {
