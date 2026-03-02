@@ -17612,8 +17612,13 @@ function renderLabsTools() {
     + 'style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:.88rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:12px;">'
 
     /* Agent ID */
-    + '<label style="font-size:.78rem;font-weight:800;color:var(--text-2);display:block;margin-bottom:4px;">ElevenLabs Agent ID <span style="font-weight:400;opacity:.6;">(create a phone agent at elevenlabs.io → Agents)</span></label>'
+    + '<label style="font-size:.78rem;font-weight:800;color:var(--text-2);display:block;margin-bottom:4px;">ElevenLabs Agent ID <span style="font-weight:400;opacity:.6;">(Conversational AI → Agents → your agent → copy ID from URL)</span></label>'
     + '<input id="labs-agent-id" type="text" value="' + agentId.replace(/"/g,'&quot;') + '" placeholder="agent_..." '
+    + 'style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:.88rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:12px;">'
+
+    /* Phone Number ID — this is DIFFERENT from Agent ID */
+    + '<label style="font-size:.78rem;font-weight:800;color:var(--text-2);display:block;margin-bottom:4px;">Phone Number ID <span style="font-weight:400;opacity:.6;">(Conversational AI → Phone Numbers → click your number → copy the ID shown, starts with <code>pn_</code>)</span></label>'
+    + '<input id="labs-phone-num-id" type="text" value="' + ((cfg.phoneNumId || '').replace(/"/g,'&quot;')) + '" placeholder="pn_..." '
     + 'style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:.88rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:16px;">'
 
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'
@@ -17705,8 +17710,9 @@ function _labsSavePhoneBookingConfig() {
   cfg.extraCar = (document.getElementById('labs-extra-car') || {}).value || '';
   cfg.homeAddr = (document.getElementById('labs-home-addr') || {}).value || '';
   cfg.phone    = (document.getElementById('labs-phone')     || {}).value || '';
-  cfg.elvKey   = (document.getElementById('labs-elv-key')   || {}).value || '';
-  cfg.agentId  = (document.getElementById('labs-agent-id')  || {}).value || '';
+  cfg.elvKey     = (document.getElementById('labs-elv-key')      || {}).value || '';
+  cfg.agentId    = (document.getElementById('labs-agent-id')     || {}).value || '';
+  cfg.phoneNumId = (document.getElementById('labs-phone-num-id') || {}).value || '';
   /* Test mode settings */
   var _tpEl = document.getElementById('labs-test-phone');
   var _tsEl = document.querySelector('input[name="labs-test-scenario"]:checked');
@@ -17838,21 +17844,25 @@ async function _labsDirectCall(parkName, parkPhone, checkin, checkout, special, 
 
   showToast('📞 Starting AI booking call for ' + parkName + '…', 3500);
 
+  /* Validate phone number ID is set */
+  if (!cfg.phoneNumId) {
+    showToast('⚠️ Add your Phone Number ID (pn_...) in the Labs tab — it\'s different from the Agent ID', 5000);
+    return;
+  }
+
+  var toNumber = parkPhone.replace(/\D/g,'').replace(/^(\d{10})$/,'+1$1').replace(/^(\d{11})$/,'+$1');
+
   try {
     var resp = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'xi-api-key': cfg.elvKey },
       body: JSON.stringify({
-        agent_id: cfg.agentId,
-        agent_phone_number_id: cfg.agentId,
-        to_number: parkPhone.replace(/\D/g,'').replace(/^(\d{10})$/,'+1$1').replace(/^(\d{11})$/,'+$1'),
-        conversation_initiation_client_data: {
-          dynamic_variables: {
-            system_prompt_override: systemPrompt,
-            user_name: 'Maass family',
-            park_name: parkName,
-            check_in: checkin,
-            check_out: checkout
+        agent_id:             cfg.agentId,
+        agent_phone_number_id: cfg.phoneNumId,   /* phone number ID — different from agent ID */
+        to_number:            toNumber,
+        conversation_config_override: {
+          agent: {
+            prompt: { prompt: systemPrompt }     /* full system prompt override per call */
           }
         }
       })
@@ -17864,8 +17874,10 @@ async function _labsDirectCall(parkName, parkPhone, checkin, checkout, special, 
       _labsPollCallEnd({ parkName: parkName, parkPhone: parkPhone, conversationId: callId, queueCtx: queueCtx || null }, cfg.elvKey);
       if (typeof _auditLog === 'function') _auditLog('Labs: Call started to ' + parkName + ' for ' + checkin + '–' + checkout);
     } else {
-      var errMsg = (data.detail && (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail))) || JSON.stringify(data);
-      showToast('❌ Call failed: ' + errMsg, 5000);
+      var httpCode = resp.status;
+      var errDetail = (data.detail && (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail))) || JSON.stringify(data);
+      var hint = httpCode === 401 ? ' — check your API key in Labs settings' : httpCode === 422 ? ' — check Phone Number ID (pn_...)' : '';
+      showToast('❌ ' + httpCode + ' ' + errDetail + hint, 7000);
     }
   } catch(e) {
     showToast('❌ Network error: ' + e.message, 4000);
@@ -18147,16 +18159,12 @@ async function _labsStartCall() {
         'xi-api-key': cfg.elvKey
       },
       body: JSON.stringify({
-        agent_id:     cfg.agentId,
-        agent_phone_number_id: cfg.agentId, /* some APIs use this */
-        to_number:    parkPhone.replace(/\D/g, '').replace(/^(\d{10})$/, '+1$1').replace(/^(\d{11})$/, '+$1'),
-        conversation_initiation_client_data: {
-          dynamic_variables: {
-            system_prompt_override: systemPrompt,
-            user_name: 'Maass family',
-            park_name: parkName,
-            check_in:  checkin,
-            check_out: checkout
+        agent_id:              cfg.agentId,
+        agent_phone_number_id: cfg.phoneNumId,   /* phone number ID — different from agent ID */
+        to_number:             parkPhone.replace(/\D/g, '').replace(/^(\d{10})$/, '+1$1').replace(/^(\d{11})$/, '+$1'),
+        conversation_config_override: {
+          agent: {
+            prompt: { prompt: systemPrompt }     /* full system prompt per call */
           }
         }
       })
@@ -18171,8 +18179,10 @@ async function _labsStartCall() {
       /* Log to audit */
       if (typeof _auditLog === 'function') _auditLog('Labs: Phone booking call started to ' + parkName + ' for ' + checkin + '–' + checkout);
     } else {
+      var httpCode = resp.status;
       var msg = (data.detail && (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail))) || JSON.stringify(data);
-      if (statusEl) statusEl.innerHTML = '<span style="color:var(--red);">❌ Call failed: ' + msg + '</span>';
+      var hint = httpCode === 401 ? ' — check your API key' : httpCode === 422 ? ' — check Phone Number ID' : '';
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--red);">❌ ' + httpCode + ': ' + msg + hint + '</span>';
     }
   } catch(e) {
     if (statusEl) statusEl.innerHTML = '<span style="color:var(--red);">❌ Network error: ' + e.message + '</span>';
