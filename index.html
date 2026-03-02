@@ -10196,8 +10196,8 @@ function renderGalleryTab() {
     html += '<div style="text-align:center;padding:60px 20px;color:var(--text-3);">'
       + '<div style="font-size:3rem;margin-bottom:12px;">📷</div>'
       + '<div style="font-weight:700;font-size:.95rem;margin-bottom:6px;">No photos yet</div>'
-      + '<div style="font-size:.83rem;">Photos you upload here and into a journal entry appear here.</div>'
-      + '<label for="gallery-tab-upload-empty" style="display:inline-block;margin-top:16px;padding:10px 20px;background:var(--orange);color:#fff;border-radius:20px;font-weight:700;cursor:pointer;font-family:var(--font);">📤 Add Photos</label>'
+      + '<div style="font-size:.83rem;">Photos you upload or attach to a journal entry will appear here.</div>'
+      + '<label for="gallery-tab-upload-empty" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:10px 22px;background:var(--orange);color:#fff;border-radius:20px;font-weight:700;cursor:pointer;font-family:var(--font);">📤 Add Photos</label>'
       + '<input type="file" id="gallery-tab-upload-empty" accept="image/*,video/*" multiple style="display:none" onchange="_galleryUpload(this)">'
       + '</div>';
     el.innerHTML = html;
