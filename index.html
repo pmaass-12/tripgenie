@@ -11303,6 +11303,21 @@ function _renderGuestStopsList(stops, tripId) {
   if (!el) return;
   var stopColors = ['#2C6EA5','#3A8A5C','#7B5EA7','#C96820','#2C8A6A','#8A3C7B','#5C6EA5','#8A5C2C','#3C8A5C','#8A2C5C','#5C8A2C','#6E5CA5','#8A6C2C','#2C7A8A'];
   var html = '';
+
+  /* ── Top-level name section — entered once, used for all submissions ── */
+  html += '<div id="guest-name-banner" style="background:#fff;border:2px solid #7B5EA7;border-radius:14px;padding:16px 18px;margin-bottom:18px;box-shadow:0 2px 12px rgba(123,94,167,.1);">';
+  html += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">';
+  html += '<div style="width:34px;height:34px;border-radius:50%;background:#7B5EA7;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fa-solid fa-user" style="color:#fff;font-size:.9rem;"></i></div>';
+  html += '<div><div style="font-weight:900;font-size:.98rem;color:#3d2270;">Who are you? 👋</div>'
+    + '<div style="font-size:.76rem;color:#888;margin-top:2px;">Enter your name once — it\'ll be used for all your suggestions below.</div></div>';
+  html += '</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
+  html += '<div><label style="font-size:.68rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px;">First Name <span style="color:#7B5EA7;">*</span></label>'
+    + '<input id="guest-fn" class="guest-form-input" type="text" placeholder="Jane" autocomplete="given-name"></div>';
+  html += '<div><label style="font-size:.68rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px;">Last Name</label>'
+    + '<input id="guest-ln" class="guest-form-input" type="text" placeholder="Smith" autocomplete="family-name"></div>';
+  html += '</div></div>';
+
   stops.forEach(function(stop, idx) {
     var col = stopColors[idx % stopColors.length];
     html += '<div class="guest-stop-card">';
@@ -11322,12 +11337,6 @@ function _renderGuestStopsList(stops, tripId) {
     // Recommendation form
     html += '<div style="padding:14px 16px;">';
     html += '<div style="font-size:.78rem;font-weight:800;color:#7B5EA7;margin-bottom:10px;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-lightbulb"></i> Your Recommendation</div>';
-    html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">';
-    html += '<div><label style="font-size:.68rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px;">First Name *</label>';
-    html += '<input id="gf-fn-' + stop.id + '" class="guest-form-input" type="text" placeholder="Jane" autocomplete="given-name"></div>';
-    html += '<div><label style="font-size:.68rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:4px;">Last Name *</label>';
-    html += '<input id="gf-ln-' + stop.id + '" class="guest-form-input" type="text" placeholder="Smith" autocomplete="family-name"></div>';
-    html += '</div>';
     html += '<div style="position:relative;margin-bottom:10px;">';
     html += '<textarea id="gf-txt-' + stop.id + '" class="guest-form-input" placeholder="What should the Maass family see, eat, or do here? Any hidden gems, great restaurants, or must-do activities?" style="min-height:88px;resize:vertical;padding-right:46px;"></textarea>';
     html += '<button id="gf-voice-' + stop.id + '" class="guest-voice-btn" onclick="_guestVoice(' + stop.id + ')" title="Tap to speak your recommendation"><i class="fa-solid fa-microphone"></i></button>';
@@ -11359,10 +11368,14 @@ function _guestVoice(stopId) {
 
 /* ── 5. Submit suggestion — Netlify Forms + Supabase + localStorage fallback ── */
 async function _guestSubmit(stopId, stopName) {
-  var fn  = ((document.getElementById('gf-fn-'  + stopId) || {}).value || '').trim();
-  var ln  = ((document.getElementById('gf-ln-'  + stopId) || {}).value || '').trim();
+  /* Name is entered once at the top of the page, not per-stop */
+  var fn  = ((document.getElementById('guest-fn') || {}).value || '').trim();
+  var ln  = ((document.getElementById('guest-ln') || {}).value || '').trim();
   var txt = ((document.getElementById('gf-txt-' + stopId) || {}).value || '').trim();
-  if (!fn || !ln) { _guestToast('Please enter your first and last name 👋', 2500); return; }
+  if (!fn) { _guestToast('Please enter your name at the top of the page 👋', 2500);
+    var nb = document.getElementById('guest-name-banner');
+    if (nb) nb.scrollIntoView({ behavior:'smooth', block:'center' });
+    return; }
   if (!txt)       { _guestToast('Don\'t forget to write your recommendation!', 2500); return; }
 
   var saved = false;
@@ -11424,9 +11437,9 @@ async function _guestSubmit(stopId, stopName) {
   } catch(e) {}
 
   if (saved) {
-    ['gf-fn-','gf-ln-','gf-txt-'].forEach(function(pfx) {
-      var el = document.getElementById(pfx + stopId); if (el) el.value = '';
-    });
+    /* Only clear the text field — name at top stays filled for subsequent stops */
+    var txtEl = document.getElementById('gf-txt-' + stopId);
+    if (txtEl) txtEl.value = '';
     var suc = document.getElementById('gf-success-' + stopId);
     if (suc) { suc.style.display = 'block'; setTimeout(function() { suc.style.display = 'none'; }, 5000); }
     _guestToast('🙌 Thanks ' + fn + '! The Maass family will love your tip!', 4000);

@@ -55,6 +55,12 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (twentieth context) — 2026-03-02
+
+- **Mobile schedule redesign — drive separators + phase headers**: Added new CSS classes (`.ds-wrap`, `.ds-pill`, `.ds-r1/.r2/.r3`, `.ph-ctrls`, `.ph-music-btn`, `.ph-sep-div`, `.ph-area-lbl`) and restructured `_renderDriveSepA`, `_renderVirtualDriveSep`, and `phaseHeaderHtml` to use them. On mobile (≤640px): dashed flanking lines hidden, drive pill becomes full-width stacked card (3 rows: route title, meta, chips), phase header controls wrap to second row with music/divider hidden and Area Info icon-only. Desktop unchanged.
+
+- **Friends view — name field moved to top of page**: Previously the First Name / Last Name fields were duplicated on every stop card. Now a single "Who are you? 👋" banner appears once at the top of `_renderGuestStopsList`, with `id="guest-fn"` and `id="guest-ln"`. Individual stop cards now show only the recommendation textarea and submit button. `_guestSubmit()` reads from `#guest-fn`/`#guest-ln` instead of `#gf-fn-{stopId}` / `#gf-ln-{stopId}`. On success, only the textarea is cleared — name fields persist for subsequent stop submissions. Validation now scrolls back to the name banner if first name is missing.
+
 ### Session 18 (nineteenth context) — 2026-03-02
 
 - **Route Map date fix — pause days now included**: `renderStopNavigator` was missing `_schCumulativeNights` (pause day accumulation) while `renderSchedule` included it — causing dates to diverge when pause blocks exist. Fixed: Added `_navPauseOffset{}` pre-computation after `_navStopOffset`. Iterates `_navAllSeenIds` in order; for each stop, computes the preliminary first date (raw + phaseExtraDays), then sums all `appState.pauseDays` nights where `pd.startDate < prelimDate`. This offset is added to `_cumOff` alongside `_navStopOffset`. Now `renderStopNavigator` and `renderSchedule` both compute effective dates as: raw date + phaseExtraDays cascade + pause nights before this stop.
