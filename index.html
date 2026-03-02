@@ -7754,7 +7754,7 @@ function phaseHeaderHtml(phase, firstDay) {
     + '<div class="ph-ctrls" style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:12px;flex-wrap:wrap;justify-content:flex-end;">'
 
     /* Music — hidden on mobile via .ph-music-btn CSS */
-    + '<button class="ph-music-btn" onclick="event.stopPropagation();_openMusicForStop(' + firstDay.stopId + ')" title="Local Music" style="background:#1DB954;border:none;color:#fff;border-radius:8px;width:30px;height:30px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;">&#127926;</button>'
+    + '<button class="ph-music-btn" onclick="event.stopPropagation();_openMusicForStop(' + firstDay.stopId + ')" title="Local Music" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;width:30px;height:30px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;"><i class="fa-solid fa-music"></i></button>'
 
     /* Divider — hidden on mobile via .ph-sep-div CSS */
     + '<div class="ph-sep-div" style="width:1px;height:22px;background:rgba(255,255,255,.2);flex-shrink:0;"></div>'
@@ -7779,7 +7779,7 @@ function phaseHeaderHtml(phase, firstDay) {
     + '</div>'
 
     /* Remove (destructive — pill style matching white-row trash) */
-    + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + _safePhase + '\')" style="background:rgba(220,60,50,.3);border:1px solid rgba(255,120,110,.4);color:#fff;border-radius:100px;padding:4px 10px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;display:inline-flex;align-items:center;gap:4px;" title="Remove this stop"><i class="fa-solid fa-trash-can"></i></button>'
+    + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + _safePhase + '\')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;width:30px;height:30px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;" title="Remove this stop"><i class="fa-solid fa-trash-can"></i></button>'
 
     + '</div>'
     + '</div>';
