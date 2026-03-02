@@ -17687,8 +17687,8 @@ async function _labsDirectCall(parkName, parkPhone, checkin, checkout, special) 
     special ? 'Special requests: ' + special : '',
     'Contact: ' + (cfg.phone || 'will provide') + '.',
     'If the campground asks for a credit card or payment at any point, say: "Could you hold that reservation for about 5 minutes? Paul is going to call you right back to give you his card number directly. Could I get the best number and a contact name for him to reach?" Then confirm they will hold it and end the call politely. Do NOT provide any card numbers under any circumstances.',
-    'Before ending the call, always ask these two questions: (1) "What is the total nightly rate including all taxes and fees?" (2) "Do you offer propane refills for RVs on site?"',
-    'Before hanging up, clearly summarize back: the all-in nightly rate with taxes, whether propane is available, and the direct callback number.',
+    'Before ending the call, always ask these three questions: (1) "What is the total nightly rate including all taxes and fees?" (2) "Do you offer propane refills for RVs on site?" (3) "What is your cancellation policy — how many hours or days in advance do we need to cancel to avoid a charge?"',
+    'Before hanging up, clearly summarize back: the all-in nightly rate with taxes, whether propane is available, the cancellation policy, and the direct callback number.',
     'Be friendly, professional, confirm all reservation details, and always get a direct callback number and confirm any hold before ending.'
   ].filter(Boolean).join(' ');
 
@@ -17766,6 +17766,7 @@ function _labsNotifyCallBack(callInfo, convData) {
   /* ── Parse transcript for rate, propane, callback number ── */
   var rateInfo    = '';
   var propaneInfo = '';
+  var cancelInfo  = '';
   var callbackNum = '';
   if (convData && Array.isArray(convData.transcript)) {
     var allText = convData.transcript.map(function(t) { return t.message || t.text || ''; }).join(' ');
@@ -17776,6 +17777,10 @@ function _labsNotifyCallBack(callInfo, convData) {
     /* Propane */
     if      (/propane.{0,40}(?:yes|available|offer|have|fill|refill|do)/i.test(allText)) propaneInfo = '✅ Propane available on site';
     else if (/(?:no|don.t|not).{0,20}propane|propane.{0,20}(?:no\b|not|don.t)/i.test(allText)) propaneInfo = '❌ No propane on site';
+    /* Cancellation policy */
+    var cancelMatch = allText.match(/cancel.{0,120}?(\d+\s*(?:hour|day|week)s?[^.]*)/i)
+                   || allText.match(/(\d+\s*(?:hour|day|week)s?[^.]*?cancel[^.]*)/i);
+    if (cancelMatch) cancelInfo = cancelMatch[1].trim().replace(/\s+/g, ' ');
     /* Callback number (prefer one near "call back" / "direct" context) */
     var cbMatch = allText.match(/(?:call back|callback|direct|reach)[^.]{0,60}?(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/i)
                || allText.match(/(\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4})/);
@@ -17792,6 +17797,7 @@ function _labsNotifyCallBack(callInfo, convData) {
       + (displayPhone ? '<div style="font-size:.83rem;margin-bottom:4px;">📞 <strong>' + displayPhone + '</strong></div>' : '')
       + (rateInfo    ? '<div style="font-size:.83rem;margin-bottom:3px;">💰 All-in nightly rate: <strong>' + rateInfo + '</strong></div>' : '')
       + (propaneInfo ? '<div style="font-size:.83rem;margin-bottom:3px;">' + propaneInfo + '</div>' : '')
+      + (cancelInfo  ? '<div style="font-size:.83rem;margin-bottom:3px;">🚫 Cancellation: ' + cancelInfo + '</div>' : '')
       + '<div style="font-size:.74rem;color:var(--text-3);margin-top:6px;">Call them back to provide your credit card and finalize the reservation.</div>'
       + '</div>';
   }
@@ -17803,7 +17809,8 @@ function _labsNotifyCallBack(callInfo, convData) {
   if ('Notification' in window && Notification.permission === 'granted') {
     var body = 'Call' + (phone ? ' ' + phone : ' them') + ' back to provide your credit card.'
       + (rateInfo    ? ' Rate: ' + rateInfo + '.' : '')
-      + (propaneInfo ? ' ' + propaneInfo + '.' : '');
+      + (propaneInfo ? ' ' + propaneInfo + '.' : '')
+      + (cancelInfo  ? ' Cancel: ' + cancelInfo + '.' : '');
     var n = new Notification('📞 Call ' + name + ' back now!', {
       body: body,
       icon: '/favicon.ico',
@@ -17841,8 +17848,8 @@ async function _labsStartCall() {
     special ? 'Special requests: ' + special : '',
     'Contact: ' + (cfg.phone || 'will provide') + '.',
     'If the campground asks for a credit card or payment at any point, say: "Could you hold that reservation for about 5 minutes? Paul is going to call you right back to give you his card number directly. Could I get the best number and a contact name for him to reach?" Then confirm they will hold it and end the call politely. Do NOT provide any card numbers under any circumstances.',
-    'Before ending the call, always ask these two questions: (1) "What is the total nightly rate including all taxes and fees?" (2) "Do you offer propane refills for RVs on site?"',
-    'Before hanging up, clearly summarize back: the all-in nightly rate with taxes, whether propane is available, and the direct callback number.',
+    'Before ending the call, always ask these three questions: (1) "What is the total nightly rate including all taxes and fees?" (2) "Do you offer propane refills for RVs on site?" (3) "What is your cancellation policy — how many hours or days in advance do we need to cancel to avoid a charge?"',
+    'Before hanging up, clearly summarize back: the all-in nightly rate with taxes, whether propane is available, the cancellation policy, and the direct callback number.',
     'Be friendly, professional, confirm all reservation details, and always get a direct callback number and confirm any hold before ending.'
   ].filter(Boolean).join(' ');
 
