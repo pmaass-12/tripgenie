@@ -6040,6 +6040,11 @@ function renderDashboard() {
   var _sleepBorder = _hasBooking ? 'border:1.5px solid rgba(255,215,0,.5);' : 'border:1px solid rgba(44,95,138,.2);';
   /* If booked, show the property name from the first confirmation instead of the day.sleep fallback */
   var _sleepDisplay = _hasBooking ? (_tonightBcs2[0].propertyName || _destSub || '—') : (_destSub || '—');
+  /* Availability badge from AI search */
+  var _availResult = appState.lodgingAvailability && curStop && appState.lodgingAvailability[curStop.id];
+  var _availBadge = _availResult && !_hasBooking
+    ? '<div style="font-size:.58rem;color:#2e7d32;font-weight:800;background:#e8f5e9;border-radius:3px;padding:1px 5px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">✅ ' + _availResult.name + (_availResult.rateText ? ' · ' + _availResult.rateText : '') + '</div>'
+    : '';
 
   var tonightTile = (!_destIsHome && curStop)
     ? '<div style="display:flex;gap:8px;margin-top:12px;">'
@@ -6047,9 +6052,10 @@ function renderDashboard() {
         + '<div style="font-size:.6rem;font-weight:800;color:#2e7d32;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Destination</div>'
         + '<div style="font-weight:800;font-size:.85rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _destLabel + '</div>'
       + '</div>'
-      + '<div style="' + _boxStyle + 'background:var(--blue-l);' + _sleepBorder + '" onclick="' + _sleepOnClick + '" title="' + (_hasBooking ? 'View booking confirmation' : 'Tap for AI campground info') + '">'
-        + '<div style="font-size:.6rem;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">' + _sleepLabel + '</div>'
+      + '<div style="' + _boxStyle + 'background:' + (_availResult && !_hasBooking ? '#e8f5e9' : 'var(--blue-l)') + ';' + (_availResult && !_hasBooking ? 'border:1px solid #a5d6a7;' : _sleepBorder) + '" onclick="' + _sleepOnClick + '" title="' + (_hasBooking ? 'View booking confirmation' : 'Tap for AI campground info') + '">'
+        + '<div style="font-size:.6rem;font-weight:800;color:' + (_availResult && !_hasBooking ? '#2e7d32' : 'var(--blue)') + ';text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">' + (_availResult && !_hasBooking ? 'Sleep ✅' : _sleepLabel) + '</div>'
         + '<div style="font-weight:700;font-size:.82rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _sleepDisplay + '</div>'
+        + _availBadge
       + '</div>'
       + '<div style="' + _boxStyle + 'background:var(--orange-l);border:1px solid rgba(232,129,58,.25);" onclick="showStopForecastModal(' + curStop.id + ')" title="Tap for weather forecast">'
         + '<div style="font-size:.6rem;font-weight:800;color:var(--orange-d);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Tonight\'s Weather</div>'
@@ -9495,6 +9501,9 @@ function renderStops() {
     if (isCurrentStop)  html += '<span style="background:var(--orange);color:#fff;font-size:.6rem;font-weight:800;padding:2px 7px;border-radius:100px;">HERE NOW</span>';
     else if (isPastStop) html += '<span style="background:#888;color:#fff;font-size:.6rem;font-weight:800;padding:2px 7px;border-radius:100px;">&#10003; Visited</span>';
     if (plannedCount > 0) html += '<span style="background:var(--green);color:#fff;font-size:.6rem;font-weight:800;padding:2px 7px;border-radius:100px;">&#9989; ' + plannedCount + ' planned</span>';
+    /* Lodging availability badge from AI search */
+    var _stopAvail = appState.lodgingAvailability && appState.lodgingAvailability[stop.id];
+    if (_stopAvail) html += '<span style="background:#e8f5e9;color:#2e7d32;font-size:.6rem;font-weight:800;padding:2px 8px;border-radius:100px;border:1px solid #a5d6a7;">✅ ' + _stopAvail.name + (_stopAvail.rateText ? ' · ' + _stopAvail.rateText : '') + '</span>';
     html += '</div>';
     // Subtitle: dates · nights · weather — always visible
     var _wxBadge = _wxStr !== '—'
@@ -14891,7 +14900,8 @@ function openDDMBookingActions() {
     + '<div style="font-size:1rem;font-weight:800;margin-bottom:3px;">📞 Booking Actions</div>'
     + '<div style="font-size:.75rem;color:var(--text-2);margin-bottom:14px;">' + (stop ? _sn(stop) : 'Current stop') + (checkin ? ' · ' + checkin + ' → ' + checkout : '') + '</div>'
     + bcHtml
-    + '<button onclick="document.getElementById(\'ddm-booking-modal\').remove();_labsQuickBookModal(' + bIdx + ')" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:12px;padding:13px;font-size:.88rem;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:8px;">📞 Book via AI Calling Agent</button>'
+    + '<button onclick="document.getElementById(\'ddm-booking-modal\').remove();_labsStartQueue(' + stopId + ')" style="width:100%;background:var(--green);color:#fff;border:none;border-radius:12px;padding:13px;font-size:.88rem;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:8px;">📞 Find Available Lodging (Call All)</button>'
+    + '<button onclick="document.getElementById(\'ddm-booking-modal\').remove();_labsQuickBookModal(' + bIdx + ')" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:12px;padding:11px;font-size:.84rem;font-weight:700;cursor:pointer;font-family:var(--font);margin-bottom:8px;">📞 Book Specific Place via Agent</button>'
     + '<button onclick="document.getElementById(\'ddm-booking-modal\').remove();openBookingModal(' + stopId + ')" style="width:100%;background:var(--bg);border:1.5px solid var(--border);color:var(--text);border-radius:12px;padding:11px;font-size:.84rem;font-weight:700;cursor:pointer;font-family:var(--font);margin-bottom:8px;">📄 View / Add Booking Confirmation</button>'
     + '<button onclick="document.getElementById(\'ddm-booking-modal\').remove()" style="width:100%;background:none;border:none;color:var(--text-3);font-size:.8rem;cursor:pointer;padding:6px;">Cancel</button>'
     + '</div>';
@@ -16811,7 +16821,7 @@ function loadStopHotels(stopId) {
 
       /* Store booking data in global queue so onclick can reference by index safely */
       if (!window._labsBookCards) window._labsBookCards = [];
-      var _bIdx = window._labsBookCards.push({ n: plName, p: plPhone, ci: arrivalDate, co: departDate, sn: _sn(stop), t: plType }) - 1;
+      var _bIdx = window._labsBookCards.push({ n: plName, p: plPhone, ci: arrivalDate, co: departDate, sn: _sn(stop), t: plType, sid: stopId }) - 1;
 
       html += '<div style="display:flex;gap:11px;padding:12px 14px;'
         + (count > 0 ? 'border-top:1px solid var(--border);' : '')
@@ -16837,7 +16847,20 @@ function loadStopHotels(stopId) {
       body.innerHTML = '<div style="padding:12px 16px;font-size:.83rem;color:var(--text-2);line-height:1.6;">'
         + text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>') + '</div>';
     } else {
-      body.innerHTML = html;
+      /* "Find Available" header strip above the cards */
+      var _avail = appState.lodgingAvailability && appState.lodgingAvailability[stopId];
+      var _availBanner = _avail
+        ? '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:#e8f5e9;border-bottom:1px solid #a5d6a7;">'
+            + '<span style="font-size:.82rem;font-weight:800;color:#2e7d32;">✅ ' + _avail.name + (_avail.rateText ? ' · ' + _avail.rateText : '') + '</span>'
+            + '<span style="font-size:.72rem;color:#388e3c;">available!</span>'
+            + '</div>'
+        : '';
+      body.innerHTML = _availBanner
+        + '<div style="padding:8px 14px 6px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);">'
+        + '<span style="font-size:.73rem;color:var(--text-3);">Tap individual cards to book one, or search all:</span>'
+        + '<button onclick="event.stopPropagation();_labsStartQueue(' + stopId + ')" style="background:var(--green);color:#fff;border:none;border-radius:100px;padding:5px 14px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;">📞 Find Available</button>'
+        + '</div>'
+        + html;
     }
 
     var btn = document.getElementById('stop-hotels-btn-' + stopId);
@@ -17727,41 +17750,54 @@ function _labsQuickBookConfirm(idx) {
 }
 
 /* Shared call-maker used by both quick-book and the Labs form.
-   isHotel = true  → hotel script (room types, breakfast, no propane/hookups)
-   isHotel = false → campground/RV park script (hookups, propane)            */
-async function _labsDirectCall(parkName, parkPhone, checkin, checkout, special, isHotel) {
+   isHotel   = true  → hotel script (room types, breakfast, $150 budget)
+   isHotel   = false → campground/RV park script (hookups, propane)
+   queueCtx  = queue object when called as part of sequential search    */
+async function _labsDirectCall(parkName, parkPhone, checkin, checkout, special, isHotel, queueCtx) {
   var cfg = appState.labsPhoneBooking || {};
   if (!cfg.elvKey)  { showToast('⚠️ Add your ElevenLabs API key in the Labs tab first', 3000); return; }
   if (!cfg.agentId) { showToast('⚠️ Add your ElevenLabs Agent ID in the Labs tab first', 3000); return; }
 
+  /* STATUS signal: agent must say exactly one of these before hanging up.
+     "BOOKING STATUS: AVAILABLE, RATE: $XX" / "BOOKING STATUS: NOT AVAILABLE"
+     This token is parsed by _labsHandleQueueResult to drive sequential calling. */
+  var statusInstruction = 'CRITICAL: Before you hang up you MUST say exactly one of the following (replace $XX with the actual rate): "BOOKING STATUS: AVAILABLE, RATE: $XX" — or if they have no availability: "BOOKING STATUS: NOT AVAILABLE".';
+
   var systemPrompt;
   if (isHotel) {
     systemPrompt = [
-      'You are an AI assistant calling on behalf of the Maass family to check availability and rates at a hotel.',
+      'You are an AI assistant calling on behalf of the Maass family to check room availability at a hotel.',
       'Guests: ' + (cfg.adults || '2') + ' adults, ' + (cfg.kids || 'several children') + '.',
       cfg.hasPets ? 'Pets: ' + cfg.hasPets + '.' : 'No pets.',
-      'Stay: ' + parkName + ', check-in ' + checkin + ', check-out ' + checkout + '.',
+      'Dates: check-in ' + checkin + ', check-out ' + checkout + '.',
       special ? 'Special requests: ' + special : '',
-      'Ask about availability for either a room with two double/queen beds, or a king bed room with a sofa bed — whichever is available for a family.',
-      'If a credit card or payment is required to hold the room, say: "Could you hold that reservation for about 5 minutes? Paul is going to call you right back to give you his card number directly. Could I get the best number and a contact name for him to reach?" Then confirm they will hold it and end the call politely. Do NOT provide any card numbers under any circumstances.',
-      'Before ending the call, always ask these three questions: (1) "What is the total nightly rate including all taxes and fees?" (2) "Is breakfast included, and if so what does it include?" (3) "What is your cancellation policy — how many hours or days in advance do we need to cancel to avoid a charge?"',
-      'Before hanging up, clearly summarize: room type available, all-in nightly rate, breakfast details, cancellation policy, and direct callback number.',
-      'Be friendly and professional. Confirm all details before ending.'
+      'First ask: do they have availability for a family room — either two double/queen beds, or a king bed with a sofa bed?',
+      'If NOT available: say thank you, end the call. ' + statusInstruction,
+      'If available: ask the all-in nightly rate including all taxes and fees.',
+      'If the rate is over $150 per night all-in: politely decline, do not book, end the call. Say "BOOKING STATUS: OVER BUDGET" before hanging up.',
+      'If available and $150 or under: ask (1) "Is breakfast included?" (2) "What is your cancellation policy — how many days in advance do we need to cancel?"',
+      'Then proactively say: "To hold the reservation, Paul will call you right back within 5 minutes to provide a credit card number. Could I get the best direct number and a contact name for him to reach?" Confirm they will hold it.',
+      'Do NOT provide any card numbers under any circumstances.',
+      'Before hanging up, clearly summarize: room type, all-in rate, breakfast, cancellation policy, and direct callback number.',
+      statusInstruction,
+      'Be friendly and professional.'
     ].filter(Boolean).join(' ');
   } else {
     systemPrompt = [
-      'You are an AI assistant calling on behalf of the Maass family to book a campground reservation.',
+      'You are an AI assistant calling on behalf of the Maass family to check availability and book a campground spot.',
       'RV: ' + (cfg.rvName || 'Class A RV') + ', ' + (cfg.rvLen || '40') + ' ft, needs ' + (cfg.rvAmps || '50') + ' amp hookup.',
       'Guests: ' + (cfg.adults || '2') + ' adults, ' + (cfg.kids || 'several children') + '.',
       cfg.hasPets ? 'Pets: ' + cfg.hasPets + '.' : 'No pets.',
       cfg.extraCar ? 'Extra vehicle: ' + cfg.extraCar + '.' : '',
-      'Reservation: ' + parkName + ', check-in ' + checkin + ', check-out ' + checkout + '.',
+      'First ask: do they have availability for check-in ' + checkin + ' through ' + checkout + ' for an RV with the above specs?',
+      'If NOT available: say thank you, end the call. ' + statusInstruction,
       special ? 'Special requests: ' + special : '',
-      'Contact: ' + (cfg.phone || 'will provide') + '.',
-      'If the campground asks for a credit card or payment at any point, say: "Could you hold that reservation for about 5 minutes? Paul is going to call you right back to give you his card number directly. Could I get the best number and a contact name for him to reach?" Then confirm they will hold it and end the call politely. Do NOT provide any card numbers under any circumstances.',
-      'Before ending the call, always ask these three questions: (1) "What is the total nightly rate including all taxes and fees?" (2) "Do you offer propane refills for RVs on site?" (3) "What is your cancellation policy — how many hours or days in advance do we need to cancel to avoid a charge?"',
-      'Before hanging up, clearly summarize back: the all-in nightly rate with taxes, whether propane is available, the cancellation policy, and the direct callback number.',
-      'Be friendly, professional, confirm all reservation details, and always get a direct callback number and confirm any hold before ending.'
+      'If available: ask (1) "What is the total nightly rate including all taxes and fees?" (2) "Do you offer propane refills for RVs on site?" (3) "What is your cancellation policy — how many hours or days in advance?"',
+      'Then say: "Could you hold that spot for about 5 minutes? Paul is going to call you right back to give you his card number directly. Could I get the best number and a contact name for him to reach?" Confirm they will hold it.',
+      'Do NOT provide any card numbers under any circumstances.',
+      'Before hanging up, clearly summarize: all-in nightly rate, propane availability, cancellation policy, and direct callback number.',
+      statusInstruction,
+      'Be friendly, professional, and always confirm the hold before ending.'
     ].filter(Boolean).join(' ');
   }
 
@@ -17794,9 +17830,9 @@ async function _labsDirectCall(parkName, parkPhone, checkin, checkout, special, 
     var data = await resp.json();
     var callId = data.conversation_id || data.call_sid || data.id;
     if (resp.ok && callId) {
-      showToast('✅ AI agent is calling ' + parkName + '!', 4000);
-      _labsPollCallEnd({ parkName: parkName, parkPhone: parkPhone, conversationId: callId }, cfg.elvKey);
-      if (typeof _auditLog === 'function') _auditLog('Labs: Quick-book call started to ' + parkName + ' for ' + checkin + '–' + checkout);
+      if (!queueCtx) showToast('✅ AI agent is calling ' + parkName + '!', 4000);
+      _labsPollCallEnd({ parkName: parkName, parkPhone: parkPhone, conversationId: callId, queueCtx: queueCtx || null }, cfg.elvKey);
+      if (typeof _auditLog === 'function') _auditLog('Labs: Call started to ' + parkName + ' for ' + checkin + '–' + checkout);
     } else {
       var errMsg = (data.detail && (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail))) || JSON.stringify(data);
       showToast('❌ Call failed: ' + errMsg, 5000);
@@ -17832,7 +17868,103 @@ function _labsPollCallEnd(callInfo, apiKey) {
   }, 10000);
 }
 
+/* ── SEQUENTIAL AVAILABILITY SEARCH ─────────────────────────────────
+   Calls lodging options one-by-one until one is available + affordable.
+   Queue stored at window._labsQueue.                                    */
+
+function _labsStartQueue(stopId) {
+  var cfg = appState.labsPhoneBooking || {};
+  if (!cfg.elvKey || !cfg.agentId) {
+    showToast('⚠️ Set ElevenLabs API key & Agent ID in Labs tab first', 3000); return;
+  }
+  var opts = (window._labsBookCards || []).filter(function(b) { return b.sid === stopId && b.p && b.p.trim(); });
+  if (opts.length === 0) {
+    showToast('⚠️ No phone numbers in this list yet — Hotels & RV Parks must be loaded first', 3500); return;
+  }
+  window._labsQueue = { stopId: stopId, options: opts, idx: 0, budget: 150, currentOption: null };
+  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+  showToast('📞 Searching ' + opts.length + ' option' + (opts.length > 1 ? 's' : '') + ' for availability…', 4000);
+  _labsCallQueueNext();
+}
+
+function _labsCallQueueNext() {
+  var q = window._labsQueue;
+  if (!q) return;
+  if (q.idx >= q.options.length) {
+    showToast('😔 All ' + q.options.length + ' options tried — none available or within budget', 6000);
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('😔 No availability found', {
+        body: 'All lodging options for this stop are unavailable or over $' + q.budget + '/night.',
+        requireInteraction: false
+      });
+    }
+    window._labsQueue = null;
+    return;
+  }
+  var opt = q.options[q.idx];
+  q.idx++;
+  q.currentOption = opt;
+  var isHotel = (opt.t || '').toLowerCase().indexOf('hotel') >= 0;
+  showToast('📞 Calling ' + q.idx + '/' + q.options.length + ': ' + opt.n + '…', 3500);
+  _labsDirectCall(opt.n, opt.p, opt.ci, opt.co, '', isHotel, q);
+}
+
+function _labsHandleQueueResult(callInfo, convData) {
+  var q = callInfo.queueCtx;
+  var opt = q.currentOption;
+  if (!opt) { window._labsQueue = null; return; }
+
+  var allText = (convData && Array.isArray(convData.transcript))
+    ? convData.transcript.map(function(t) { return t.message || t.text || ''; }).join(' ')
+    : '';
+
+  /* Parse the explicit STATUS token the agent was told to say */
+  var statusMatch = allText.match(/BOOKING STATUS:\s*(AVAILABLE|NOT AVAILABLE|OVER BUDGET)/i);
+  var status = statusMatch ? statusMatch[1].toUpperCase().trim() : '';
+
+  /* Parse rate */
+  var rateMatch = allText.match(/BOOKING STATUS:.*?RATE:\s*\$?([\d,]+(?:\.\d{2})?)/i)
+               || allText.match(/\$[\d,]+(?:\.\d{2})?(?:\s*(?:per|a|\/)\s*night)?/i);
+  var rateNum = null; var rateText = '';
+  if (rateMatch) {
+    var rStr = (rateMatch[1] || rateMatch[0]).replace(/[^0-9.]/g, '');
+    rateNum = parseFloat(rStr);
+    if (!isNaN(rateNum)) rateText = '$' + rateNum + '/night';
+  }
+
+  var isHotel = (opt.t || '').toLowerCase().indexOf('hotel') >= 0;
+  var isAvailable = status === 'AVAILABLE'
+    || (!statusMatch && !/(not available|fully booked|no availability|no rooms|sold out)/i.test(allText));
+  var isOverBudget = isHotel && rateNum && rateNum > q.budget;
+
+  if (status === 'OVER BUDGET') isAvailable = false;
+
+  if (isAvailable && !isOverBudget) {
+    /* ✅ Found one — save and notify */
+    if (!appState.lodgingAvailability) appState.lodgingAvailability = {};
+    appState.lodgingAvailability[q.stopId] = {
+      name: opt.n, phone: opt.p, rate: rateNum, rateText: rateText,
+      type: opt.t, checkin: opt.ci, checkout: opt.co, ts: Date.now()
+    };
+    saveState();
+    if (typeof renderStops === 'function') renderStops();
+    if (typeof renderDashboard === 'function') renderDashboard();
+    showToast('✅ ' + opt.n + ' has availability!' + (rateText ? ' · ' + rateText : ''), 8000);
+    /* Fire the full callback summary so Paul knows to call back */
+    _labsNotifyCallBack({ parkName: opt.n, parkPhone: opt.p, conversationId: callInfo.conversationId }, convData);
+    window._labsQueue = null;
+  } else {
+    /* ❌ Skip — try next */
+    var reason = isOverBudget ? ('over $' + q.budget + '/night') : 'not available';
+    showToast('⏩ ' + opt.n + ' — ' + reason + '. Trying next…', 3000);
+    setTimeout(_labsCallQueueNext, 1500);
+  }
+}
+
 function _labsNotifyCallBack(callInfo, convData) {
+  /* Route queue calls to queue handler */
+  if (callInfo.queueCtx) { _labsHandleQueueResult(callInfo, convData); return; }
+
   var name  = callInfo.parkName  || 'the campground';
   var phone = callInfo.parkPhone || '';
 
