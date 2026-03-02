@@ -17686,8 +17686,8 @@ async function _labsDirectCall(parkName, parkPhone, checkin, checkout, special) 
     'Reservation: ' + parkName + ', check-in ' + checkin + ', check-out ' + checkout + '.',
     special ? 'Special requests: ' + special : '',
     'Contact: ' + (cfg.phone || 'will provide') + '.',
-    'If the campground asks for a credit card or payment at any point, say: "I need to place you on a brief hold — Paul will call you right back within a few minutes to provide the card and finalize everything. Could I get the best direct number and a contact name for him to reach?" Then end the call politely. Do NOT provide any card numbers under any circumstances.',
-    'Be friendly, professional, confirm all reservation details, and always get a direct callback number before ending.'
+    'If the campground asks for a credit card or payment at any point, say: "Could you hold that reservation for about 5 minutes? Paul is going to call you right back to give you his card number directly. Could I get the best number and a contact name for him to reach?" Then confirm they will hold it and end the call politely. Do NOT provide any card numbers under any circumstances.',
+    'Be friendly, professional, confirm all reservation details, and always get a direct callback number and confirm the hold before ending.'
   ].filter(Boolean).join(' ');
 
   /* Request browser notification permission before the call so it\'s ready when the call ends */
@@ -17800,8 +17800,8 @@ async function _labsStartCall() {
     'Reservation: ' + parkName + ', check-in ' + checkin + ', check-out ' + checkout + '.',
     special ? 'Special requests: ' + special : '',
     'Contact: ' + (cfg.phone || 'will provide') + '.',
-    'If the campground asks for a credit card or payment at any point, say: "I need to place you on a brief hold — Paul will call you right back within a few minutes to provide the card and finalize everything. Could I get the best direct number and a contact name for him to reach?" Then end the call politely. Do NOT provide any card numbers under any circumstances.',
-    'Be friendly, professional, confirm all reservation details, and always get a direct callback number before ending.'
+    'If the campground asks for a credit card or payment at any point, say: "Could you hold that reservation for about 5 minutes? Paul is going to call you right back to give you his card number directly. Could I get the best number and a contact name for him to reach?" Then confirm they will hold it and end the call politely. Do NOT provide any card numbers under any circumstances.',
+    'Be friendly, professional, confirm all reservation details, and always get a direct callback number and confirm the hold before ending.'
   ].filter(Boolean).join(' ');
 
   if (statusEl) {
