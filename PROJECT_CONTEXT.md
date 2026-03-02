@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-02 (Session 18, nineteenth context)
+2026-03-02 (Session 18, twenty-fourth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,18 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 18 (twenty-fourth context) — 2026-03-02
+
+- **Planner sub-nav gap fixed**: Restructured `#tab-planner` to use a flex column layout so the `.plan-nav` strip sits OUTSIDE the scrollable content area. Previously it was `position:sticky;top:0` inside a scrollable `tab-panel`, causing content to bleed above it in the gap. Fix: added `#tab-planner { overflow:hidden; padding:0; display:flex; flex-direction:column }`, changed `.plan-nav` to `flex-shrink:0` static (no sticky), wrapped all 5 content divs in a new `<div id="planner-body">` with `flex:1; overflow-y:auto; padding:var(--sp-6)`. Mobile override: `#planner-body { padding:12px }`.
+
+- **"Invalid Date" bug in schedule drift banner**: The banner computed `_sched_effEndMs` using `_totalPauseNights` before that variable was defined (it was defined 23 lines later). Fixed by hoisting the pause-nights calculation to before the banner block. New vars `_schPausesEarly` and `_totalPauseNightsEarly` computed first; the banner uses `_totalPauseNightsEarly`.
+
+- **Friends view stop names — state + capitalization**: `_renderFriendSuggestionsFamily` was manually constructing stop labels with raw `stop.state` field, skipping the `_sn()` / `_inferStopState()` / `_normState()` pipeline. Result: missing states (e.g. just "Memphis"), wrong casing (e.g. "Austin, Tx"). Fixed: when `stopObj` exists, now uses `_sn(stopObj)` directly. When no `stopObj` (database submission), normalises stored `stop_name` by splitting on comma, uppercasing state via `_normState()`, and looking up bare city names via `_KNOWN_STOP_STATES`.
+
+- **Dashboard "days left" sync**: `daysLeft` was computed as calendar days from today to `CONFIG.endDate`. Since `CONFIG.endDate` is set dynamically to `TRIP_DAYS[last].date` (extended by phaseExtraDays), it could show e.g. 58 days. Fixed: `daysLeft = Math.max(0, _gVisibleDayCount - dayNum)` — counts remaining trip days from the visible schedule, not calendar arithmetic. Moved `_gVisibleDayCount` computation before `daysLeft` to ensure it's ready.
+
+- **Mobile TripGenie icon → voice mode**: Added `openTripGenieVoice()` function. On mobile (`window.innerWidth <= 640`) it opens TripGenie then fires `_tgToggleHandsFree()` after a 500ms delay, starting the hands-free voice loop automatically. On desktop it just opens normally. Changed `#tg-btn` onclick from `openTripGenie()` to `openTripGenieVoice()`.
 
 ### Session 18 (twenty-third context) — 2026-03-02
 

@@ -362,6 +362,24 @@
       box-sizing: border-box;
     }
     .tab-panel.active { display: block; }
+    /* ── Planner tab: plan-nav sits OUTSIDE the scroll container ───── */
+    /* Overrides .tab-panel scroll/padding so the sub-nav strip is     */
+    /* flush against the top edge with zero gap, and only the content  */
+    /* area below it scrolls.                                          */
+    #tab-planner {
+      overflow: hidden !important;
+      padding: 0 !important;
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    #planner-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: var(--sp-6);
+      box-sizing: border-box;
+    }
 
     /* ── CARDS ────────────────────────────────────────────────────── */
     .card {
@@ -2383,6 +2401,7 @@
     .sc-day-pill { display:none; }
 
     /* ── Planner sub-nav: horizontal scroll strip on mobile ─────────── */
+    #planner-body { padding: 12px !important; }
     .plan-nav {
       flex-wrap: nowrap !important;
       overflow-x: auto !important;
@@ -2704,7 +2723,7 @@
                transition:background .15s;">
         <i class="fa-solid fa-map-location-dot"></i>
       </button>
-      <button id="tg-btn" onclick="openTripGenie()" title="Ask TripGenie anything">
+      <button id="tg-btn" onclick="openTripGenieVoice()" title="Ask TripGenie anything">
         <span style="font-size:.78rem;line-height:1;">✨</span><span class="tg-btn-label"> Ask TripGenie</span>
       </button>
       <button id="change-plan-btn" onclick="openChangePlanModal()" title="Tell TripGenie about a change to the plan"
@@ -3001,18 +3020,22 @@
 
     <!-- PLANNER TAB (Schedule + Stops combined) -->
     <div class="tab-panel" id="tab-planner">
-      <div class="plan-nav" style="position:sticky;top:0;z-index:50;background:var(--bg);padding:10px 0 10px;margin-bottom:16px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:2px solid var(--border);margin-left:-16px;margin-right:-16px;padding-left:16px;padding-right:16px;">
+      <!-- Sub-nav lives OUTSIDE the scroll body so it never lets content bleed above it -->
+      <div class="plan-nav" style="flex-shrink:0;background:var(--bg);padding:10px 24px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:2px solid var(--border);">
         <button id="plan-seg-schedule" onclick="_mainSeg('schedule')" class="plan-nav-btn active-seg" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--orange);border-radius:50px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-calendar-days"></i></span><span class="pnb-label"> Schedule</span></button>
         <button id="plan-seg-agenda" onclick="_mainSeg('agenda')" class="plan-nav-btn" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon">📅</span><span class="pnb-label"> Agenda</span></button>
         <button id="plan-seg-stops" onclick="_mainSeg('stops')" class="plan-nav-btn" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-map-pin"></i></span><span class="pnb-label"> Day Planner</span></button>
         <button id="plan-seg-stats" onclick="_mainSeg('stats')" class="plan-nav-btn" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-star"></i></span><span class="pnb-label"> Trip Stats</span></button>
         <button id="plan-seg-friends" onclick="_mainSeg('friends')" class="plan-nav-btn" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-lightbulb"></i></span><span class="pnb-label"> Suggestions</span></button>
       </div>
-      <div id="schedule-content" style="display:block"></div>
-      <div id="agenda-content" style="display:none"></div>
-      <div id="stops-content" style="display:none"></div>
-      <div id="stats-content" style="display:none"></div>
-      <div id="friends-content" style="display:none"></div>
+      <!-- Scrollable content area — only this div scrolls -->
+      <div id="planner-body">
+        <div id="schedule-content" style="display:block"></div>
+        <div id="agenda-content" style="display:none"></div>
+        <div id="stops-content" style="display:none"></div>
+        <div id="stats-content" style="display:none"></div>
+        <div id="friends-content" style="display:none"></div>
+      </div>
     </div>
 
     <!-- SCHOOL TAB -->
@@ -5754,8 +5777,7 @@ function renderDashboard() {
   var dayData  = getDay(dayNum);
   var curStop  = dayData ? getStop(dayData.stopId) : null;
   var sleep    = dayData ? getDaySleep(dayNum)  : '—';
-  var daysLeft = Math.max(0, Math.ceil((end - today) / 86400000));
-  /* Compute visible day count here too so dashboard is correct even before renderSchedule() runs */
+  /* Compute visible day count first so daysLeft can use it */
   if (!_gVisibleDayCount) {
     var _removedSids = appState.removedStops || {};
     var _dbCount = 0;
@@ -5766,6 +5788,9 @@ function renderDashboard() {
     });
     _gVisibleDayCount = _dbCount;
   }
+  /* daysLeft = remaining trip days (not calendar diff) so phaseExtraDays changes
+     are reflected immediately without a stale CONFIG.endDate */
+  var daysLeft = Math.max(0, (_gVisibleDayCount || TRIP_DAYS.length) - dayNum);
 
   // ── Pre-compute stats (no logic inside template strings) ──────────
   var milesCompleted = 0;
@@ -8596,6 +8621,13 @@ function renderSchedule() {
     + '<button onclick="openAddDest()" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:7px 14px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px;">&#128205; Add Destination</button>'
     + '</div>';
 
+  /* ── Pre-compute pause nights early so the drift banner can use it ── */
+  var _schPausesEarly = (appState.pauseDays || [])
+    .filter(function(pd) { return pd.startDate && pd.endDate; });
+  var _totalPauseNightsEarly = _schPausesEarly.reduce(function(sum, pd) {
+    return sum + Math.max(0, Math.round((new Date(pd.endDate+'T00:00:00') - new Date(pd.startDate+'T00:00:00')) / 86400000));
+  }, 0);
+
   /* ── Day-adjustment drift warning ───────────────────────────────────
      Compute total phaseExtraDays across all stops. If the trip end date
      has drifted more than 1 day from the base CONFIG.endDate (after
@@ -8609,7 +8641,7 @@ function renderSchedule() {
     });
   }
   if (_sched_totalExtra !== 0) {
-    var _sched_effEndMs  = new Date(CONFIG.endDate + 'T00:00:00').getTime() + (_sched_totalExtra + _totalPauseNights) * 86400000;
+    var _sched_effEndMs  = new Date(CONFIG.endDate + 'T00:00:00').getTime() + (_sched_totalExtra + _totalPauseNightsEarly) * 86400000;
     var _sched_effEnd    = new Date(_sched_effEndMs);
     var _sched_effEndStr = _sched_effEnd.toLocaleDateString('en-US', { month:'short', day:'numeric' });
     var _sched_isOver    = _sched_totalExtra > 0;
@@ -11777,17 +11809,28 @@ function _renderFriendSuggestionsFamily(rows) {
     /* Build a consistent city+state label. Prefer stopObj data; fall back to
        suggs[0].stop_name which may carry a richer "City, ST" format from the
        submission form. Avoid adding a duplicate state if it's already in the name. */
-    var _snBase = stopObj ? (stopObj.name || '') : '';
-    var _stCode = stopObj ? (stopObj.state || '') : '';
-    /* If the stop object name lacks state info, try the submission's stop_name */
-    if (_snBase && !_snBase.includes(',') && !_stCode) {
-      var _sugg0nm = (suggs[0] && suggs[0].stop_name) || '';
-      if (_sugg0nm.includes(',')) _snBase = _sugg0nm; // richer name from form submission
+    /* Build a consistent city+state label using the canonical _sn() helper
+       which handles state inference via _inferStopState() and proper
+       uppercase abbreviations. For fallback (no stopObj match), normalise
+       the stored stop_name: uppercase the state portion after the comma. */
+    var stopLabel;
+    if (stopObj) {
+      stopLabel = (stopObj.emoji ? stopObj.emoji + ' ' : '') + _sn(stopObj);
+    } else {
+      var _rawName = (suggs[0] && suggs[0].stop_name) || 'General Suggestions';
+      /* Normalise "City, Tx" → "City, TX" and bare city names via lookup */
+      var _nameParts = _rawName.split(',');
+      if (_nameParts.length >= 2) {
+        var _city = _nameParts[0].trim();
+        var _st   = _nameParts.slice(1).join(',').trim();
+        _st = _normState(_st);          /* "Tx" → "TX", "Texas" → "TX", etc. */
+        stopLabel = _city + ', ' + _st;
+      } else {
+        /* No comma — try the known-states lookup to append state */
+        var _knownSt = _KNOWN_STOP_STATES[_rawName.trim()] || '';
+        stopLabel = _rawName.trim() + (_knownSt ? ', ' + _knownSt : '');
+      }
     }
-    var _stSuffix = (_stCode && !_snBase.includes(',')) ? ', ' + _stCode : '';
-    var stopLabel = stopObj
-      ? ((stopObj.emoji ? stopObj.emoji + ' ' : '') + _snBase + _stSuffix)
-      : (suggs[0].stop_name || 'General Suggestions');
 
     html += '<div style="background:var(--card);border:1.5px solid #c9a8f5;border-radius:14px;overflow:hidden;">';
     /* Stop header */
@@ -22076,6 +22119,16 @@ async function _tsTestElVoice() {
     showToast('✅ ElevenLabs voice working!', 2000);
   } catch(e) {
     showToast('Could not reach ElevenLabs — check connection', 2500);
+  }
+}
+
+/* Opens TripGenie and, on mobile, immediately activates hands-free voice loop */
+function openTripGenieVoice() {
+  openTripGenie();
+  if (window.innerWidth <= 640) {
+    setTimeout(function() {
+      if (!_tgHandsFree) _tgToggleHandsFree();
+    }, 500);
   }
 }
 
