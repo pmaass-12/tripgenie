@@ -55,6 +55,20 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (twenty-first context) — 2026-03-02
+
+- **Drive separator × button moves to top-right on mobile**: Added `.ds-del` CSS class to the delete button in `_renderDriveSepA()`. On `@media(max-width:640px)`: `.ds-pill { position:relative }`, `.ds-del { position:absolute; top:8px; right:10px }`, `.ds-r1 { padding-right:36px }` — button floats to top-right corner without occupying Row 3 space.
+
+- **Phase header weather pill moved to city name row**: `_wxHtml` moved from the `ph-ctrls` right-controls cluster to the city name row (inline with `_displayPhase`). Weather now shows right next to the destination name on both mobile and desktop, instead of appearing in the second controls row on mobile.
+
+- **Ideal stay badge hidden on mobile**: Added `class="ph-ideal-badge"` to both the loading span and the loaded `⭐ ideal: X` span. `.ph-ideal-badge { display:none !important }` in the `@media(max-width:640px)` block hides it on mobile (planning is desktop-only).
+
+- **"Day X" pill hidden on mobile**: Added `class="sc-day-pill"` to the day-number pill below the date badge. `.sc-day-pill { display:none }` hides it on mobile, saving vertical space.
+
+- **Date format fixed — month always first**: Changed `dMDay` from `toLocaleDateString('en-US', { month:'short', day:'numeric' })` (locale-dependent order) to explicit `month + '\u00a0' + day` construction. Now always renders "Mar 2", never "2 Mar" regardless of device locale.
+
+- **Mockup annotation labels hidden**: `.label` spans in `mockup_schedule_mobile.html` (▼ Phase Header, ▼ Day Cards, etc.) were design-time annotations now hidden via `display:none`.
+
 ### Session 18 (twentieth context) — 2026-03-02
 
 - **Mobile schedule redesign — drive separators + phase headers**: Added new CSS classes (`.ds-wrap`, `.ds-pill`, `.ds-r1/.r2/.r3`, `.ph-ctrls`, `.ph-music-btn`, `.ph-sep-div`, `.ph-area-lbl`) and restructured `_renderDriveSepA`, `_renderVirtualDriveSep`, and `phaseHeaderHtml` to use them. On mobile (≤640px): dashed flanking lines hidden, drive pill becomes full-width stacked card (3 rows: route title, meta, chips), phase header controls wrap to second row with music/divider hidden and Area Info icon-only. Desktop unchanged.

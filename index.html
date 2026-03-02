@@ -2373,6 +2373,14 @@
     .ph-music-btn,.ph-sep-div { display:none !important; }
     /* Shorten "Area Info" to icon-only on mobile */
     .ph-area-lbl { display:none; }
+    /* × delete chip: float to top-right corner of the drive card */
+    .ds-pill { position:relative; }
+    .ds-r1   { padding-right:36px; } /* prevent title text from underlapping the × */
+    .ds-del  { position:absolute !important; top:8px; right:10px; border-radius:8px !important; padding:3px 7px !important; }
+    /* Ideal stay badge hidden on mobile — planning happens on desktop */
+    .ph-ideal-badge { display:none !important; }
+    /* Day-number pill under date badge is redundant on mobile */
+    .sc-day-pill { display:none; }
   }
 
   /* Below-fold separator */
@@ -7630,9 +7638,10 @@ function phaseHeaderHtml(phase, firstDay) {
 
     /* ── Center: name + meta ── */
     + '<div style="flex:1;min-width:160px;">'
-    + '<div style="display:flex;align-items:center;gap:6px;">'
+    + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
     + '<div style="font-weight:900;font-size:1.08rem;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;">' + _displayPhase + '</div>'
     + '<button onclick="event.stopPropagation();editStopCityName(' + (pStop ? pStop.id : firstDay.stopId) + ')" title="Edit city/town name shown in day cards" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;padding:1px 6px;font-size:.65rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" >' + (_hasOverride ? '📍' : '✏️') + '</button>'
+    + _wxHtml
     + '</div>'
     + (_hasOverride ? '<div style="font-size:.72rem;opacity:.75;font-weight:600;margin-top:1px;">📍 ' + _cityDisp + '</div>' : '')
     + '<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
@@ -7648,12 +7657,12 @@ function phaseHeaderHtml(phase, firstDay) {
           // Load lazily if not cached; show load button first time
           if (!mv) setTimeout(function() { loadStopMinVisit(firstDay.stopId); }, 300);
           return mv === 'loading'
-            ? '<span style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.5);border-radius:6px;padding:2px 7px;font-size:.68rem;font-weight:600;">⏳ Ideal stay…</span>'
+            ? '<span class="ph-ideal-badge" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.5);border-radius:6px;padding:2px 7px;font-size:.68rem;font-weight:600;">⏳ Ideal stay…</span>'
             : '';
         }
         var _ideal = mv.ideal || '';
         var _note  = mv.note  || '';
-        return '<span title="' + _note + '" style="background:rgba(255,215,0,.18);border:1px solid rgba(255,215,0,.35);color:rgba(255,230,120,.95);border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:700;cursor:default;white-space:nowrap;" >⭐ ideal: ' + _ideal + '</span>';
+        return '<span class="ph-ideal-badge" title="' + _note + '" style="background:rgba(255,215,0,.18);border:1px solid rgba(255,215,0,.35);color:rgba(255,230,120,.95);border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:700;cursor:default;white-space:nowrap;">⭐ ideal: ' + _ideal + '</span>';
       })()
     + (firstDay.springBreak ? '<span style="background:rgba(255,215,0,.2);border:1px solid rgba(255,215,0,.4);border-radius:6px;padding:2px 7px;font-size:.68rem;font-weight:700;color:rgba(255,230,100,.95);">&#127775; Spring Break</span>' : '')
     + '</div>'
@@ -7661,9 +7670,6 @@ function phaseHeaderHtml(phase, firstDay) {
 
     /* ── Right: controls cluster (wraps to second row on mobile via .ph-ctrls) ── */
     + '<div class="ph-ctrls" style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:12px;flex-wrap:wrap;justify-content:flex-end;">'
-
-    /* Weather */
-    + _wxHtml
 
     /* Music — hidden on mobile via .ph-music-btn CSS */
     + '<button class="ph-music-btn" onclick="event.stopPropagation();_openMusicForStop(' + firstDay.stopId + ')" title="Local Music" style="background:#1DB954;border:none;color:#fff;border-radius:8px;width:30px;height:30px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;">&#127926;</button>'
@@ -8147,7 +8153,8 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
     + '\u2192\u00a0Arrive\u00a0' + _arrivalStr + '</span>';
 
   /* Delete chip */
-  var _deleteChip = '<button onclick="event.stopPropagation();_deleteDriveBar(' + d.day + ')" '
+  /* ds-del class pins this to top-right corner on mobile via CSS absolute positioning */
+  var _deleteChip = '<button class="ds-del" onclick="event.stopPropagation();_deleteDriveBar(' + d.day + ')" '
     + 'title="Remove this drive day" '
     + 'style="display:inline-flex;align-items:center;gap:3px;background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.2);'
     + 'color:rgba(255,255,255,.75);border-radius:100px;padding:2px 8px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;white-space:nowrap;">'
@@ -8720,13 +8727,14 @@ function renderSchedule() {
     var dayBg = isToday ? 'var(--orange)' : d.springBreak ? 'var(--purple)' : isBefore ? '#aaa' : 'var(--blue)';
     var dObj2 = new Date(_effectiveDate.getTime());
     var dWday = dObj2.toLocaleDateString('en-US', { weekday:'short' });
-    var dMDay = dObj2.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    /* Build "Mar 2" explicitly (month first) so locale differences can't reorder it */
+    var dMDay = dObj2.toLocaleDateString('en-US', { month:'short' }) + '\u00a0' + dObj2.getDate();
     html += '<div style="display:flex;flex-direction:column;align-self:stretch;min-width:76px;">'
       + '<div style="background:' + dayBg + ';color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:1px;padding:6px 8px;">'
       + '<span style="font-size:.7rem;font-weight:700;opacity:.85;letter-spacing:.02em;white-space:nowrap;">' + dWday + '</span>'
       + '<span style="font-size:.95rem;font-weight:900;line-height:1.2;white-space:nowrap;">' + dMDay + '</span>'
       + '</div>'
-      + '<div style="background:#f0ece6;text-align:center;padding:3px 4px;font-size:.65rem;font-weight:800;color:var(--text-3);letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;border-top:1px solid var(--border);">Day ' + (_dayDisplayNum[d.day] || d.day) + '</div>'
+      + '<div class="sc-day-pill" style="background:#f0ece6;text-align:center;padding:3px 4px;font-size:.65rem;font-weight:800;color:var(--text-3);letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;border-top:1px solid var(--border);">Day ' + (_dayDisplayNum[d.day] || d.day) + '</div>'
       + '</div>';
 
     // Middle: title + meta
