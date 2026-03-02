@@ -842,12 +842,19 @@
       .logout-btn { width: 30px; height: 30px; font-size: .85rem; }
       #tg-btn { padding: 6px 9px; font-size: .72rem; gap: 4px; border-radius: 100px; }
       .tg-btn-label { display: none; }
-      .plan-trip-label { display: none; }
-      #plan-trip-btn { padding: 6px 9px; }
-      .change-plan-label { display: none; }
-      #change-plan-btn { padding: 6px 9px; }
-      .header-right { gap: 8px; }
+      /* Mobile: hide plan/change/help/refresh/debug — these go into hamburger */
+      #plan-trip-btn, #change-plan-btn { display: none !important; }
+      #help-btn, #refresh-btn, #debug-console-btn { display: none !important; }
+      /* Mobile: hide trip selector from header — accessible via hamburger */
+      #trip-selector-wrap { display: none !important; }
+      /* Mobile: show hamburger */
+      #ham-btn { display: flex !important; }
+      /* Mobile: mode labels — icon only for compact fit */
+      .hdr-mode-label { display: none !important; }
+      .header-right { gap: 6px; }
       .header-left { gap: 6px; }
+      /* Mobile: show trip-name and extra buttons inside hamburger */
+      #ham-trip-name, #ham-switch-trip-btn, #ham-refresh-btn { display: block !important; }
 
       /* ── Nav: bottom bar, in-flow (reliable iOS sticky) ────────── */
       #app-nav {
@@ -2278,20 +2285,60 @@
   #sm .dm-cta-left    { background: var(--orange); color: #fff; box-shadow: 0 4px 18px rgba(232,129,58,.32); }
 
   /* Big TripGenie button */
+  /* ── Drive Mode: Big waveform TripGenie button ──────────────────── */
   #sm .dm-genie-big {
-    display: flex; align-items: center; gap: 14px; width: 100%;
-    background: linear-gradient(135deg, #7B2FBE 0%, #4A90D9 100%);
-    color: #fff; border: none; border-radius: 18px; padding: 20px 22px;
-    font-family: var(--font); cursor: pointer;
-    box-shadow: 0 5px 24px rgba(123,47,190,.38); margin-bottom: 20px;
-    transition: transform .12s; text-align: left;
+    display: flex; flex-direction: column; align-items: center;
+    width: 100%; background: none; border: none; padding: 8px 0 20px; cursor: pointer;
+    font-family: var(--font); position: relative;
   }
-  #sm .dm-genie-big:active { transform: scale(.98); }
-  #sm .dm-genie-emoji { font-size: 2.3rem; line-height: 1; flex-shrink: 0; }
-  #sm .dm-genie-body  { flex: 1; min-width: 0; }
-  #sm .dm-genie-title { font-size: 1.12rem; font-weight: 900; line-height: 1.1; }
-  #sm .dm-genie-hint  { font-size: .77rem; opacity: .82; margin-top: 3px; font-style: italic; }
-  #sm .dm-genie-mic   { font-size: 1.3rem; opacity: .6; flex-shrink: 0; }
+  #sm .dm-genie-big:active .dm-genie-orb { transform: scale(.94); }
+  /* Outer pulse rings */
+  @keyframes dm-ring-pulse {
+    0%   { transform: scale(1);    opacity: .45; }
+    100% { transform: scale(1.55); opacity: 0; }
+  }
+  #sm .dm-genie-ring {
+    position: absolute; border-radius: 50%; pointer-events: none;
+    border: 2px solid rgba(123,47,190,.55);
+  }
+  #sm .dm-genie-ring-1 { width: 120px; height: 120px; top: -10px; left: calc(50% - 60px);
+    animation: dm-ring-pulse 2s ease-out infinite; }
+  #sm .dm-genie-ring-2 { width: 120px; height: 120px; top: -10px; left: calc(50% - 60px);
+    animation: dm-ring-pulse 2s ease-out infinite .67s; }
+  #sm .dm-genie-ring-3 { width: 120px; height: 120px; top: -10px; left: calc(50% - 60px);
+    animation: dm-ring-pulse 2s ease-out infinite 1.33s; }
+  /* Orb */
+  #sm .dm-genie-orb {
+    width: 100px; height: 100px; border-radius: 50%;
+    background: radial-gradient(circle at 38% 38%, #a44fe0, #4A90D9 70%, #2a6ab0);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    box-shadow: 0 6px 32px rgba(123,47,190,.52), 0 0 0 4px rgba(123,47,190,.18);
+    transition: transform .12s, box-shadow .12s; position: relative; z-index: 1;
+  }
+  #sm .dm-genie-big:active .dm-genie-orb {
+    box-shadow: 0 2px 16px rgba(123,47,190,.6), 0 0 0 8px rgba(123,47,190,.18);
+  }
+  /* Waveform bars inside orb */
+  @keyframes dm-wave-bar {
+    0%, 100% { height: 8px; opacity: .55; }
+    50%       { height: 28px; opacity: 1; }
+  }
+  #sm .dm-wave-bars {
+    display: flex; align-items: center; gap: 4px; height: 36px;
+  }
+  #sm .dm-wave-bar {
+    width: 5px; border-radius: 100px; background: rgba(255,255,255,.9);
+    height: 12px; animation: dm-wave-bar 1.2s ease-in-out infinite;
+  }
+  #sm .dm-wave-bar:nth-child(1) { animation-delay: 0s; }
+  #sm .dm-wave-bar:nth-child(2) { animation-delay: .15s; }
+  #sm .dm-wave-bar:nth-child(3) { animation-delay: .3s; }
+  #sm .dm-wave-bar:nth-child(4) { animation-delay: .45s; }
+  #sm .dm-wave-bar:nth-child(5) { animation-delay: .3s; }
+  #sm .dm-wave-bar:nth-child(6) { animation-delay: .15s; }
+  #sm .dm-wave-bar:nth-child(7) { animation-delay: 0s; }
+  #sm .dm-genie-lbl { font-size: .78rem; font-weight: 800; color: var(--text-2); margin-top: 12px; letter-spacing: .04em; text-transform: uppercase; }
+  #sm .dm-genie-hint2 { font-size: .73rem; color: var(--text-3); margin-top: 3px; font-style: italic; text-align: center; }
 
   /* Below-fold separator */
   #sm .dm-divider { height: 1px; background: var(--border); margin: 0 -20px 20px; }
@@ -2610,7 +2657,7 @@
         <span style="background:rgba(255,255,255,.18);color:#fff;border-radius:100px;padding:4px 11px;font-size:.72rem;font-weight:800;cursor:pointer;white-space:nowrap;font-family:var(--font);" onclick="_showSimpleMode()"><i class="fa-solid fa-mobile-screen-button"></i><span class="hdr-mode-label"> Driving</span></span>
         <span style="background:var(--orange);color:#fff;border-radius:100px;padding:4px 11px;font-size:.72rem;font-weight:800;white-space:nowrap;font-family:var(--font);"><i class="fa-solid fa-sliders"></i><span class="hdr-mode-label"> Planning</span></span>
       </div>
-      <button onclick="openHelpSearch()" title="Search the app — ask anything" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:100px;padding:5px 11px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-magnifying-glass"></i><span class="hdr-help-label"> Help</span></button>
+      <button id="help-btn" onclick="openHelpSearch()" title="Search the app — ask anything" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:100px;padding:5px 11px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-magnifying-glass"></i><span class="hdr-help-label"> Help</span></button>
       <button id="refresh-btn" onclick="_refreshAll()" title="Refresh all views — syncs schedule, map, dashboard" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:800;cursor:pointer;line-height:1;display:flex;align-items:center;gap:5px;font-family:var(--font);" aria-label="Refresh"><i class="fa-solid fa-rotate-right"></i><span class="hdr-refresh-label"> Refresh</span></button>
       <button id="dark-mode-btn" onclick="toggleDarkMode()" title="Toggle dark/light mode" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:1rem;cursor:pointer;line-height:1;display:flex;align-items:center;">🌙</button>
       <button id="debug-console-btn" onclick="_dbgOpen()" title="Debug console" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:.85rem;cursor:pointer;line-height:1;display:flex;align-items:center;position:relative;"><i class="fa-solid fa-terminal"></i><span id="debug-err-badge" style="display:none;position:absolute;top:-3px;right:-3px;background:#e53e3e;color:#fff;border-radius:50%;width:14px;height:14px;font-size:.6rem;font-weight:900;align-items:center;justify-content:center;line-height:1;"></span></button>
@@ -2618,8 +2665,13 @@
         <i class="fa-solid fa-right-from-bracket"></i>
       </button>
     </div>
-    <!-- Hamburger dropdown — tablet only, slides down from header -->
+    <!-- Hamburger dropdown — shown on tablet + mobile -->
     <div id="ham-menu" onclick="event.stopPropagation()">
+      <!-- Trip name row — mobile only -->
+      <div id="ham-trip-name" style="display:none;padding:6px 8px 4px;font-size:.72rem;font-weight:800;color:rgba(255,255,255,.55);letter-spacing:.05em;text-transform:uppercase;border-bottom:1px solid rgba(255,255,255,.1);margin-bottom:4px;"></div>
+      <button class="ham-menu-btn" id="ham-switch-trip-btn" style="display:none;" onclick="_hamSwitchTrip()">
+        <i class="fa-solid fa-route"></i> Switch Trip
+      </button>
       <button class="ham-menu-btn" onclick="_hamAct(openTripBuilder)">
         <i class="fa-solid fa-map"></i> Plan a New Trip
       </button>
@@ -2628,6 +2680,9 @@
       </button>
       <button class="ham-menu-btn" onclick="_hamAct(openHelpSearch)">
         <i class="fa-solid fa-magnifying-glass"></i> Help
+      </button>
+      <button class="ham-menu-btn" id="ham-refresh-btn" style="display:none;" onclick="_hamAct(_refreshAll)">
+        <i class="fa-solid fa-rotate-right"></i> Refresh
       </button>
     </div>
   </header>
@@ -11565,6 +11620,7 @@ function _renderFriendSuggestionsFamily(rows) {
       var safe = (s.suggestion || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       var safeForJs = (s.suggestion || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,' ');
       var safeStop  = stopLabel.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      var safeKey   = String(key).replace(/'/g,"\\'");
 
       html += '<div style="border-left:3px solid #9B6FCA;padding:10px 12px;background:#faf7ff;border-radius:0 10px 10px 0;">';
       /* Submitter + date */
@@ -11576,7 +11632,7 @@ function _renderFriendSuggestionsFamily(rows) {
       /* Suggestion text */
       html += '<div style="font-size:.85rem;color:var(--text);line-height:1.6;margin-bottom:10px;">' + safe + '</div>';
       /* Explore This Idea button */
-      html += '<button onclick="_exploreIdea(\'' + safeStop + '\',\'' + safeForJs + '\')"'
+      html += '<button onclick="_exploreIdea(\'' + safeStop + '\',\'' + safeForJs + '\',\'' + safeKey + '\')"'
         + ' style="display:inline-flex;align-items:center;gap:6px;background:linear-gradient(135deg,#7B5EA7,#9B6FCA);'
         + 'color:#fff;border:none;border-radius:100px;padding:7px 14px;font-size:.78rem;font-weight:800;'
         + 'cursor:pointer;font-family:var(--font);">'
@@ -11590,14 +11646,15 @@ function _renderFriendSuggestionsFamily(rows) {
   inner.innerHTML = html;
 }
 
-/* ── 10. Explore This Idea — AI info modal + Change Plan pre-fill ── */
-async function _exploreIdea(stopLabel, suggestionText) {
+/* ── 10. Explore This Idea — AI info modal + direct Plan It button ── */
+async function _exploreIdea(stopLabel, suggestionText, stopId) {
   /* Remove any existing modal */
   var prev = document.getElementById('explore-idea-modal');
   if (prev) prev.remove();
 
   var safeTxt = suggestionText.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   var safeForJs = suggestionText.replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/\n/g,' ');
+  var safeStopId = String(stopId || '').replace(/'/g,"\\'");
 
   var modal = document.createElement('div');
   modal.id = 'explore-idea-modal';
@@ -11624,8 +11681,9 @@ async function _exploreIdea(stopLabel, suggestionText) {
     + '</div>'
     /* Action buttons */
     + '<div style="padding:0 20px 20px;display:flex;gap:10px;flex-wrap:wrap;">'
-    + '<button onclick="_exploreIdeaAddToPlan(\'' + safeForJs + '\')" style="flex:1;min-width:160px;background:linear-gradient(135deg,var(--orange),#d4611a);color:#fff;border:none;border-radius:100px;padding:12px 18px;font-size:.84rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:7px;"><i class="fa-solid fa-arrows-spin"></i> Add to Change Plan</button>'
-    + '<button onclick="document.getElementById(\'explore-idea-modal\').remove()" style="flex:1;min-width:100px;background:var(--bg);color:var(--text-2);border:1.5px solid var(--border);border-radius:100px;padding:12px 18px;font-size:.84rem;font-weight:700;cursor:pointer;font-family:var(--font);">Dismiss</button>'
+    + '<button id="explore-plan-btn" onclick="_exploreIdeaPlanDirect(\'' + safeStopId + '\',\'' + safeForJs + '\')" style="flex:1;min-width:130px;background:linear-gradient(135deg,var(--green),#1a7a5a);color:#fff;border:none;border-radius:100px;padding:12px 18px;font-size:.84rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:7px;"><i class="fa-solid fa-circle-plus"></i> + Plan It!</button>'
+    + '<button onclick="_exploreIdeaAddToPlan(\'' + safeForJs + '\')" style="flex:1;min-width:130px;background:var(--bg);color:var(--text-2);border:1.5px solid var(--border);border-radius:100px;padding:12px 18px;font-size:.84rem;font-weight:700;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:6px;"><i class="fa-solid fa-arrows-spin"></i> Discuss</button>'
+    + '<button onclick="document.getElementById(\'explore-idea-modal\').remove()" style="flex:1;min-width:80px;background:var(--bg);color:var(--text-2);border:1.5px solid var(--border);border-radius:100px;padding:12px 18px;font-size:.84rem;font-weight:700;cursor:pointer;font-family:var(--font);">Dismiss</button>'
     + '</div>'
     + '</div>';
 
@@ -11679,6 +11737,74 @@ function _exploreIdeaAddToPlan(suggestionText) {
       ta.scrollTop = ta.scrollHeight;
     }
   }, 120);
+}
+
+function _exploreIdeaPlanDirect(stopId, suggName) {
+  /* Plan a friend suggestion directly — same result as clicking "+ Plan" in the Day Planner Attractions panel */
+  if (!appState.plannedEvents)    appState.plannedEvents    = {};
+  if (!appState.customActivities) appState.customActivities = {};
+  if (!appState.planned)          appState.planned          = {};
+
+  var sid = parseInt(stopId, 10) || stopId;
+  /* Truncate very long suggestion text to a reasonable activity name */
+  var shortName = suggName.length > 70 ? suggName.substring(0, 67).replace(/\s+\S*$/, '') + '…' : suggName;
+
+  /* Prevent duplicates — check if already planned with same suggestion */
+  var existing = (appState.customActivities[sid] || []).find(function(a) {
+    return a._origSugg === suggName || a.name === shortName;
+  });
+  if (existing && appState.plannedEvents[existing._planKey]) {
+    showToast('Already planned! ✅', 1800);
+    var btn = document.getElementById('explore-plan-btn');
+    if (btn) { btn.textContent = '✅ Planned!'; btn.style.background = 'var(--green)'; btn.disabled = true; }
+    return;
+  }
+
+  var planKey = 'sugg_' + sid + '_' + Date.now();
+
+  /* Add to customActivities */
+  if (!appState.customActivities[sid]) appState.customActivities[sid] = [];
+  appState.customActivities[sid].push({
+    _planKey: planKey, _origSugg: suggName,
+    name: shortName, desc: '', type: 'suggestion', duration: '', kidRating: 4
+  });
+  var existInCustom = appState.customActivities[sid].length - 1;
+
+  /* Mark as planned */
+  appState.plannedEvents[planKey] = { name: shortName, stopId: sid, addedAt: Date.now() };
+
+  /* Write appState.planned key for day modal compatibility */
+  var stopObj  = (typeof getStop === 'function') ? getStop(sid) : null;
+  var staticLen = (stopObj && stopObj.activities) ? stopObj.activities.length : 0;
+  var combinedIdx = staticLen + existInCustom;
+  var firstDay = TRIP_DAYS.filter(function(d) { return d.stopId == sid; })[0];
+  appState.planned['p_' + sid + '_a_' + combinedIdx] = firstDay ? firstDay.day : true;
+
+  saveState();
+  showToast('✅ ' + shortName + ' added to plan!', 2400);
+
+  /* Update button to show planned state */
+  var btn = document.getElementById('explore-plan-btn');
+  if (btn) {
+    btn.innerHTML = '✅ Planned!';
+    btn.style.background = 'var(--green)';
+    btn.disabled = true;
+  }
+
+  /* Re-render stops tab if currently visible so activity appears immediately */
+  if (typeof renderStops === 'function' && document.getElementById('stops-content')) {
+    var _openStops = Array.from(document.querySelectorAll('#stops-content [data-stop-id]'))
+      .filter(function(el) { var det = document.getElementById('stop-detail-' + el.dataset.stopId); return det && !det.classList.contains('hidden'); })
+      .map(function(el) { return el.dataset.stopId; });
+    renderStops();
+    /* Restore expanded state */
+    _openStops.forEach(function(oid) {
+      var det = document.getElementById('stop-detail-' + oid);
+      var chev = document.getElementById('stop-chevron-' + oid);
+      if (det) det.classList.remove('hidden');
+      if (chev) chev.textContent = '▲';
+    });
+  }
 }
 
 /* ── FRIEND MODE ─────────────────────────────────────────────────── */
@@ -13417,11 +13543,48 @@ function _hamToggle() {
   var menu = document.getElementById('ham-menu');
   var btn  = document.getElementById('ham-btn');
   if (!menu) return;
+  /* Populate mobile-only trip name */
+  var tripNameEl = document.getElementById('ham-trip-name');
+  if (tripNameEl) {
+    var tripLabel = document.getElementById('trip-selector-label');
+    tripNameEl.textContent = tripLabel ? tripLabel.textContent : 'Current Trip';
+  }
   var isOpen = menu.classList.toggle('open');
   if (btn) {
     btn.classList.toggle('active', isOpen);
     btn.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
     btn.innerHTML = isOpen ? '<i class="fa-solid fa-xmark"></i>' : '<i class="fa-solid fa-bars"></i>';
+  }
+}
+
+function _hamSwitchTrip() {
+  /* Close hamburger, briefly show trip-selector-wrap, then open its dropdown */
+  _hamClose();
+  var wrap = document.getElementById('trip-selector-wrap');
+  if (!wrap) return;
+  /* Temporarily make visible for positioning, then open dropdown */
+  var prevDisplay = wrap.style.getPropertyValue('display');
+  var prevImportant = wrap.style.cssText.indexOf('!important') !== -1;
+  wrap.style.cssText = 'display:flex !important;position:fixed;top:52px;right:10px;z-index:1200;';
+  toggleTripSelectorMenu();
+  /* Restore on menu close */
+  var menu = document.getElementById('trip-selector-menu');
+  if (menu) {
+    var _closeObs = function() {
+      if (menu.style.display === 'none') {
+        wrap.style.cssText = '';
+        menu.removeEventListener('transitionend', _closeObs);
+      }
+    };
+    /* Use a brief timeout to reset after user closes dropdown */
+    var _checkClose = function() {
+      if (menu.style.display === 'none' || !menu.classList.contains('open')) {
+        wrap.style.cssText = '';
+      } else {
+        setTimeout(_checkClose, 300);
+      }
+    };
+    setTimeout(_checkClose, 500);
   }
 }
 function _hamClose() {
@@ -17055,6 +17218,248 @@ function answerTrivia(qi, oi) {
   renderTrivia();
 }
 
+/* ── LABS TAB ───────────────────────────────────────────────────── */
+function renderLabsTools() {
+  var el = document.getElementById('tools-sub-content');
+  if (!el) return;
+
+  /* Load saved config */
+  var cfg = (appState.labsPhoneBooking) || {};
+  var rvName   = cfg.rvName    || 'Entegra Aspire 44W';
+  var rvLen    = cfg.rvLen     || '44';
+  var rvAmps   = cfg.rvAmps    || '50';
+  var adults   = cfg.adults    || '2';
+  var kids     = cfg.kids      || '5 (ages 3, 6, 8, 11, 13)';
+  var hasPets  = cfg.hasPets   || 'no pets';
+  var extraCar = cfg.extraCar  || 'yes, towing a Toyota RAV4';
+  var homeAddr = cfg.homeAddr  || '';
+  var phone    = cfg.phone     || '';
+  var elvKey   = cfg.elvKey    || (appState.elevenLabsKey || '');
+  var agentId  = cfg.agentId   || '';
+
+  /* Build stop options from TRIP_STOPS */
+  var stopOpts = '<option value="">-- Select a stop --</option>';
+  (typeof TRIP_STOPS !== 'undefined' ? TRIP_STOPS : []).forEach(function(s) {
+    if (s.sleepType === 'home') return;
+    var firstDay = (typeof TRIP_DAYS !== 'undefined' ? TRIP_DAYS : []).find(function(d) { return d.stopId === s.id; });
+    var dateLabel = firstDay ? (' · ' + firstDay.date) : '';
+    stopOpts += '<option value="' + s.id + '">' + (s.emoji || '') + ' ' + s.name + (s.state ? ', ' + s.state : '') + dateLabel + '</option>';
+  });
+
+  el.innerHTML =
+    /* LABS banner */
+    '<div style="background:linear-gradient(135deg,#ff6b6b,#ee5a24);color:#fff;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:10px;">'
+    + '<span style="font-size:1.4rem;">🧪</span>'
+    + '<div><div style="font-weight:900;font-size:.92rem;">LABS — Testing Only</div>'
+    + '<div style="font-size:.75rem;opacity:.9;margin-top:2px;">Experimental features. Not production-ready. Use at your own risk.</div></div>'
+    + '</div>'
+
+    /* ElevenLabs Phone Agent card */
+    + '<div class="card" style="overflow:hidden;margin-bottom:16px;">'
+    + '<div style="background:linear-gradient(135deg,#0f172a,#1e3a5f);color:#fff;padding:14px 18px;display:flex;align-items:center;gap:12px;">'
+    + '<span style="font-size:1.8rem;">📞</span>'
+    + '<div><div style="font-weight:900;font-size:1rem;">AI Phone Booking Agent</div>'
+    + '<div style="font-size:.75rem;opacity:.78;margin-top:2px;">Powered by ElevenLabs Conversational AI — calls RV parks & hotels on your behalf</div></div>'
+    + '</div>'
+    + '<div class="card-body" style="padding:16px;">'
+
+    /* Setup guide — collapsible */
+    + '<div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:10px;padding:12px 14px;margin-bottom:14px;">'
+    + '<div onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display===\'none\'?\'block\':\'none\'" style="cursor:pointer;font-weight:800;font-size:.82rem;color:#166534;display:flex;align-items:center;gap:6px;">'
+    + '<i class="fa-solid fa-circle-question"></i> ElevenLabs Setup Guide ▾</div>'
+    + '<div style="margin-top:8px;font-size:.79rem;color:#166534;line-height:1.7;">'
+    + '<strong>1. Create account:</strong> Go to <a href="https://elevenlabs.io" target="_blank" style="color:#15803d;">elevenlabs.io</a> → Sign up (free tier available)<br>'
+    + '<strong>2. Create a Phone Agent:</strong> In ElevenLabs → Conversational AI → Agents → Create Agent → choose "Phone" type<br>'
+    + '<strong>3. System prompt:</strong> Set the agent\'s instructions to: <em>"You are a helpful assistant booking RV reservations on behalf of a family."</em> (the app will override this with full details per call)<br>'
+    + '<strong>4. Add a phone number:</strong> In the agent → Phone Numbers tab → Add number. ElevenLabs can provision a Twilio number for you, or connect your own Twilio account<br>'
+    + '<strong>5. Copy Agent ID:</strong> From the agent page URL or settings — looks like <code>agent_XXXXXXXX</code><br>'
+    + '<strong>6. Get API key:</strong> Profile → API Keys → Create key → copy it here<br>'
+    + '<strong style="color:#92400e;">⚠️ Cost:</strong> ElevenLabs charges per minute for phone calls. Check their pricing. Each booking call typically runs 3–8 minutes.<br>'
+    + '<strong style="color:#92400e;">⚠️ Credit card:</strong> The agent CANNOT provide payment info. When asked for a card, the agent will say it will call back — you then complete payment directly with the park.'
+    + '</div></div>'
+
+    /* How it works */
+    + '<div style="background:var(--blue-l);border-radius:10px;padding:12px 14px;margin-bottom:14px;font-size:.82rem;color:var(--blue);line-height:1.6;">'
+    + '<strong>How it works:</strong> Configure your RV details and family info below. When you\'re ready to book, select a stop, enter the campground\'s phone number, and hit "Start Call." An ElevenLabs AI agent will call them, introduce itself, and book your reservation using the details below.'
+    + '</div>'
+
+    /* API Key */
+    + '<label style="font-size:.78rem;font-weight:800;color:var(--text-2);display:block;margin-bottom:4px;">ElevenLabs API Key <span style="font-weight:400;opacity:.6;">(from elevenlabs.io → Profile → API Keys)</span></label>'
+    + '<input id="labs-elv-key" type="password" value="' + elvKey.replace(/"/g,'&quot;') + '" placeholder="sk-..." '
+    + 'style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:.88rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:12px;">'
+
+    /* Agent ID */
+    + '<label style="font-size:.78rem;font-weight:800;color:var(--text-2);display:block;margin-bottom:4px;">ElevenLabs Agent ID <span style="font-weight:400;opacity:.6;">(create a phone agent at elevenlabs.io → Agents)</span></label>'
+    + '<input id="labs-agent-id" type="text" value="' + agentId.replace(/"/g,'&quot;') + '" placeholder="agent_..." '
+    + 'style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:.88rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:16px;">'
+
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">'
+    /* RV Name */
+    + '<div><label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">RV Make/Model</label>'
+    + '<input id="labs-rv-name" type="text" value="' + rvName.replace(/"/g,'&quot;') + '" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);"></div>'
+    /* RV Length */
+    + '<div><label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Length (ft)</label>'
+    + '<input id="labs-rv-len" type="text" value="' + rvLen.replace(/"/g,'&quot;') + '" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);"></div>'
+    /* Amps */
+    + '<div><label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Amps Needed</label>'
+    + '<select id="labs-rv-amps" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);">'
+    + '<option value="30"' + (rvAmps==='30'?' selected':'') + '>30 amp</option>'
+    + '<option value="50"' + (rvAmps==='50'?' selected':'') + '>50 amp</option>'
+    + '<option value="20"' + (rvAmps==='20'?' selected':'') + '>20 amp (dry)</option>'
+    + '</select></div>'
+    /* Pets */
+    + '<div><label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Pets</label>'
+    + '<input id="labs-pets" type="text" value="' + hasPets.replace(/"/g,'&quot;') + '" placeholder="no pets / 1 dog" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);"></div>'
+    + '</div>'
+
+    /* Guests */
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Adults</label>'
+    + '<input id="labs-adults" type="text" value="' + adults.replace(/"/g,'&quot;') + '" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:10px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Children (number + ages)</label>'
+    + '<input id="labs-kids" type="text" value="' + kids.replace(/"/g,'&quot;') + '" placeholder="3 children, ages 5, 8, 10" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:10px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Extra vehicle (toad)?</label>'
+    + '<input id="labs-extra-car" type="text" value="' + extraCar.replace(/"/g,'&quot;') + '" placeholder="no / yes, towing a Honda CRV" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:10px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Home address (for reservation)</label>'
+    + '<input id="labs-home-addr" type="text" value="' + homeAddr.replace(/"/g,'&quot;') + '" placeholder="123 Main St, Warwick, NY 10990" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:10px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Your mobile number (for reservation callback)</label>'
+    + '<input id="labs-phone" type="tel" value="' + phone.replace(/"/g,'&quot;') + '" placeholder="(845) 555-1234" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:16px;">'
+
+    + '<button onclick="_labsSavePhoneBookingConfig()" style="width:100%;padding:11px;background:var(--blue);color:#fff;border:none;border-radius:100px;font-size:.88rem;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:20px;">💾 Save Profile</button>'
+
+    /* ── MAKE A CALL section ── */
+    + '<div style="border-top:1px solid var(--border);padding-top:16px;">'
+    + '<div style="font-weight:900;font-size:.9rem;color:var(--text);margin-bottom:10px;">📞 Book a Reservation</div>'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Stop to book</label>'
+    + '<select id="labs-stop-sel" style="width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:10px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:10px;" onchange="_labsStopChanged()">' + stopOpts + '</select>'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Campground / Hotel name to call</label>'
+    + '<input id="labs-park-name" type="text" placeholder="e.g. Luray RV Resort" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:10px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Phone number to call</label>'
+    + '<input id="labs-park-phone" type="tel" placeholder="(555) 555-5555" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:10px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Check-in date</label>'
+    + '<input id="labs-checkin" type="date" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:10px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Check-out date</label>'
+    + '<input id="labs-checkout" type="date" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);margin-bottom:10px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:3px;">Special requests (optional)</label>'
+    + '<textarea id="labs-special" rows="2" placeholder="Pull-through site preferred, back-in ok, prefer shade..." style="width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:.85rem;background:var(--bg);color:var(--text);font-family:var(--font);resize:none;margin-bottom:14px;"></textarea>'
+    + '<div id="labs-call-status" style="display:none;background:var(--green-l);border-radius:10px;padding:10px 14px;font-size:.82rem;color:var(--green);margin-bottom:12px;"></div>'
+    + '<button onclick="_labsStartCall()" style="width:100%;padding:13px;background:linear-gradient(135deg,#2e7d52,#1a5c3a);color:#fff;border:none;border-radius:100px;font-size:.9rem;font-weight:900;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;gap:8px;"><i class="fa-solid fa-phone"></i> Start AI Booking Call</button>'
+    + '<div style="font-size:.71rem;color:var(--text-3);text-align:center;margin-top:8px;line-height:1.5;">The AI agent will introduce itself, confirm availability, and attempt to book your reservation. You\'ll need to provide payment separately.</div>'
+    + '</div>'
+    + '</div></div>';
+
+  /* Style the section-sub-bar button active state for labs */
+}
+
+function _labsSavePhoneBookingConfig() {
+  if (!appState.labsPhoneBooking) appState.labsPhoneBooking = {};
+  var cfg = appState.labsPhoneBooking;
+  cfg.rvName   = (document.getElementById('labs-rv-name')   || {}).value || '';
+  cfg.rvLen    = (document.getElementById('labs-rv-len')    || {}).value || '';
+  cfg.rvAmps   = (document.getElementById('labs-rv-amps')   || {}).value || '50';
+  cfg.hasPets  = (document.getElementById('labs-pets')      || {}).value || '';
+  cfg.adults   = (document.getElementById('labs-adults')    || {}).value || '';
+  cfg.kids     = (document.getElementById('labs-kids')      || {}).value || '';
+  cfg.extraCar = (document.getElementById('labs-extra-car') || {}).value || '';
+  cfg.homeAddr = (document.getElementById('labs-home-addr') || {}).value || '';
+  cfg.phone    = (document.getElementById('labs-phone')     || {}).value || '';
+  cfg.elvKey   = (document.getElementById('labs-elv-key')   || {}).value || '';
+  cfg.agentId  = (document.getElementById('labs-agent-id')  || {}).value || '';
+  /* Also save elvKey to top-level appState for voice features */
+  if (cfg.elvKey) appState.elevenLabsKey = cfg.elvKey;
+  saveState();
+  showToast('✅ Profile saved!', 1800);
+}
+
+function _labsStopChanged() {
+  /* Auto-populate check-in/out dates when a stop is selected */
+  var sel = document.getElementById('labs-stop-sel');
+  var parkInput = document.getElementById('labs-park-name');
+  if (!sel || !sel.value) return;
+  var sid = parseInt(sel.value, 10);
+  var stop = (typeof TRIP_STOPS !== 'undefined' ? TRIP_STOPS : []).find(function(s) { return s.id === sid; });
+  var days = (typeof TRIP_DAYS !== 'undefined' ? TRIP_DAYS : []).filter(function(d) { return d.stopId === sid; });
+  if (!days.length) return;
+  var ciEl = document.getElementById('labs-checkin');
+  var coEl = document.getElementById('labs-checkout');
+  if (ciEl) ciEl.value = days[0].date;
+  if (coEl) coEl.value = days[days.length - 1].date;
+  /* Suggest the campground name from the first day's sleep field */
+  if (parkInput && days[0].sleep && !parkInput.value) parkInput.value = days[0].sleep;
+}
+
+async function _labsStartCall() {
+  _labsSavePhoneBookingConfig();
+  var cfg = appState.labsPhoneBooking || {};
+  var parkPhone = (document.getElementById('labs-park-phone') || {}).value || '';
+  var parkName  = (document.getElementById('labs-park-name')  || {}).value || '';
+  var checkin   = (document.getElementById('labs-checkin')    || {}).value || '';
+  var checkout  = (document.getElementById('labs-checkout')   || {}).value || '';
+  var special   = (document.getElementById('labs-special')    || {}).value || '';
+  var statusEl  = document.getElementById('labs-call-status');
+
+  if (!cfg.elvKey)   { showToast('⚠️ Add your ElevenLabs API key first', 2400); return; }
+  if (!cfg.agentId)  { showToast('⚠️ Add your ElevenLabs Agent ID first', 2400); return; }
+  if (!parkPhone)    { showToast('⚠️ Enter the campground\'s phone number', 2400); return; }
+  if (!parkName)     { showToast('⚠️ Enter the campground name', 2400); return; }
+  if (!checkin || !checkout) { showToast('⚠️ Enter check-in and check-out dates', 2400); return; }
+
+  /* Build the system prompt for the agent */
+  var systemPrompt = [
+    'You are an AI assistant calling on behalf of the Maass family to book a campground reservation.',
+    'RV: ' + (cfg.rvName || 'Class A RV') + ', ' + (cfg.rvLen || '40') + ' ft, needs ' + (cfg.rvAmps || '50') + ' amp hookup.',
+    'Guests: ' + (cfg.adults || '2') + ' adults, ' + (cfg.kids || 'several children') + '.',
+    cfg.hasPets ? 'Pets: ' + cfg.hasPets + '.' : 'No pets.',
+    cfg.extraCar ? 'Extra vehicle: ' + cfg.extraCar + '.' : '',
+    'Reservation: ' + parkName + ', check-in ' + checkin + ', check-out ' + checkout + '.',
+    special ? 'Special requests: ' + special : '',
+    'Contact: ' + (cfg.phone || 'will provide') + '.',
+    'If asked for a credit card, politely say you\'ll call back with payment or complete online. Do NOT provide card numbers.',
+    'Be friendly, professional, and confirm all reservation details before ending the call.'
+  ].filter(Boolean).join(' ');
+
+  if (statusEl) {
+    statusEl.style.display = 'block';
+    statusEl.innerHTML = '<i class="fa-solid fa-phone" style="animation:spin 1s linear infinite;margin-right:6px;"></i> Initiating call to ' + parkName + '…';
+  }
+
+  try {
+    /* ElevenLabs outbound call API */
+    var resp = await fetch('https://api.elevenlabs.io/v1/convai/twilio/outbound-call', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': cfg.elvKey
+      },
+      body: JSON.stringify({
+        agent_id:     cfg.agentId,
+        agent_phone_number_id: cfg.agentId, /* some APIs use this */
+        to_number:    parkPhone.replace(/\D/g, '').replace(/^(\d{10})$/, '+1$1').replace(/^(\d{11})$/, '+$1'),
+        conversation_initiation_client_data: {
+          dynamic_variables: {
+            system_prompt_override: systemPrompt,
+            user_name: 'Maass family',
+            park_name: parkName,
+            check_in:  checkin,
+            check_out: checkout
+          }
+        }
+      })
+    });
+    var data = await resp.json();
+    if (resp.ok && (data.call_sid || data.conversation_id || data.id)) {
+      if (statusEl) statusEl.innerHTML = '✅ Call initiated! The AI agent is calling ' + parkName + '. You\'ll be notified of the outcome via your ElevenLabs dashboard.';
+      showToast('📞 AI booking call started!', 3000);
+      /* Log to audit */
+      if (typeof _auditLog === 'function') _auditLog('Labs: Phone booking call started to ' + parkName + ' for ' + checkin + '–' + checkout);
+    } else {
+      var msg = (data.detail && (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail))) || JSON.stringify(data);
+      if (statusEl) statusEl.innerHTML = '<span style="color:var(--red);">❌ Call failed: ' + msg + '</span>';
+    }
+  } catch(e) {
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--red);">❌ Network error: ' + e.message + '</span>';
+  }
+}
+
 /* ── HEALTH CHECK TAB ───────────────────────────────────────────── */
 function renderHealthCheckTab() {
   var el = document.getElementById('tools-sub-content');
@@ -17773,7 +18178,8 @@ function renderTools() {
     { id:'profiles', icon:'👤', label:'Profiles'      },
     { id:'auditlog', icon:'📋', label:'Audit Log'     },
     { id:'health',   icon:'🩺', label:'Health Check'  },
-    { id:'settings', icon:'⚙️', label:'Settings'       }
+    { id:'settings', icon:'⚙️', label:'Settings'       },
+    { id:'labs',     icon:'🧪', label:'Labs'           }
   ];
   var effectiveTab = _toolsTab;
   var bar = '<div class="section-sub-bar">';
@@ -17797,6 +18203,7 @@ function _renderToolsSub() {
   if (_toolsTab === 'auditlog') renderAuditLog();
   if (_toolsTab === 'health')   renderHealthCheckTab();
   if (_toolsTab === 'settings') renderTripSettings();
+  if (_toolsTab === 'labs')     renderLabsTools();
 }
 
 /* ── WHAT'S NEW ─────────────────────────────────────────────────── */
@@ -25138,10 +25545,37 @@ function _smRenderToday() {
     + '<span class="dm-pct-lbl">' + pct + '% done</span>'
     + '</div>';
 
-  /* 2. Next Stop card */
+  /* ── Booking chip (computed here so it can be embedded in nextCard) ── */
+  var _tonightBcs = (appState.bookingConfirmations && appState.bookingConfirmations[stop.id]) || [];
+  var _tonightBcFirst = _tonightBcs.length ? _tonightBcs[0] : null;
+  var _tonightBookingChip = _tonightBcFirst
+    ? '<div style="margin-top:8px;" onclick="event.stopPropagation();openBookingModal(' + stop.id + ')">'
+      + '<span style="background:rgba(255,215,0,.18);border:1px solid rgba(255,215,0,.55);color:rgba(255,240,160,.95);border-radius:100px;padding:4px 12px;font-size:.72rem;font-weight:800;display:inline-flex;align-items:center;gap:5px;letter-spacing:.01em;">'
+      + '🎫 ' + (_tonightBcFirst.propertyName || day.sleep || 'Confirmed')
+      + (_tonightBcFirst.confirmationNumber ? ' · <span style="opacity:.75;">#</span>' + _tonightBcFirst.confirmationNumber : '')
+      + (_tonightBcs.length > 1 ? ' <span style="opacity:.55;">+' + (_tonightBcs.length - 1) + ' more</span>' : '')
+      + '</span>'
+      + '</div>'
+    : '';
+  if (!_tonightBcFirst) {
+    var _legacyBs = (appState.bookingStatus && appState.bookingStatus[day.sleep]) || {};
+    if (_legacyBs.booked) {
+      _tonightBookingChip = '<div style="margin-top:8px;">'
+        + '<span style="background:rgba(255,215,0,.18);border:1px solid rgba(255,215,0,.55);color:rgba(255,240,160,.95);border-radius:100px;padding:4px 12px;font-size:.72rem;font-weight:800;display:inline-flex;align-items:center;gap:5px;">'
+        + '✓ Booked'
+        + (_legacyBs.confirmNum ? ' · #' + _legacyBs.confirmNum : '')
+        + '</span>'
+        + '</div>';
+    }
+  }
+  /* Sleep label for embedding */
+  var _sleepLabel = day.sleep || stop.name || '';
+  var _sleepType  = day.sleepType ? day.sleepType.replace(/_/g,' ') : '';
+
+  /* 2. Next Stop card — combines heading-to info + tonight's stop/booking */
   var nextCard;
   if (day.driveDay) {
-    nextCard = '<div class="dm-next-card">'
+    nextCard = '<div class="dm-next-card" onclick="openCampInfo(' + (idx + 1) + ')">'
       + '<div class="dm-next-eyebrow">Heading To</div>'
       + '<div class="dm-next-name">' + (stop.emoji || '📍') + ' ' + toName + toState + '</div>'
       + '<div class="dm-next-pills">'
@@ -25155,9 +25589,11 @@ function _smRenderToday() {
       + '<div class="dm-rdot end"></div>'
       + '</div>'
       + '<div class="dm-route-labels"><span>' + fromName + '</span><span>' + toName + '</span></div>'
+      + (_sleepLabel ? '<div style="border-top:1px solid rgba(255,255,255,.2);margin-top:10px;padding-top:9px;font-size:.77rem;opacity:.85;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-moon"></i> <strong>Tonight:</strong>&nbsp;' + _sleepLabel + (_sleepType ? ' · ' + _sleepType : '') + '</div>' : '')
+      + _tonightBookingChip
       + '</div>';
   } else {
-    nextCard = '<div class="dm-next-card" style="background:var(--green);">'
+    nextCard = '<div class="dm-next-card" style="background:var(--green);" onclick="openCampInfo(' + (idx + 1) + ')">'
       + '<div class="dm-next-eyebrow">Today\'s Stop</div>'
       + '<div class="dm-next-name">' + (stop.emoji || '🌲') + ' ' + (stop.name || 'Rest day') + toState + '</div>'
       + '<div class="dm-next-pills">'
@@ -25165,6 +25601,8 @@ function _smRenderToday() {
       + (actCount ? '<span class="dm-next-pill"><i class="fa-solid fa-star"></i> ' + actCount + ' activities</span>' : '')
       + '</div>'
       + (day.title ? '<div style="font-size:.82rem;opacity:.88;line-height:1.4;margin-top:8px;">' + day.title + '</div>' : '')
+      + (_sleepLabel ? '<div style="border-top:1px solid rgba(255,255,255,.2);margin-top:10px;padding-top:9px;font-size:.77rem;opacity:.85;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-moon"></i> <strong>Tonight:</strong>&nbsp;' + _sleepLabel + (_sleepType ? ' · ' + _sleepType : '') + '</div>' : '')
+      + _tonightBookingChip
       + '</div>';
   }
 
@@ -25197,14 +25635,24 @@ function _smRenderToday() {
     + '</button>'
     + '</div>';
 
-  /* 4. Big TripGenie button */
-  var genieBtn = '<button class="dm-genie-big" onclick="openTripGenie()">'
-    + '<span class="dm-genie-emoji">✨</span>'
-    + '<div class="dm-genie-body">'
-    + '<div class="dm-genie-title">Ask TripGenie</div>'
-    + '<div class="dm-genie-hint">"What should we do at ' + (stop.name || 'this stop') + '?"</div>'
+  /* 4. Big waveform TripGenie button — tap to ask, pulses when listening */
+  var genieBtn = '<button class="dm-genie-big" id="dm-genie-orb-btn" onclick="openTripGenie()">'
+    + '<div class="dm-genie-ring dm-genie-ring-1"></div>'
+    + '<div class="dm-genie-ring dm-genie-ring-2"></div>'
+    + '<div class="dm-genie-ring dm-genie-ring-3"></div>'
+    + '<div class="dm-genie-orb">'
+    + '<div class="dm-wave-bars">'
+    + '<div class="dm-wave-bar"></div>'
+    + '<div class="dm-wave-bar"></div>'
+    + '<div class="dm-wave-bar"></div>'
+    + '<div class="dm-wave-bar"></div>'
+    + '<div class="dm-wave-bar"></div>'
+    + '<div class="dm-wave-bar"></div>'
+    + '<div class="dm-wave-bar"></div>'
     + '</div>'
-    + '<i class="fa-solid fa-microphone dm-genie-mic"></i>'
+    + '</div>'
+    + '<div class="dm-genie-lbl">✨ Ask TripGenie</div>'
+    + '<div class="dm-genie-hint2">"What should we do at ' + (stop.name || 'this stop') + '?"</div>'
     + '</button>';
 
   /* ── BELOW FOLD ─────────────────────────────────────────────── */
@@ -25218,38 +25666,8 @@ function _smRenderToday() {
     + '<div class="stat-box"><div class="stat-num" style="color:var(--orange)">' + (day.miles || 0) + '</div><div class="stat-lbl">Miles</div></div>'
     + '</div>';
 
-  /* Tonight's stop hero */
-  var _tonightBcs = (appState.bookingConfirmations && appState.bookingConfirmations[stop.id]) || [];
-  var _tonightBcFirst = _tonightBcs.length ? _tonightBcs[0] : null;
-  var _tonightBookingChip = _tonightBcFirst
-    ? '<div style="margin-top:7px;" onclick="event.stopPropagation();openBookingModal(' + stop.id + ')">'
-      + '<span style="background:rgba(255,215,0,.18);border:1px solid rgba(255,215,0,.55);color:rgba(255,240,160,.95);border-radius:100px;padding:4px 12px;font-size:.72rem;font-weight:800;display:inline-flex;align-items:center;gap:5px;letter-spacing:.01em;">'
-      + '🎫 ' + (_tonightBcFirst.propertyName || day.sleep || 'Confirmed')
-      + (_tonightBcFirst.confirmationNumber ? ' · <span style="opacity:.75;">#</span>' + _tonightBcFirst.confirmationNumber : '')
-      + (_tonightBcs.length > 1 ? ' <span style="opacity:.55;">+' + (_tonightBcs.length - 1) + ' more</span>' : '')
-      + '</span>'
-      + '</div>'
-    : '';
-  /* Also check legacy bookingStatus (booked + confirmNum) */
-  if (!_tonightBcFirst) {
-    var _legacyBs = (appState.bookingStatus && appState.bookingStatus[day.sleep]) || {};
-    if (_legacyBs.booked) {
-      _tonightBookingChip = '<div style="margin-top:7px;">'
-        + '<span style="background:rgba(255,215,0,.18);border:1px solid rgba(255,215,0,.55);color:rgba(255,240,160,.95);border-radius:100px;padding:4px 12px;font-size:.72rem;font-weight:800;display:inline-flex;align-items:center;gap:5px;">'
-        + '✓ Booked'
-        + (_legacyBs.confirmNum ? ' · #' + _legacyBs.confirmNum : '')
-        + '</span>'
-        + '</div>';
-    }
-  }
-  var heroHtml = '<h2 class="section-head">Tonight</h2>'
-    + '<div class="hero-card" onclick="openCampInfo(' + (idx + 1) + ')">'
-    + '<div class="hero-bg"></div><div class="hero-overlay"></div>'
-    + '<div class="hero-label"><i class="fa-solid fa-location-dot"></i> Tonight\'s stop</div>'
-    + '<div class="hero-title">' + (stop.emoji || '📍') + ' ' + (stop.name || 'Unknown') + (stop.state ? ', ' + stop.state : '') + '</div>'
-    + '<div class="hero-sub">' + (day.sleep || stop.name || '') + (day.sleepType ? ' · ' + day.sleepType.replace(/_/g,' ') : '') + '</div>'
-    + _tonightBookingChip
-    + '</div>';
+  /* heroHtml removed — booking/tonight info now embedded directly in nextCard above */
+  var heroHtml = '';
 
   /* Quick actions */
   var qaHtml = '<h2 class="section-head">Quick actions</h2>'
@@ -25333,7 +25751,9 @@ function _smRenderSchedule() {
   /* Header */
   var start = _smFmtDateShort(days[0].date);
   var end   = _smFmtDateShort(days[days.length-1].date);
-  var html = '<div class="screen-eyebrow">' + days.length + ' days' + (totalMiles ? ' · ' + totalMiles.toLocaleString() + ' mi' : '') + '</div>'
+  /* Use the last entry's day number (matches Planner Schedule tab count) */
+  var _lastDayNum = days[days.length - 1].day || days.length;
+  var html = '<div class="screen-eyebrow">' + _lastDayNum + ' days' + (totalMiles ? ' · ' + totalMiles.toLocaleString() + ' mi' : '') + '</div>'
     + '<div class="screen-title">Schedule</div>'
     + '<div class="screen-subtitle">' + start + ' – ' + end + '</div>';
 

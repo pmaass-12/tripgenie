@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-02 (Session 18, sixteenth context)
+2026-03-02 (Session 18, eighteenth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,20 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 18 (eighteenth context) — 2026-03-02
+
+- **Explore This Idea modal — direct "+ Plan It!" button**: `_exploreIdea(stopLabel, suggestionText, stopId)` now accepts `stopId` as 3rd param (passed from suggestions rendering via `safeKey`). Modal buttons changed: green **"+ Plan It!"** calls new `_exploreIdeaPlanDirect(stopId, suggName)` (mirrors `planStopEvent` behavior — adds to `appState.customActivities`, `appState.plannedEvents`, `appState.planned`, triggers `renderStops` with expanded-card preservation); grey **"Discuss"** keeps old "Add to Change Plan" behavior; **"Dismiss"** unchanged.
+
+- **Mobile hamburger**: On mobile (≤640px) the header was too crowded — Driving/Planning toggle fell off screen. Fixed: `#ham-btn` now shows on mobile; `#plan-trip-btn`, `#change-plan-btn`, `#trip-selector-wrap`, `#help-btn`, `#refresh-btn`, `#debug-console-btn` all hidden on mobile. `.hdr-mode-label` text hidden (icon-only). Hamburger menu gains: trip-name display header, "Switch Trip" button (`_hamSwitchTrip()`), and "Refresh" button. `_hamToggle()` now populates `#ham-trip-name` with current trip selector label.
+
+- **Drive Mode — heading-to + tonight cards combined**: `nextCard` (Heading To / Today's Stop) now embeds a "Tonight:" row showing sleep name + sleepType and the booking confirmation chip. Booking chip computation moved before `nextCard` definition. Standalone `heroHtml` ("Tonight" section) removed from `el.innerHTML` assembly — booking info is now above the fold in the main card.
+
+- **Drive Mode — day count fix**: Schedule screen header used `days.length` which showed user's saved state count (e.g. 58). Now uses `days[days.length-1].day` — the last entry's day number, matching how the Planner → Schedule tab identifies total days. Static data day 46 is the last day.
+
+- **Drive Mode — large waveform TripGenie button**: Replaced flat banner button with a centered 100px circular orb + 3 expanding pulse rings + 7 animated waveform bars inside. CSS: `dm-genie-orb`, `dm-genie-ring-1/2/3` (pulse animation), `dm-wave-bar` (staggered height animation). Orb has radial-gradient purple-to-blue. Label below: "✨ Ask TripGenie" and hint text.
+
+- **Labs tab (Tools → 🧪 Labs)**: Added experimental "AI Phone Booking Agent" feature powered by ElevenLabs Conversational AI. Includes: step-by-step ElevenLabs setup guide (create agent, add phone number, get IDs), RV profile form (RV name/length/amps, adults/kids/pets/extra car, home address, phone), stop selector (auto-fills dates + campground name), per-call form (park name, park phone, check-in/out, special requests), `_labsSavePhoneBookingConfig()`, `_labsStopChanged()`, `_labsStartCall()` (calls ElevenLabs outbound API with dynamic system prompt override). Credit card warning: agent cannot provide CC info. LABS banner with "Testing Only" label.
 
 ### Session 18 (seventeenth context) — 2026-03-02
 
