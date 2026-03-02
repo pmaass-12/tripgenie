@@ -1126,6 +1126,18 @@
     .swipe-trash.visible { pointer-events:auto;opacity:1; }
     .swipe-content { display:block;position:relative;transition:transform .15s;will-change:transform; }
     .swipe-content.swiped { transform:translateX(-72px) !important; }
+    /* Desktop hover-delete button — hidden on touch/mobile */
+    .list-del-btn { display:none;align-items:center;justify-content:center;padding:4px 6px;color:var(--text-3);font-size:.8rem;cursor:pointer;flex-shrink:0;border-radius:50%;transition:color .12s; }
+    .list-del-btn:hover { color:var(--red); }
+    @media (hover:hover) and (pointer:fine) {
+      .swipe-row:hover .list-del-btn { display:flex; }
+    }
+    /* Multi-column grid for list items on wider screens */
+    .list-items-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:5px 10px;margin-bottom:6px; }
+    @media (max-width:1100px) { .list-items-grid { grid-template-columns:repeat(2,1fr); } }
+    @media (max-width:640px)  { .list-items-grid { grid-template-columns:1fr; } }
+    /* In multi-col mode the cat header spans all columns */
+    .list-items-grid .swipe-row { margin-bottom:0; }
     /* Sticky category headers in packing/todo lists */
     .list-cat-hdr {
       position:sticky;top:0;z-index:20;
@@ -12165,6 +12177,7 @@ function renderListSection(items, customItems, type, checkedMap) {
     h += 'onkeydown="if(event.key===\'Enter\')submitListQuickAdd(\'' + qaId + '\')" />';
     h += '<button class="list-qa-submit" onclick="submitListQuickAdd(\'' + qaId + '\')">Add</button>';
     h += '</div>';
+    h += '<div class="list-items-grid">';
     for (var ii = 0; ii < catItems.length; ii++) {
       var it = catItems[ii];
       var checked = !!checkedMap[it.id];
@@ -12178,10 +12191,12 @@ function renderListSection(items, customItems, type, checkedMap) {
       h += '<span style="width:24px;height:24px;border-radius:50%;border:2px solid ' + (checked ? 'var(--green)' : 'var(--border)') + ';display:flex;align-items:center;justify-content:center;flex-shrink:0;background:' + (checked ? 'var(--green)' : '#fff') + ';color:#fff;font-size:.88rem;">' + (checked ? '&#10003;' : '') + '</span>';
       h += '<span style="font-size:.88rem;color:' + (checked ? 'var(--text-3)' : 'var(--text)') + ';' + (checked ? 'text-decoration:line-through;' : '') + 'line-height:1.4;flex:1;">' + dispText + '</span>';
       h += '<span onclick="editListItem(\'' + type + '\',\'' + it.id + '\',\'' + escapedText + '\');event.stopPropagation();" style="padding:5px 7px;color:var(--text-3);font-size:.8rem;cursor:pointer;flex-shrink:0;border-radius:50%;" title="Edit item"><i class="fa-solid fa-pencil"></i></span>';
+      h += '<span class="list-del-btn" onclick="swipeDeleteItem(\'' + type + '\',\'' + it.id + '\',this);event.stopPropagation();" title="Delete item"><i class="fa-solid fa-trash-can"></i></span>';
       h += '<span ontouchstart="listDragStart(event,\'' + type + '\',\'' + it.id + '\')" ontouchmove="listDragMove(event)" ontouchend="listDragEnd(event)" style="padding:4px 6px;color:var(--text-3);font-size:1rem;cursor:grab;touch-action:none;flex-shrink:0;"><i class="fa-solid fa-grip-lines"></i></span>';
       h += '</label>';
       h += '</div>';
     }
+    h += '</div>';
   }
   return h;
 }
