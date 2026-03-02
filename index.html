@@ -8047,6 +8047,11 @@ function renderSchedule() {
     return (a.day || 0) - (b.day || 0);
   });
 
+  /* Track drive-day entries that were "pre-rendered" before their phase header to
+     avoid showing them a second time when the iteration reaches them normally.
+     Keyed by day number.                                                         */
+  var _preRenderedDriveDays = {};
+
   for (var i = 0; i < _sortedDays.length; i++) {
     var d        = _sortedDays[i];
 
@@ -8086,10 +8091,28 @@ function renderSchedule() {
          has no explicit driveDay entry). Skip if either stop was removed.           */
       if (!d.driveDay && !removedStopIds[d.stopId] && !(_dIsHome && _lastHeaderWasHome)) {
         if (lastStopId && lastStopId !== d.stopId && !_dIsHome && stop && stop.lat && stop.lng) {
-          var _prevStopForSep = getStop(lastStopId);
-          if (_prevStopForSep && !removedStopIds[lastStopId]) {
-            var _vsep = _renderVirtualDriveSep(_prevStopForSep, stop, d, _effectiveDate, _dayDisplayNum[d.day] || d.day);
-            if (_vsep) html += _vsep;
+          /* Look ahead: is there a real driveDay entry heading to THIS same stop
+             (i.e. d.stopId) that hasn't been removed? If so, use its data for the
+             separator and mark it to be skipped when we iterate to it — this fixes
+             the duplicate "A → B" separator that occurs when the AI trip builder
+             places a non-driveDay at a stop BEFORE the explicit driveDay entry.    */
+          var _realDriveAhead = null;
+          for (var _la = i + 1; _la < _sortedDays.length; _la++) {
+            var _laDay = _sortedDays[_la];
+            if (_laDay.stopId !== d.stopId) break; // different destination — stop looking
+            if (_laDay.driveDay && !skipDayNums[_laDay.day]) { _realDriveAhead = _laDay; break; }
+          }
+          if (_realDriveAhead) {
+            /* Use the real drive entry's miles/hours instead of a haversine estimate */
+            var _rdDispNum = _dayDisplayNum[_realDriveAhead.day] || _realDriveAhead.day;
+            html += _renderDriveSepA(_realDriveAhead, stop, _effectiveDate, _rdDispNum, _isOverflow);
+            _preRenderedDriveDays[_realDriveAhead.day] = true;
+          } else {
+            var _prevStopForSep = getStop(lastStopId);
+            if (_prevStopForSep && !removedStopIds[lastStopId]) {
+              var _vsep = _renderVirtualDriveSep(_prevStopForSep, stop, d, _effectiveDate, _dayDisplayNum[d.day] || d.day);
+              if (_vsep) html += _vsep;
+            }
           }
         }
         html += phaseHeaderHtml(d.phase, d);
@@ -8104,6 +8127,10 @@ function renderSchedule() {
 
     // ── Drive day → Option A road-ribbon separator ───────────────────────────
     if (d.driveDay) {
+      /* Skip if this drive day was already rendered before its destination's phase header
+         (handles AI-generated trips where a non-driveDay appears at a stop before the
+         explicit driveDay entry that drives TO that stop).                             */
+      if (_preRenderedDriveDays[d.day]) continue;
       var _dispNum = _dayDisplayNum[d.day] || d.day;
       html += _renderDriveSepA(d, stop, _effectiveDate, _dispNum, _isOverflow);
       /* Now render destination phase header AFTER the separator */
@@ -15809,11 +15836,285 @@ function renderBookings() {
 }
 
 /* ── TOOLS TAB SHELL ────────────────────────────────────────────── */
+/* ── DAY-BY-DAY AGENDA VIEW ──────────────────────────────────── */
+/* Helper: format hour/minute to "8:30 AM" */
+function _calFmtTime(h, m) {
+  m = m || 0;
+  var ampm = h >= 12 ? 'PM' : 'AM';
+  var hh = h % 12 || 12;
+  return hh + (m ? ':' + (m < 10 ? '0' + m : m) : '') + '\u00a0' + ampm;
+}
+/* Helper: add fractional hours to H,M → {h, m} (clamps at midnight) */
+function _calAddHours(startH, startM, hoursFloat) {
+  var totalM = startH * 60 + (startM || 0) + Math.round(hoursFloat * 60);
+  return { h: Math.floor(totalM / 60) % 24, m: totalM % 60 };
+}
+/* Helper: extract activity name from title like "Smokies — Cades Cove & Waterfalls" */
+function _calActivity(title) {
+  if (!title) return '';
+  var parts = title.split(/\s*[—–-]\s*/);
+  return parts.length > 1 ? parts.slice(1).join(' — ') : title;
+}
+
+function renderCalendar() {
+  var el = document.getElementById('tools-sub-content');
+  if (!el) return;
+
+  /* Build skip set (removed stops) */
+  var _calRemoved = {};
+  (appState.removedStops || []).forEach(function(id) { _calRemoved[id] = true; });
+  var _calSkip = {};
+  TRIP_DAYS.forEach(function(d) { if (_calRemoved[d.stopId]) _calSkip[d.day] = true; });
+
+  /* Sort & count visible days */
+  var _calSorted = TRIP_DAYS.slice().sort(function(a,b){
+    if (a.date < b.date) return -1; if (a.date > b.date) return 1; return (a.day||0)-(b.day||0);
+  });
+  var _calNum = {}, _calCtr = 0;
+  _calSorted.forEach(function(d) {
+    if (d.sleepType==='home' && !d.driveDay) return;
+    if (_calSkip[d.day]) return;
+    _calCtr++; _calNum[d.day] = _calCtr;
+  });
+
+  /* Pause offsets */
+  var _calPauses = (appState.pauseDays || []).filter(function(p){return p.startDate&&p.endDate;})
+    .sort(function(a,b){return a.startDate<b.startDate?-1:1;});
+  var _calPI = 0, _calCN = 0;
+
+  /* Driving prefs */
+  var _calDepartDefault = (appState.drivingPrefs && appState.drivingPrefs.departureTime) || '08:00';
+  var _calMaxH = (appState.drivingPrefs && appState.drivingPrefs.maxHours) || 4;
+  var _calSbEvery = (appState.drivingPrefs && appState.drivingPrefs.stopBreakEvery) || 0;
+  var _calSbMins  = (appState.drivingPrefs && appState.drivingPrefs.stopBreakMins)  || 30;
+
+  var todayStr = new Date().toISOString().slice(0,10);
+  var lastMonth = '';
+  var html = '<div style="padding:0 0 24px 0;">';
+
+  /* ── Header ── */
+  html += '<div style="background:linear-gradient(135deg,#2C5F8A,#1e4266);color:#fff;border-radius:var(--radius);padding:14px 18px;margin-bottom:14px;display:flex;align-items:center;gap:12px;">'
+    + '<span style="font-size:1.8rem;">📅</span>'
+    + '<div><div style="font-weight:900;font-size:1rem;">Daily Agenda</div>'
+    + '<div style="font-size:.78rem;opacity:.82;margin-top:2px;">'
+    + _calCtr + ' days · ' + formatDate(CONFIG.startDate) + ' – ' + formatDate(CONFIG.endDate) + '</div></div></div>';
+
+  /* ── Shared styles for time blocks ── */
+  var _blkRow = 'display:flex;align-items:flex-start;gap:0;padding:5px 0;border-bottom:1px solid rgba(0,0,0,.05);';
+  var _blkTime = 'min-width:56px;font-size:.68rem;font-weight:700;color:var(--text-3);padding-top:1px;flex-shrink:0;';
+  var _blkIcon = 'width:22px;font-size:.85rem;flex-shrink:0;text-align:center;';
+  var _blkText = 'flex:1;font-size:.8rem;color:var(--text);line-height:1.35;';
+  var _blkSub  = 'font-size:.68rem;color:var(--text-3);margin-top:1px;';
+
+  for (var ci = 0; ci < _calSorted.length; ci++) {
+    var d = _calSorted[ci];
+    if (d.sleepType === 'home' && !d.driveDay) continue;
+    if (_calSkip[d.day]) continue;
+
+    /* Pause shift */
+    while (_calPI < _calPauses.length && _calPauses[_calPI].startDate <= d.date) {
+      _calCN += Math.max(0, Math.round((new Date(_calPauses[_calPI].endDate+'T00:00:00') - new Date(_calPauses[_calPI].startDate+'T00:00:00')) / 86400000));
+      _calPI++;
+    }
+    var _eMs  = new Date(d.date+'T00:00:00').getTime() + _calCN * 86400000;
+    var _eObj = new Date(_eMs);
+    var _eStr = _eObj.toISOString().slice(0,10);
+
+    /* Month header */
+    var _mLabel = _eObj.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+    if (_mLabel !== lastMonth) {
+      html += '<div style="font-weight:900;font-size:.9rem;color:var(--blue);margin:' + (lastMonth ? '18px' : '4px') + ' 0 8px 0;'
+        + 'padding:6px 12px;background:#eef4fb;border-radius:8px;letter-spacing:.01em;">'
+        + _mLabel + '</div>';
+      lastMonth = _mLabel;
+    }
+
+    var _isToday = (_eStr === todayStr);
+    var _isDrive = d.driveDay;
+    var _isSB    = d.springBreak;
+    var _isHome  = d.sleepType === 'home';
+    var _stop    = getStop(d.stopId);
+    var _dispNum = _calNum[d.day] || d.day;
+
+    /* Day card accent color */
+    var _accentColor = _isToday ? '#E8813A' : _isDrive ? '#c05a10' : _isSB ? '#7B5EA7' : _isHome ? '#3A8A5C' : '#2C5F8A';
+    var _headerBg    = _isToday ? '#E8813A' : _isDrive ? '#d06020' : _isSB ? '#7B5EA7' : _isHome ? '#3A8A5C' : '#2C5F8A';
+
+    /* Weekday + date labels */
+    var _wday = _eObj.toLocaleDateString('en-US', { weekday:'long' });
+    var _mday = _eObj.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+
+    /* Weather */
+    var _wx = (appState.weather && appState.weather[d.stopId] && appState.weather[d.stopId][_eStr]) || null;
+    var _wxStr = _wx && _wx.high != null
+      ? wxIcon(_wx.code) + ' ' + _wx.high + '&#176;/' + _wx.low + '&#176;' + (_wx.type === 'typical' ? ' <span style="opacity:.7;font-size:.6rem;">(typical)</span>' : '')
+      : '';
+
+    /* ── Day card header ── */
+    html += '<div style="margin-bottom:10px;border-radius:10px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.08);">';
+    html += '<div style="background:' + _headerBg + ';color:#fff;padding:9px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;">';
+    html += '<div style="display:flex;align-items:center;gap:10px;">'
+      + '<div style="background:rgba(255,255,255,.2);border-radius:6px;padding:3px 8px;text-align:center;flex-shrink:0;">'
+      + '<div style="font-size:.6rem;font-weight:700;opacity:.85;line-height:1.4;">' + _mday + '</div>'
+      + '<div style="font-size:.6rem;font-weight:700;opacity:.65;">Day ' + _dispNum + '</div>'
+      + '</div>'
+      + '<div>'
+      + '<div style="font-weight:900;font-size:.9rem;line-height:1.2;">' + _wday
+        + (_isToday ? ' <span style="background:rgba(255,255,255,.3);font-size:.6rem;padding:1px 6px;border-radius:100px;vertical-align:middle;">TODAY</span>' : '') + '</div>'
+      + '<div style="font-size:.72rem;opacity:.85;margin-top:1px;">'
+        + (_isDrive ? '🚗 Drive Day' : _isSB ? '🌟 Spring Break' : _isHome ? '🏠 Home' : (_stop && _stop.emoji ? _stop.emoji + ' ' : '') + (d.phase || ''))
+      + '</div></div></div>';
+    if (_wxStr) html += '<div style="font-size:.72rem;text-align:right;opacity:.92;">' + _wxStr + '</div>';
+    html += '</div>'; /* end header */
+
+    /* ── Agenda blocks body ── */
+    html += '<div style="background:#fff;padding:8px 12px;">';
+
+    /* ── DRIVE DAYS ── */
+    if (_isDrive) {
+      /* Compute departure time */
+      var _dpt = (appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].departTime)
+        || _calDepartDefault;
+      var _dptH = parseInt(_dpt.split(':')[0], 10);
+      var _dptM = parseInt(_dpt.split(':')[1] || '0', 10);
+
+      /* Compute drive hours & stop breaks */
+      var _drH = d.driveHours || 0;
+      var _sbN = (_calSbEvery > 0 && _drH > 0) ? Math.floor(_drH / _calSbEvery) : 0;
+      var _sbH = _sbN > 0 ? Math.round((_sbN * _calSbMins) / 60 * 10) / 10 : 0;
+      var _totalDriveH = _drH + _sbH;
+
+      var _arrT = _calAddHours(_dptH, _dptM, _totalDriveH);
+      var _ciT  = _calAddHours(_arrT.h, _arrT.m, 1);    /* check-in ~1h after arrive */
+      var _aftT = _calAddHours(_ciT.h, _ciT.m, 0.5);    /* explore starts 30min after check-in */
+
+      /* Origin → Destination label */
+      var _driveTitle = (typeof _getDriveDayTitle === 'function') ? _getDriveDayTitle(d) : (d.title || 'Drive day');
+
+      /* Breakfast at 7 AM */
+      html += '<div style="' + _blkRow + '">'
+        + '<div style="' + _blkTime + '">' + _calFmtTime(7) + '</div>'
+        + '<div style="' + _blkIcon + '">🍳</div>'
+        + '<div style="' + _blkText + '"><strong>Breakfast &amp; Pack Up</strong>'
+        + '<div style="' + _blkSub + '">Get the RV road-ready</div></div></div>';
+
+      /* Drive block */
+      html += '<div style="' + _blkRow + 'background:#fff7f2;margin:0 -12px;padding:6px 12px;border-radius:0;">'
+        + '<div style="' + _blkTime + '">' + _calFmtTime(_dptH, _dptM) + '</div>'
+        + '<div style="' + _blkIcon + '">🚗</div>'
+        + '<div style="' + _blkText + '"><strong>' + _driveTitle + '</strong>'
+        + '<div style="' + _blkSub + '">'
+        + (d.miles ? d.miles + ' mi · ' : '') + (_drH ? _drH + 'h drive' : '')
+        + (_sbH ? ' + ' + _sbH + 'h stops' : '')
+        + ' · Arrive ~' + _calFmtTime(_arrT.h, _arrT.m)
+        + '</div></div></div>';
+
+      /* Check in */
+      if (d.sleep && !_isHome) {
+        var _sleepIcon = d.sleepType === 'rv_park' ? '🏕' : d.sleepType === 'walmart' ? '🛒' : '🏠';
+        html += '<div style="' + _blkRow + '">'
+          + '<div style="' + _blkTime + '">' + _calFmtTime(_arrT.h, _arrT.m) + '</div>'
+          + '<div style="' + _blkIcon + '">' + _sleepIcon + '</div>'
+          + '<div style="' + _blkText + '"><strong>Arrive &amp; Check In</strong>'
+          + '<div style="' + _blkSub + '">' + d.sleep + '</div></div></div>';
+      } else if (_isHome) {
+        html += '<div style="' + _blkRow + '">'
+          + '<div style="' + _blkTime + '">' + _calFmtTime(_arrT.h, _arrT.m) + '</div>'
+          + '<div style="' + _blkIcon + '">🏠</div>'
+          + '<div style="' + _blkText + '"><strong>Welcome Home!</strong>'
+          + '<div style="' + _blkSub + '">Unpack, decompress, celebrate 🎉</div></div></div>';
+      }
+
+      /* Afternoon explore (only if arriving before 4 PM) */
+      if (_aftT.h < 17) {
+        html += '<div style="' + _blkRow + '">'
+          + '<div style="' + _blkTime + '">' + _calFmtTime(_aftT.h, _aftT.m) + '</div>'
+          + '<div style="' + _blkIcon + '">🌄</div>'
+          + '<div style="' + _blkText + '"><strong>Explore the Area</strong>'
+          + '<div style="' + _blkSub + '">Short walk, local sights, or just relax</div></div></div>';
+      }
+
+      /* Dinner */
+      if (!_isHome) {
+        html += '<div style="' + _blkRow + 'border-bottom:none;">'
+          + '<div style="' + _blkTime + '">6:30\u00a0PM</div>'
+          + '<div style="' + _blkIcon + '">🍽</div>'
+          + '<div style="' + _blkText + '"><strong>Dinner</strong>'
+          + '<div style="' + _blkSub + '">Settle in for the evening</div></div></div>';
+      }
+
+    } else {
+      /* ── EXPLORE DAYS ── */
+      var _activity = _calActivity(d.title) || 'Explore ' + (d.phase || 'the area');
+      /* Is it a spring break day? Use slightly later schedule */
+      var _bfastH = _isSB ? 8 : 7;
+      var _bfastM = _isSB ? 30 : 30;
+
+      /* Breakfast */
+      html += '<div style="' + _blkRow + '">'
+        + '<div style="' + _blkTime + '">' + _calFmtTime(_bfastH, _bfastM) + '</div>'
+        + '<div style="' + _blkIcon + '">🍳</div>'
+        + '<div style="' + _blkText + '"><strong>Breakfast</strong>'
+        + '<div style="' + _blkSub + '">Start the day fueled up</div></div></div>';
+
+      /* Main activity */
+      html += '<div style="' + _blkRow + 'background:' + (_isSB ? '#f8f4ff' : '#f0f5fc') + ';margin:0 -12px;padding:6px 12px;">'
+        + '<div style="' + _blkTime + '">9:00\u00a0AM</div>'
+        + '<div style="' + _blkIcon + '">🗺</div>'
+        + '<div style="' + _blkText + '"><strong>' + _activity + '</strong>'
+        + '<div style="' + _blkSub + '">Morning adventure</div></div></div>';
+
+      /* Lunch */
+      html += '<div style="' + _blkRow + '">'
+        + '<div style="' + _blkTime + '">12:30\u00a0PM</div>'
+        + '<div style="' + _blkIcon + '">🥗</div>'
+        + '<div style="' + _blkText + '"><strong>Lunch</strong>'
+        + '<div style="' + _blkSub + '">Break &amp; refuel</div></div></div>';
+
+      /* Afternoon */
+      html += '<div style="' + _blkRow + '">'
+        + '<div style="' + _blkTime + '">1:30\u00a0PM</div>'
+        + '<div style="' + _blkIcon + '">☀️</div>'
+        + '<div style="' + _blkText + '"><strong>Afternoon Exploration</strong>'
+        + '<div style="' + _blkSub + '">Free time, more sightseeing, or relaxing at camp</div></div></div>';
+
+      /* Evening/camp */
+      html += '<div style="' + _blkRow + '">'
+        + '<div style="' + _blkTime + '">5:00\u00a0PM</div>'
+        + '<div style="' + _blkIcon + '">⛺</div>'
+        + '<div style="' + _blkText + '"><strong>Back at Camp</strong>'
+        + (d.sleep ? '<div style="' + _blkSub + '">' + d.sleep + '</div>' : '')
+        + '</div></div>';
+
+      /* Dinner */
+      html += '<div style="' + _blkRow + 'border-bottom:none;">'
+        + '<div style="' + _blkTime + '">6:30\u00a0PM</div>'
+        + '<div style="' + _blkIcon + '">🍽</div>'
+        + '<div style="' + _blkText + '"><strong>Dinner &amp; Evening</strong>'
+        + '<div style="' + _blkSub + '">Campfire, games, stargazing</div></div></div>';
+    }
+
+    /* Tap to see full day detail (non-drive days) */
+    if (!_isDrive) {
+      html += '<div style="text-align:right;margin-top:4px;">'
+        + '<button onclick="openDayDetail(' + d.day + ')" style="background:none;border:none;color:var(--blue);font-size:.72rem;font-weight:700;cursor:pointer;padding:2px 0;font-family:var(--font);">'
+        + 'Full day detail →</button></div>';
+    }
+
+    html += '</div>'; /* end body */
+    html += '</div>'; /* end card */
+  }
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 var _toolsTab = 'expenses';
 function renderTools() {
   var el = document.getElementById('tools-content');
   if (!el) return;
   var tabs = [
+    { id:'calendar', icon:'📅', label:'Calendar'      },
     { id:'expenses', icon:'💰', label:'Expenses'      },
     { id:'bookings', icon:'🎫', label:'Bookings'      },
     { id:'rvlog',    icon:'🚐', label:'RV Log'        },
@@ -15836,6 +16137,7 @@ function setToolsTab(tab) { _toolsTab = tab; renderTools(); }
 function _renderToolsSub() {
   var el = document.getElementById('tools-sub-content');
   if (!el) return;
+  if (_toolsTab === 'calendar') renderCalendar();
   if (_toolsTab === 'expenses') renderExpenses();
   if (_toolsTab === 'bookings') renderBookings();
   if (_toolsTab === 'rvlog')    renderRVMaintenance();

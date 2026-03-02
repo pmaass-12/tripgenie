@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-01 (Session 18, sixth context)
+2026-03-02 (Session 18, ninth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -337,6 +337,15 @@ tripgenie/
   - **Phase header ordering fixed**: Drive days defer their destination phase header until AFTER the separator. `_phaseJustChanged` flag tracks the change; non-drive days render phase header before card (unchanged behavior). `continue` skips full card for drive days.
   - **`mobile-web-app-capable` meta tag**: Added non-deprecated meta tag alongside Apple-specific one.
   - **Guest map invalidateSize fix**: `_initGuestMapInst` now calls `invalidateSize()` + fitBounds after 120ms to resolve blank-tile issue when container transitions from `display:none` to `display:flex`.
+
+- Session 18 continued (2026-03-02, ninth context):
+  - **Drive separator duplicate fix**: Fixed AI-generated trips where a non-driveDay appeared at a stop BEFORE the explicit driveDay entry for that same stop — causing "Winchester → Wytheville" to appear twice (once as virtual separator, once as the real drive day rendered mid-stop). Fix: in the phase-change non-driveDay block, look ahead in `_sortedDays` for a real driveDay with the same `stopId`. If found, render that real drive entry's separator (with actual miles/hours) BEFORE the phase header and mark it `_preRenderedDriveDays[day] = true`. When the loop reaches that day, it skips it. If no real drive entry found, fall back to haversine virtual estimate (unchanged).
+  - **Daily Agenda view (Calendar tab)**: New "📅 Calendar" sub-tab added to Tools. Shows every trip day as a time-blocked agenda card:
+    - Drive days: 7:00 AM Breakfast & Pack Up → Departure time (from drivingPrefs) + 🚗 Drive block with miles/hours/arrival → Check In → Afternoon Explore → 6:30 PM Dinner
+    - Explore days: 7:30 AM Breakfast → 9:00 AM Main Activity (extracted from day title) → 12:30 PM Lunch → 1:30 PM Afternoon → 5:00 PM Back at Camp → 6:30 PM Dinner
+    - Shows weather pill if available, TODAY badge, stop break time on drive days
+    - Month headers, phase name labels, "Full day detail →" button on explore days
+    - Helper functions: `_calFmtTime(h, m)`, `_calAddHours(h, m, float)`, `_calActivity(title)`
 
 ## Suggested Next Steps
 - **0-day waypoint stops**: User wants stops with 0 nights for driving waypoints (fuel, Walmart overnight, route planning) — not yet built
