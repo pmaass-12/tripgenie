@@ -17075,6 +17075,7 @@ function renderHealthCheckTab() {
    ════════════════════════════════════════════════════════════════════ */
 var _bcCurrentStopId = null; /* stopId for the booking currently being added */
 var _bcPendingFile   = null; /* { b64, mimeType, fileName } waiting for extraction */
+var _bcEditId        = null; /* set when editing an existing booking (its id); null = new */
 
 /* ── Open/close modal ─────────────────────────────────────────── */
 function openBookingModal(stopId) {
@@ -17118,6 +17119,7 @@ function closeBookingModal() {
   if (el) el.remove();
   _bcCurrentStopId = null;
   _bcPendingFile = null;
+  _bcEditId = null;
   /* Reset file input so same file can be re-selected */
   var fi = document.getElementById('bc-file-input');
   if (fi) fi.value = '';
@@ -17153,7 +17155,10 @@ function _bcCardHtml(bc, inModal) {
     + '<div style="font-weight:800;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + (bc.propertyName || 'Reservation') + '</div>'
     + (bc.address ? '<div style="font-size:.74rem;color:var(--text-3);margin-top:2px;">' + bc.address + '</div>' : '')
     + '</div>'
-    + (inModal ? '<button onclick="event.stopPropagation();_bcDelete(\'' + bc.id + '\',' + bc.stopId + ')" title="Delete this confirmation" style="background:rgba(220,60,50,.1);border:1px solid rgba(220,60,50,.2);color:#c53030;border-radius:8px;padding:3px 8px;font-size:.7rem;font-weight:700;cursor:pointer;flex-shrink:0;"><i class="fa-solid fa-trash-can"></i></button>' : '')
+    + (inModal ? '<div style="display:flex;gap:5px;flex-shrink:0;">'
+        + '<button onclick="event.stopPropagation();_bcEditBooking(\'' + bc.id + '\',' + bc.stopId + ')" title="Edit this confirmation" style="background:rgba(44,95,138,.1);border:1px solid rgba(44,95,138,.2);color:var(--blue);border-radius:8px;padding:3px 8px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fa-solid fa-pen"></i></button>'
+        + '<button onclick="event.stopPropagation();_bcDelete(\'' + bc.id + '\',' + bc.stopId + ')" title="Delete this confirmation" style="background:rgba(220,60,50,.1);border:1px solid rgba(220,60,50,.2);color:#c53030;border-radius:8px;padding:3px 8px;font-size:.7rem;font-weight:700;cursor:pointer;"><i class="fa-solid fa-trash-can"></i></button>'
+        + '</div>' : '')
     + '</div>'
     /* details grid */
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;font-size:.76rem;">'
@@ -17191,9 +17196,32 @@ function _bcHandleFile(event) {
   var reader = new FileReader();
   reader.onload = function(e) {
     var dataUrl = e.target.result;
-    /* dataUrl = "data:mime/type;base64,AAAA..." — split off the base64 portion */
-    var b64 = dataUrl.split(',')[1];
-    _bcExtract(b64, mimeType, fileName);
+    /* For images: compress/resize to ≤1200px max side at 82% JPEG quality before sending.
+       This keeps the payload well under the 8 MB proxy limit for even large phone photos. */
+    if (mimeType.startsWith('image/')) {
+      var img = new Image();
+      img.onload = function() {
+        var maxDim = 1200;
+        var w = img.width, h = img.height;
+        if (w > maxDim || h > maxDim) {
+          if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+          else         { w = Math.round(w * maxDim / h); h = maxDim; }
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        var compressed = canvas.toDataURL('image/jpeg', 0.82);
+        _bcExtract(compressed.split(',')[1], 'image/jpeg', fileName);
+      };
+      img.onerror = function() {
+        /* Fallback: send original if canvas fails */
+        _bcExtract(dataUrl.split(',')[1], mimeType, fileName);
+      };
+      img.src = dataUrl;
+    } else {
+      /* PDF or other — send as-is */
+      _bcExtract(dataUrl.split(',')[1], mimeType, fileName);
+    }
   };
   reader.readAsDataURL(file);
   event.target.value = '';
@@ -17229,8 +17257,13 @@ function _bcExtract(b64, mimeType, fileName) {
   });
 
   fetch(GEMINI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body })
-  .then(function(r) { return r.json(); })
+  .then(function(r) {
+    if (r.status === 413) throw new Error('TOO_LARGE');
+    if (!r.ok) throw new Error('HTTP_' + r.status);
+    return r.json();
+  })
   .then(function(data) {
+    if (data && data.error) throw new Error(data.error.message || 'API_ERROR');
     var text = '';
     try { text = data.candidates[0].content.parts[0].text || ''; } catch(e) {}
     /* Strip any markdown code fence if Gemini added one */
@@ -17245,7 +17278,10 @@ function _bcExtract(b64, mimeType, fileName) {
   })
   .catch(function(err) {
     var resEl = document.getElementById('bc-extract-result');
-    if (resEl) resEl.innerHTML = '<div style="background:#fff3f3;border:1px solid #f5c6c6;border-radius:10px;padding:14px;color:#c53030;font-size:.83rem;">⚠️ Could not read the confirmation. Check your connection and try again.</div>';
+    if (!resEl) return;
+    var msg = '⚠️ Could not read the confirmation. Check your connection and try again.';
+    if (err && err.message === 'TOO_LARGE') msg = '⚠️ File is too large for AI extraction. Try a screenshot or smaller image instead.';
+    resEl.innerHTML = '<div style="background:#fff3f3;border:1px solid #f5c6c6;border-radius:10px;padding:14px;color:#c53030;font-size:.83rem;">' + msg + '</div>';
   });
 }
 
@@ -17262,8 +17298,14 @@ function _bcShowExtracted(data, b64, mimeType, fileName) {
       + '</div>';
   };
 
-  resEl.innerHTML = '<div style="background:var(--green-l,#e8f5ec);border:1px solid #a5d6a7;border-radius:12px;padding:14px 15px;margin-bottom:14px;">'
-    + '<div style="font-weight:800;color:var(--green-d,#2a6041);font-size:.88rem;margin-bottom:12px;display:flex;align-items:center;gap:7px;"><i class="fa-solid fa-circle-check"></i> Extracted — review and save</div>'
+  var _bcIsEdit = !!_bcEditId;
+  var _bcFormBg   = _bcIsEdit ? 'var(--blue-l,#e8f0f7)' : 'var(--green-l,#e8f5ec)';
+  var _bcFormBord = _bcIsEdit ? '#a5c4e0' : '#a5d6a7';
+  var _bcHdrCol   = _bcIsEdit ? 'var(--blue)' : 'var(--green-d,#2a6041)';
+  var _bcHdrIcon  = _bcIsEdit ? 'fa-pen' : 'fa-circle-check';
+  var _bcHdrTxt   = _bcIsEdit ? 'Edit booking — make changes and update' : 'Extracted — review and save';
+  resEl.innerHTML = '<div style="background:' + _bcFormBg + ';border:1px solid ' + _bcFormBord + ';border-radius:12px;padding:14px 15px;margin-bottom:14px;">'
+    + '<div style="font-weight:800;color:' + _bcHdrCol + ';font-size:.88rem;margin-bottom:12px;display:flex;align-items:center;gap:7px;"><i class="fa-solid ' + _bcHdrIcon + '"></i> ' + _bcHdrTxt + '</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px;">'
     + fld('Property Name', data.propertyName, 'name')
     + fld('Confirmation #', data.confirmationNumber, 'confnum')
@@ -17281,8 +17323,8 @@ function _bcShowExtracted(data, b64, mimeType, fileName) {
     + fld('Notes', data.notes, 'notes')
     + '</div>'
     + '<div style="display:flex;gap:8px;margin-top:4px;">'
-    + '<button onclick="_bcSave()" style="flex:1;background:var(--blue);color:#fff;border:none;border-radius:10px;padding:10px;font-weight:800;font-size:.88rem;cursor:pointer;font-family:var(--font);"><i class="fa-solid fa-floppy-disk"></i> Save Confirmation</button>'
-    + '<button onclick="document.getElementById(\'bc-extract-result\').style.display=\'none\'" style="background:var(--bg);border:1px solid var(--border);color:var(--text-2);border-radius:10px;padding:10px 16px;font-weight:600;font-size:.82rem;cursor:pointer;font-family:var(--font);">Cancel</button>'
+    + '<button onclick="_bcSave()" style="flex:1;background:var(--blue);color:#fff;border:none;border-radius:10px;padding:10px;font-weight:800;font-size:.88rem;cursor:pointer;font-family:var(--font);"><i class="fa-solid fa-floppy-disk"></i> ' + (_bcIsEdit ? 'Update Booking' : 'Save Confirmation') + '</button>'
+    + '<button onclick="_bcCancelEdit()" style="background:var(--bg);border:1px solid var(--border);color:var(--text-2);border-radius:10px;padding:10px 16px;font-weight:600;font-size:.82rem;cursor:pointer;font-family:var(--font);">Cancel</button>'
     + '</div>'
     + '</div>';
 }
@@ -17320,13 +17362,31 @@ function _bcSave() {
 
   if (!appState.bookingConfirmations) appState.bookingConfirmations = {};
   if (!appState.bookingConfirmations[_bcCurrentStopId]) appState.bookingConfirmations[_bcCurrentStopId] = [];
-  appState.bookingConfirmations[_bcCurrentStopId].push(bc);
+
+  if (_bcEditId) {
+    /* Update existing booking in place */
+    bc.id = _bcEditId;
+    var _editList = appState.bookingConfirmations[_bcCurrentStopId];
+    var _editIdx  = _editList.findIndex ? _editList.findIndex(function(b) { return b.id === _bcEditId; }) : -1;
+    if (_editIdx === -1) { for (var _i=0;_i<_editList.length;_i++) { if (_editList[_i].id===_bcEditId) { _editIdx=_i; break; } } }
+    if (_editIdx > -1) {
+      bc.addedAt = _editList[_editIdx].addedAt; /* preserve original addedAt */
+      _editList[_editIdx] = bc;
+    }
+    _bcEditId = null;
+    showToast('✅ Booking updated!', 2200);
+  } else {
+    /* Add new booking */
+    appState.bookingConfirmations[_bcCurrentStopId].push(bc);
+    showToast('✅ Booking confirmation saved!', 2200);
+  }
+
   saveState(appState);
   if (typeof renderSchedule === 'function') renderSchedule();
-  showToast('✅ Booking confirmation saved!', 2200);
+  var _savedStopId = _bcCurrentStopId;
   closeBookingModal();
-  /* Re-open to show the saved item */
-  setTimeout(function() { openBookingModal(_bcCurrentStopId); }, 150);
+  /* Re-open to show the saved/updated item */
+  setTimeout(function() { openBookingModal(_savedStopId); }, 150);
 }
 
 /* ── Delete a booking ─────────────────────────────────────────── */
@@ -17338,6 +17398,26 @@ function _bcDelete(bcId, stopId) {
   showToast('🗑️ Booking removed', 1800);
   closeBookingModal();
   setTimeout(function() { openBookingModal(stopId); }, 150);
+}
+
+/* ── Edit an existing booking ─────────────────────────────────── */
+function _bcEditBooking(bcId, stopId) {
+  var list = (appState.bookingConfirmations && appState.bookingConfirmations[stopId]) || [];
+  var bc = null;
+  for (var i = 0; i < list.length; i++) { if (list[i].id === bcId) { bc = list[i]; break; } }
+  if (!bc) return;
+  _bcEditId        = bcId;
+  _bcCurrentStopId = stopId;
+  var resEl = document.getElementById('bc-extract-result');
+  if (resEl) { resEl.style.display = 'block'; }
+  _bcShowExtracted(bc);
+  if (resEl) { resEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+}
+
+function _bcCancelEdit() {
+  _bcEditId = null;
+  var resEl = document.getElementById('bc-extract-result');
+  if (resEl) { resEl.style.display = 'none'; }
 }
 
 /* ── All-stops bookings view (Tools tab) ──────────────────────── */

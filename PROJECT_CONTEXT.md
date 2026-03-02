@@ -55,6 +55,15 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (sixteenth context) — 2026-03-02
+
+- **Booking confirmation AI extraction fix**: Root cause was Netlify proxy `MAX_BODY_BYTES = 200 KB` — booking photos/PDFs encoded as base64 easily exceeded this limit, causing 413 responses that showed as generic errors. Fixed:
+  1. `netlify/functions/gemini.js`: `MAX_BODY_BYTES` increased from 200 KB → 8 MB.
+  2. `_bcHandleFile`: Added canvas-based image compression (max 1200px, JPEG 82%) before sending image files, keeping payload well under limit and improving response quality.
+  3. `_bcExtract`: Improved error handling — catches 413 "file too large" specifically, also handles `data.error` from Gemini API response.
+
+- **Booking edit feature**: Added ✏️ edit button (pencil, blue) alongside existing 🗑️ delete button on each booking card (modal-only). Workflow: tap ✏️ → opens same review/edit form pre-filled with saved data → "Update Booking" button updates record in place. Implementation: `_bcEditId` state var, `_bcEditBooking(bcId, stopId)`, `_bcCancelEdit()`, modified `_bcSave()` to handle update-vs-create based on `_bcEditId`.
+
 ### Session 18 (fifteenth context) — 2026-03-02
 
 - **Planned activities three-way sync fix**: When a user taps "+ Plan" on an attraction in the Day Planner Attractions panel, planned items now appear in all three places:

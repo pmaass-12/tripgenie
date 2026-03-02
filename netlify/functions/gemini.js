@@ -13,7 +13,7 @@
  *                  Body: same JSON body as the Gemini API expects
  */
 
-const MAX_BODY_BYTES = 200_000; // 200 KB
+const MAX_BODY_BYTES = 8_000_000; // 8 MB — booking confirmation photos/PDFs can be large
 
 function getAllowedOrigins() {
   const raw = process.env.ALLOWED_ORIGINS || '';
