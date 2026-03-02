@@ -6850,10 +6850,19 @@ function _jumpToStopPlans(stopId) {
   if (typeof switchTab === 'function') switchTab('planner');
   /* Switch to Day Planner (stops) segment — this calls renderStops() */
   if (typeof _mainSeg === 'function') _mainSeg('stops');
-  /* After renderStops() has run, find and scroll to the stop card */
+  /* After renderStops() has run, expand the stop card and scroll to it */
   setTimeout(function() {
     var el = document.querySelector('#stops-content [data-stop-id="' + stopId + '"]');
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (el) {
+      /* Expand the card if it isn't already open */
+      var det  = document.getElementById('stop-detail-' + stopId);
+      var chev = document.getElementById('stop-chevron-' + stopId);
+      if (det && det.classList.contains('hidden')) {
+        det.classList.remove('hidden');
+        if (chev) chev.textContent = '▲';
+      }
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }, 350);
 }
 
@@ -9108,11 +9117,10 @@ function getPlannedForStop(stopId, forDay) {
     /* val===true (legacy) → show only on first day of stop; otherwise match exact day */
     if (val === true ? forDay === firstStopDay : val === forDay) result.activities.push(ai);
   }
-  /* Also surface custom (AI-planned) activities — not yet day-specific, show on any day of stop */
+  /* Also surface custom (AI-planned) activities — use plannedEvents as truth source */
   for (var ci = 0; ci < customActs.length; ci++) {
-    var cIdx = stopActs.length + ci;
-    var cval = appState.planned['p_' + stopId + '_a_' + cIdx];
-    if (!cval) continue;
+    var _ca = customActs[ci];
+    if (!appState.plannedEvents || !appState.plannedEvents[_ca._planKey]) continue;
     result.customActivities.push(ci); /* show on any day of this stop */
   }
   for (var ri = 0; ri < stopRests.length; ri++) {
@@ -9133,9 +9141,16 @@ function renderStops() {
   var _rsRemoved = appState.removedStops || {};
   var _rsHomeStop = (typeof _tripHomeStop === 'function') ? _tripHomeStop() : null;
   var _rsHomeId   = _rsHomeStop ? _rsHomeStop.id : 15;
-  /* Only count / show active, non-home stops */
+  /* Only count / show active, non-home stops — sorted chronologically by first trip day */
   var _rsVisible = TRIP_STOPS.filter(function(s) {
     return !_rsRemoved[s.id] && s.id !== _rsHomeId && s.sleepType !== 'home';
+  }).sort(function(a, b) {
+    var aDay = 9999, bDay = 9999;
+    for (var _di = 0; _di < TRIP_DAYS.length; _di++) {
+      if (TRIP_DAYS[_di].stopId === a.id && TRIP_DAYS[_di].day < aDay) aDay = TRIP_DAYS[_di].day;
+      if (TRIP_DAYS[_di].stopId === b.id && TRIP_DAYS[_di].day < bDay) bDay = TRIP_DAYS[_di].day;
+    }
+    return aDay - bDay;
   });
   var totalActs = 0;
   var totalRests = 0;
@@ -9234,7 +9249,7 @@ function renderStops() {
     // Col 1: emoji strip
     html += '<div class="sc-emoji-col" style="background:' + headerBg + ';color:#fff;">'
       + '<div style="font-size:1.5rem;line-height:1;">' + (stop.emoji || '📍') + '</div>'
-      + '<div style="font-size:.6rem;opacity:.8;font-weight:700;">' + (i + 1) + ' of ' + TRIP_STOPS.length + '</div>'
+      + '<div style="font-size:.6rem;opacity:.8;font-weight:700;">' + (i + 1) + ' of ' + _rsVisible.length + '</div>'
       + '</div>';
 
     // Col 2: name + inline subtitle (always visible)
@@ -9287,13 +9302,13 @@ function renderStops() {
     var stopActivities  = stop.activities  || [];
     var stopRestaurants = stop.restaurants || [];
     var _customActs4Stop = (appState.customActivities && appState.customActivities[stop.id]) || [];
-    var _plannedCustom4Stop = _customActs4Stop.filter(function(ca, ci) {
-      var cIdx = stopActivities.length + ci;
-      return !!(appState.planned && appState.planned['p_' + stop.id + '_a_' + cIdx]);
+    /* Use plannedEvents as the reliable source of truth for planned status */
+    var _plannedCustom4Stop = _customActs4Stop.filter(function(ca) {
+      return !!(appState.plannedEvents && appState.plannedEvents[ca._planKey]);
     });
     html += '<div style="font-weight:700;font-size:.78rem;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;"><i class="fa-solid fa-person-hiking"></i> Activities &amp; Things To Do</div>';
     html += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">';
-    if (!stopActivities.length && !_plannedCustom4Stop.length) html += '<div style="font-size:.83rem;color:var(--text-2);padding:10px 0;">No activities listed yet — tap <strong>Attractions</strong> below to discover &amp; plan!</div>';
+    if (!stopActivities.length && !_plannedCustom4Stop.length) html += '<div style="font-size:.83rem;color:var(--text-2);padding:10px 0;">No activities planned yet — tap <strong>Attractions</strong> below to discover &amp; plan!</div>';
 
     for (var ai = 0; ai < stopActivities.length; ai++) {
       var act = stopActivities[ai];
@@ -9358,7 +9373,7 @@ function renderStops() {
     // RESTAURANTS
     html += '<div style="font-weight:700;font-size:.78rem;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;"><i class="fa-solid fa-utensils"></i> Top Restaurants</div>';
     html += '<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:20px;">';
-    if (!stopRestaurants.length) html += '<div style="font-size:.83rem;color:var(--text-2);padding:10px 0;">No restaurants listed yet for this stop.</div>';
+    if (!stopRestaurants.length) html += '<div style="font-size:.83rem;color:var(--text-2);padding:10px 0;">No restaurants planned yet for this stop.</div>';
 
     for (var ri = 0; ri < stopRestaurants.length; ri++) {
       var rest = stopRestaurants[ri];
@@ -9407,7 +9422,7 @@ function renderStops() {
     var stopSleepOptions = stop.sleepOptions || [];
     html += '<div style="font-weight:700;font-size:.78rem;color:var(--text-2);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;"><i class="fa-solid fa-moon"></i> Sleep Options</div>';
     html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;">';
-    if (!stopSleepOptions.length) html += '<div style="font-size:.83rem;color:var(--text-2);">No sleep options listed yet — check RV parks near this stop.</div>';
+    if (!stopSleepOptions.length) html += '<div style="font-size:.83rem;color:var(--text-2);">No lodging planned yet — check Hotels &amp; RV Parks near this stop.</div>';
     for (var soi = 0; soi < stopSleepOptions.length; soi++) {
       var so2 = stopSleepOptions[soi];
       var isWM2   = so2.toLowerCase().indexOf('walmart') !== -1;
@@ -10485,7 +10500,8 @@ function renderTripStats() {
       if (!d.driveDay) _lastSId = d.stopId;
     });
   }
-  var displayMiles = Math.round(totalMiles + estimatedExtra);
+  /* Use CONFIG.totalMiles as a floor — consistent with renderStopNavigator */
+  var displayMiles = Math.max(Math.round(totalMiles + estimatedExtra), (typeof CONFIG !== 'undefined' && CONFIG.totalMiles) || 0);
   var milesLabel   = 'Est. Miles'; // always estimated — road choice affects actual total
 
   // ── Build HTML ──────────────────────────────────────────────────
@@ -10798,9 +10814,8 @@ function renderPlannerAgenda() {
       /* Also include any planned custom (AI-added) activities for this stop */
       if (_stop && appState.customActivities && appState.customActivities[_stop.id]) {
         var _pca_staticLen = (_stop.activities || []).length;
-        appState.customActivities[_stop.id].forEach(function(ca, ci) {
-          var _pcaIdx = _pca_staticLen + ci;
-          if (appState.planned && appState.planned['p_' + _stop.id + '_a_' + _pcaIdx]) {
+        appState.customActivities[_stop.id].forEach(function(ca) {
+          if (appState.plannedEvents && appState.plannedEvents[ca._planKey]) {
             _activities.push({ icon: '✅', text: ca.name + (ca.duration ? ' · ' + ca.duration : '') });
           }
         });

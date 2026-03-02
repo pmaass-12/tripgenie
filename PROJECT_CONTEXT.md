@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-02 (Session 18, fifteenth context)
+2026-03-02 (Session 18, sixteenth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,26 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 18 (seventeenth context) — 2026-03-02
+
+- **Planned activities rendering (root fix)**: Previous fix used `appState.planned['p_STOPID_a_IDX']` index-based lookup which was unreliable. The real source of truth is `appState.plannedEvents[planKey]`. Fixed all three views:
+  1. **Day Planner card** (`_plannedCustom4Stop` filter): now checks `appState.plannedEvents[ca._planKey]`
+  2. **Agenda** (`renderPlannerAgenda`): now checks `appState.plannedEvents[ca._planKey]`
+  3. **DDM** (`getPlannedForStop`): now checks `appState.plannedEvents[ca._planKey]`
+
+- **Empty state text updates**:
+  - Activities: "No activities listed yet" → "No activities planned yet"
+  - Restaurants: "No restaurants listed yet" → "No restaurants planned yet"
+  - Sleep: "No sleep options listed yet" → "No lodging planned yet"
+
+- **View Plans button opens card expanded**: `_jumpToStopPlans(stopId)` now removes `hidden` class from `stop-detail-STOPID` and updates chevron to `▲` after switching to the Day Planner tab.
+
+- **Stop ordering fix**: `renderStops` now sorts `_rsVisible` chronologically by first TRIP_DAYS `day` number before rendering — fixes stops appearing out of order when added via trip wizard (e.g. Winnemucca NV appearing at the bottom instead of its correct Apr 8 position).
+
+- **Stop badge counter fix**: Badge now shows `(i+1) of _rsVisible.length` instead of `TRIP_STOPS.length` — was showing wrong total (44 instead of actual visible stop count).
+
+- **Trip Stats miles fix**: `displayMiles` now uses `Math.max(..., CONFIG.totalMiles || 0)` as a floor — consistent with `renderStopNavigator`. Prevents Haversine estimate from showing a lower number than the known route total.
 
 ### Session 18 (sixteenth context) — 2026-03-02
 
