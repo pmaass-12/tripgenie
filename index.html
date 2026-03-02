@@ -8621,42 +8621,6 @@ function renderSchedule() {
     + '<button onclick="openAddDest()" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:7px 14px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px;">&#128205; Add Destination</button>'
     + '</div>';
 
-  /* ── Pre-compute pause nights early so the drift banner can use it ── */
-  var _schPausesEarly = (appState.pauseDays || [])
-    .filter(function(pd) { return pd.startDate && pd.endDate; });
-  var _totalPauseNightsEarly = _schPausesEarly.reduce(function(sum, pd) {
-    return sum + Math.max(0, Math.round((new Date(pd.endDate+'T00:00:00') - new Date(pd.startDate+'T00:00:00')) / 86400000));
-  }, 0);
-
-  /* ── Day-adjustment drift warning ───────────────────────────────────
-     Compute total phaseExtraDays across all stops. If the trip end date
-     has drifted more than 1 day from the base CONFIG.endDate (after
-     accounting for intentional pause blocks), show a small inline banner
-     with a one-click reset. This keeps all views in sync without requiring
-     the user to visit Tools → Health Check manually.                       */
-  var _sched_totalExtra = 0;
-  if (appState.phaseExtraDays) {
-    Object.keys(appState.phaseExtraDays).forEach(function(sid) {
-      _sched_totalExtra += (appState.phaseExtraDays[sid] || 0);
-    });
-  }
-  if (_sched_totalExtra !== 0) {
-    var _sched_effEndMs  = new Date(CONFIG.endDate + 'T00:00:00').getTime() + (_sched_totalExtra + _totalPauseNightsEarly) * 86400000;
-    var _sched_effEnd    = new Date(_sched_effEndMs);
-    var _sched_effEndStr = _sched_effEnd.toLocaleDateString('en-US', { month:'short', day:'numeric' });
-    var _sched_isOver    = _sched_totalExtra > 0;
-    html += '<div style="background:' + (_sched_isOver ? '#fff5e8' : '#f0faf4') + ';border:1.5px solid ' + (_sched_isOver ? 'var(--orange)' : 'var(--green)') + ';border-radius:10px;padding:9px 14px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">'
-      + '<div style="display:flex;align-items:center;gap:8px;">'
-      + '<span style="font-size:1.1rem;">' + (_sched_isOver ? '📅' : '📅') + '</span>'
-      + '<div>'
-      + '<div style="font-size:.82rem;font-weight:800;color:' + (_sched_isOver ? 'var(--orange-d,#b85c1a)' : 'var(--green)') + ';">Schedule ends ' + _sched_effEndStr + ' &nbsp;(' + (_sched_isOver ? '+' : '') + _sched_totalExtra + ' day' + (Math.abs(_sched_totalExtra) !== 1 ? 's' : '') + ' vs. base)</div>'
-      + '<div style="font-size:.73rem;color:var(--text-3);">Base trip ends ' + CONFIG.endDate + '. Tap Reset to sync all views.</div>'
-      + '</div>'
-      + '</div>'
-      + '<button onclick="_resetAllExtraDaysQuiet()" style="background:' + (_sched_isOver ? 'var(--orange)' : 'var(--green)') + ';color:#fff;border:none;border-radius:100px;padding:6px 14px;font-size:.76rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;"><i class="fa-solid fa-rotate-left"></i> Reset Days</button>'
-      + '</div>';
-  }
-
   /* Pre-compute pause blocks for schedule injection */
   var _schPauses = (appState.pauseDays || [])
     .filter(function(pd) { return pd.startDate && pd.endDate; })
@@ -9409,6 +9373,43 @@ function renderStops() {
 
   html += '<div style="display:flex;flex-direction:column;gap:20px;">';
 
+  /* ── Pre-compute phase + pause offsets so Day Planner dates match the Schedule exactly ──
+     Mirrors the _schPhaseOffset / _schCumulativeNights logic in renderSchedule().           */
+  var _rsPhaseOffset = {};
+  var _rsPhaseCumOffset = 0;
+  var _rsSeenStops = [];
+  TRIP_DAYS.forEach(function(d) {
+    if (_rsSeenStops.indexOf(d.stopId) === -1) {
+      _rsSeenStops.push(d.stopId);
+      _rsPhaseOffset[d.stopId] = _rsPhaseCumOffset;
+      var _xtra = (appState.phaseExtraDays && appState.phaseExtraDays[d.stopId]) || 0;
+      _rsPhaseCumOffset += _xtra;
+    }
+  });
+  var _rsPauses = (appState.pauseDays || [])
+    .filter(function(pd) { return pd.startDate && pd.endDate; })
+    .sort(function(a,b) { return a.startDate < b.startDate ? -1 : 1; });
+  /* Sum pause nights whose startDate is at or before rawDate */
+  function _rsPauseNightsBefore(rawDate) {
+    var n = 0;
+    for (var _pi = 0; _pi < _rsPauses.length; _pi++) {
+      if (_rsPauses[_pi].startDate <= rawDate)
+        n += Math.max(0, Math.round((new Date(_rsPauses[_pi].endDate+'T00:00:00') - new Date(_rsPauses[_pi].startDate+'T00:00:00')) / 86400000));
+    }
+    return n;
+  }
+  /* Return effective Date for a raw YYYY-MM-DD string + stopId */
+  function _rsEffDate(rawDate, stopId) {
+    var off = (_rsPhaseOffset[stopId] || 0) + _rsPauseNightsBefore(rawDate);
+    return new Date(new Date(rawDate + 'T00:00:00').getTime() + off * 86400000);
+  }
+  /* Date object → YYYY-MM-DD using local time (avoids UTC midnight shift) */
+  function _rsDateStr(dt) {
+    return dt.getFullYear() + '-'
+      + String(dt.getMonth() + 1).padStart(2, '0') + '-'
+      + String(dt.getDate()).padStart(2, '0');
+  }
+
   for (var i = 0; i < _rsVisible.length; i++) {
     var stop = _rsVisible[i];
     var stopDays = [];
@@ -9425,9 +9426,11 @@ function renderStops() {
       }
     }
     var isPastStop = tripIsLive() && appState.tripStarted && lastDay && lastDay.day < todayNum && !isCurrentStop;
-    var dateRange = firstDay ? formatDate(firstDay.date) : '';
-    if (firstDay && lastDay && firstDay.date !== lastDay.date) {
-      dateRange += ' – ' + formatDate(lastDay.date);
+    var _rsFirstEff = firstDay ? _rsEffDate(firstDay.date, stop.id) : null;
+    var _rsLastEff  = lastDay  ? _rsEffDate(lastDay.date,  stop.id) : null;
+    var dateRange = _rsFirstEff ? formatDate(_rsDateStr(_rsFirstEff)) : '';
+    if (_rsFirstEff && _rsLastEff && _rsFirstEff.getTime() !== _rsLastEff.getTime()) {
+      dateRange += ' – ' + formatDate(_rsDateStr(_rsLastEff));
     }
     var planned = getPlannedForStop(stop.id);
     var plannedCount = planned.activities.length + planned.restaurants.length;
@@ -9466,10 +9469,10 @@ function renderStops() {
     var _wxStr = (_swHi !== null && _swLo !== null)
       ? (_swIcon||'🌡️') + ' ' + Math.round(_swLo) + '°–' + Math.round(_swHi) + '°F' + (_swTypical ? ' typical' : '')
       : '—';
-    // Compact date label for columns (e.g. "2/28–3/6")
-    var _dateShort = firstDay ? firstDay.date.slice(5).replace('-','/') : '';
-    if (firstDay && lastDay && firstDay.date !== lastDay.date)
-      _dateShort += '–' + lastDay.date.slice(5).replace('-','/');
+    // Compact date label for columns (e.g. "2/28–3/6") — uses effective dates to match Schedule
+    var _dateShort = _rsFirstEff ? _rsDateStr(_rsFirstEff).slice(5).replace('-', '/') : '';
+    if (_rsFirstEff && _rsLastEff && _rsFirstEff.getTime() !== _rsLastEff.getTime())
+      _dateShort += '–' + _rsDateStr(_rsLastEff).slice(5).replace('-', '/');
 
     // ── Grid header row ──────────────────────────────────────────
     html += '<div class="sc-header" onclick="toggleStop(' + stop.id + ')">';

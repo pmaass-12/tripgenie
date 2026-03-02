@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-02 (Session 18, twenty-fourth context)
+2026-03-02 (Session 18, twenty-fifth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,12 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 18 (twenty-fifth context) — 2026-03-02
+
+- **Removed "Reset Days" drift banner from Schedule**: The inline warning banner (with "Reset Days" button) that appeared at the top of the Schedule view when `phaseExtraDays` had accumulated a non-zero total has been removed entirely. The user confirmed they don't want to use it. Removed the `_schPausesEarly`/`_totalPauseNightsEarly` hoisted block and the entire `if (_sched_totalExtra !== 0)` HTML block from `renderSchedule()`.
+
+- **Day Planner dates now sync with Schedule (source of truth)**: `renderStops()` was displaying raw `firstDay.date`/`lastDay.date` from TRIP_DAYS without applying `phaseExtraDays` cascade offsets or pause block offsets — causing dates to diverge from the Schedule. Fix: Added pre-computation of `_rsPhaseOffset{}` (mirrors `_schPhaseOffset` from `renderSchedule`) and a `_rsPauseNightsBefore(rawDate)` helper that sums pause block nights whose `startDate <= rawDate`. New `_rsEffDate(rawDate, stopId)` applies both offsets to get the effective date. New `_rsDateStr(dt)` formats a Date using local time components (avoiding UTC midnight shift from `toISOString()`). Both `dateRange` and `_dateShort` now use `_rsFirstEff`/`_rsLastEff` — matching what Schedule displays exactly.
 
 ### Session 18 (twenty-fourth context) — 2026-03-02
 
