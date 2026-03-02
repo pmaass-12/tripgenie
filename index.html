@@ -22346,6 +22346,45 @@ function renderIdeas() {
 function renderDecisions() {
   var el = document.getElementById('decisions-content');
   if (!el) return;
+
+  /* ── Live reconciliation: sync drive-split decisions with current TRIP_DAYS ── */
+  var _maxH = (appState.drivingPrefs && appState.drivingPrefs.maxHours) || 4;
+  if (!appState.decisions) appState.decisions = [];
+
+  // Build a set of day numbers that are currently long drives
+  var _liveLongDayNums = {};
+  (TRIP_DAYS || []).forEach(function(d) {
+    if (d && d.driveDay && d.driveHours > _maxH) _liveLongDayNums[d.day] = true;
+  });
+
+  // 1. Auto-dismiss pending split decisions whose driveDay is no longer a long drive
+  var _staleCount = 0;
+  appState.decisions.forEach(function(dec) {
+    if (dec.isSplitDrive && dec.status === 'pending' && dec.driveDay) {
+      if (!_liveLongDayNums[dec.driveDay]) {
+        dec.status = 'auto-resolved';
+        _staleCount++;
+      }
+    }
+  });
+
+  // 2. Auto-add new long drives not already represented in decisions
+  var _addedCount = 0;
+  Object.keys(_liveLongDayNums).forEach(function(dayNumStr) {
+    var dayNum = parseInt(dayNumStr, 10);
+    var alreadyExists = appState.decisions.find(function(s) { return s.isSplitDrive && s.driveDay === dayNum; });
+    if (!alreadyExists) {
+      var sugg = _buildDriveSplitSuggestion(dayNum);
+      if (sugg) { appState.decisions.push(sugg); _addedCount++; }
+    }
+  });
+
+  // Persist if anything changed
+  if (_staleCount || _addedCount) {
+    saveState(appState);
+    updateDecisionsBadge();
+  }
+
   var decisions = appState.decisions || [];
   var pauseDays = appState.pauseDays || [];
 
@@ -22448,9 +22487,22 @@ function renderDecisions() {
   }
 
   var html = variBanner + genieSection;
+  // Show staleness note if we auto-resolved or auto-added items
+  var _reconNote = '';
+  if (_staleCount || _addedCount) {
+    var _reconParts = [];
+    if (_addedCount) _reconParts.push(_addedCount + ' new long drive' + (_addedCount !== 1 ? 's' : '') + ' added');
+    if (_staleCount) _reconParts.push(_staleCount + ' resolved drive' + (_staleCount !== 1 ? 's' : '') + ' auto-cleared');
+    _reconNote = '<div style="background:#e8f5e9;border:1px solid #a5d6a7;border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:.78rem;color:#2e7d32;display:flex;align-items:center;gap:6px;">'
+      + '<i class="fa-solid fa-rotate"></i> Decisions updated to match your current trip — ' + _reconParts.join(', ') + '.'
+      + '</div>';
+  }
+  html += _reconNote;
   html += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">'
     + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-triangle-exclamation" style="color:var(--red);"></i> Decisions Needed</h2>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">'
     + '<button onclick="openPauseDayModal()" style="background:var(--red);color:#fff;border:none;border-radius:100px;padding:7px 14px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:6px;"><i class="fa-solid fa-plane-departure"></i> Add Trip Pause</button>'
+    + '</div>'
     + '</div>';
 
   /* ── Pause Days section ── */
@@ -22464,10 +22516,11 @@ function renderDecisions() {
   }
 
   /* ── Drive split decisions ── */
-  var pending   = decisions.filter(function(s) { return s.status === 'pending'; });
-  var resolved  = decisions.filter(function(s) { return s.status !== 'pending'; });
+  var pending      = decisions.filter(function(s) { return s.status === 'pending'; });
+  var resolved     = decisions.filter(function(s) { return s.status !== 'pending' && s.status !== 'auto-resolved'; });
+  var autoResolved = decisions.filter(function(s) { return s.status === 'auto-resolved'; });
 
-  if (!decisions.length && !pauseDays.length) {
+  if (!pending.length && !resolved.length && !autoResolved.length && !pauseDays.length) {
     html += '<div style="text-align:center;padding:36px 20px;color:var(--text-3);">'
       + '<div style="font-size:2.5rem;margin-bottom:12px;color:var(--text-3);"><i class="fa-solid fa-circle-check"></i></div>'
       + '<div style="font-weight:700;font-size:.95rem;margin-bottom:6px;">No open decisions</div>'
@@ -22484,6 +22537,12 @@ function renderDecisions() {
       html += '<div style="font-weight:700;font-size:.8rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px;">Resolved</div>'
         + '<div style="display:flex;flex-direction:column;gap:8px;">';
       for (var rdi = 0; rdi < resolved.length; rdi++) html += _decisionCard(resolved[rdi]);
+      html += '</div>';
+    }
+    if (autoResolved.length) {
+      html += '<div style="font-weight:700;font-size:.8rem;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;margin-top:8px;opacity:.65;">Auto-cleared (drive no longer over limit)</div>'
+        + '<div style="display:flex;flex-direction:column;gap:6px;opacity:.6;">';
+      for (var ari = 0; ari < autoResolved.length; ari++) html += _decisionCard(autoResolved[ari]);
       html += '</div>';
     }
   }
@@ -22591,7 +22650,7 @@ function _pauseDayCard(pd) {
 }
 
 function _decisionCard(s) {
-  var col = s.status === 'resolved' ? 'var(--green)' : s.status === 'dismissed' ? '#bbb' : 'var(--red)';
+  var col = s.status === 'resolved' ? 'var(--green)' : (s.status === 'dismissed' || s.status === 'auto-resolved') ? '#bbb' : 'var(--red)';
   var h = '<div style="background:var(--card);border:1px solid var(--border);border-left:3px solid ' + col + ';border-radius:var(--radius-s);padding:14px 16px;">'
     + '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">'
     + '<div style="flex:1;"><div style="font-weight:800;font-size:.9rem;margin-bottom:4px;">' + (s.title||'') + '</div>';
@@ -22614,6 +22673,8 @@ function _decisionCard(s) {
     }
   } else if (s.status === 'resolved') {
     h += '<div style="font-size:.75rem;color:var(--green);font-weight:800;flex-shrink:0;">' + (s.isSplitDrive ? '✂️ Split Applied' : '✓ Done') + '</div>';
+  } else if (s.status === 'auto-resolved') {
+    h += '<div style="font-size:.75rem;color:var(--text-3);flex-shrink:0;" title="This drive is no longer over your max drive time — either the trip changed or it was already handled.">✓ No longer over limit</div>';
   } else {
     h += '<div style="font-size:.75rem;color:var(--text-3);flex-shrink:0;">' + (s.isSplitDrive ? '💪 Driving It All' : 'Skipped') + '</div>';
   }
