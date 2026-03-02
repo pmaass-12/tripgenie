@@ -18014,7 +18014,11 @@ async function _labsDirectCall(parkName, parkPhone, checkin, checkout, special, 
         to_number:            toNumber,
         conversation_config_override: {
           agent: {
-            prompt: { prompt: systemPrompt }     /* full system prompt override per call */
+            prompt: { prompt: systemPrompt },    /* full system prompt override per call */
+            /* first_message forces the opening line so the base agent persona can't hijack it */
+            first_message: isHotel
+              ? "Hi there! This is Alex calling on behalf of Paul Maass. I'm their travel coordinator and I'm helping arrange their family trip — I wanted to check on room availability and get a few details if you have a moment."
+              : "Hi there! This is Alex calling on behalf of Paul Maass. I'm their travel coordinator and I'm helping plan their family RV trip — I wanted to check on availability for their RV and get a few details if you have a moment."
           }
         }
       })
@@ -18297,18 +18301,21 @@ async function _labsStartCall() {
 
   /* Build the system prompt for the agent */
   var systemPrompt = [
-    'You are an AI assistant calling on behalf of the Maass family to book a campground reservation.',
-    'RV: ' + (cfg.rvName || 'Class A RV') + ', ' + (cfg.rvLen || '40') + ' ft, needs ' + (cfg.rvAmps || '50') + ' amp hookup.',
-    'Guests: ' + (cfg.adults || '2') + ' adults, ' + (cfg.kids || 'several children') + '.',
+    'Your name is Alex. You are the travel coordinator for Paul and Melissa Maass and their family.',
+    'You are calling a campground or RV park to check availability and book a spot on their behalf.',
+    'Do NOT say you are an AI, a bot, or an automated assistant. Speak naturally as a helpful human coordinator.',
+    'RV details: ' + (cfg.rvName || 'Class A motorhome') + ', ' + (cfg.rvLen || '40') + ' feet long, needs a ' + (cfg.rvAmps || '50') + '-amp full hookup.',
+    'Guests: ' + (cfg.adults || '2') + ' adults, ' + (cfg.kids || 'several kids') + '.',
     cfg.hasPets ? 'Pets: ' + cfg.hasPets + '.' : 'No pets.',
-    cfg.extraCar ? 'Extra vehicle: ' + cfg.extraCar + '.' : '',
-    'Reservation: ' + parkName + ', check-in ' + checkin + ', check-out ' + checkout + '.',
-    special ? 'Special requests: ' + special : '',
-    'Contact: ' + (cfg.phone || 'will provide') + '.',
-    'If the campground asks for a credit card or payment at any point, say: "Could you hold that reservation for about 5 minutes? Paul is going to call you right back to give you his card number directly. Could I get the best number and a contact name for him to reach?" Then confirm they will hold it and end the call politely. Do NOT provide any card numbers under any circumstances.',
-    'Before ending the call, always ask these three questions: (1) "What is the total nightly rate including all taxes and fees?" (2) "Do you offer propane refills for RVs on site?" (3) "What is your cancellation policy — how many hours or days in advance do we need to cancel to avoid a charge?"',
-    'Before hanging up, clearly summarize back: the all-in nightly rate with taxes, whether propane is available, the cancellation policy, and the direct callback number.',
-    'Be friendly, professional, confirm all reservation details, and always get a direct callback number and confirm any hold before ending.'
+    cfg.extraCar ? 'Extra tow vehicle: ' + cfg.extraCar + '.' : '',
+    'Dates: check-in ' + checkin + ', check-out ' + checkout + '.',
+    special ? 'Special note: ' + special : '',
+    'Ask: do they have availability for those dates with the RV specs above?',
+    'If NOT available: thank them warmly and end the call.',
+    'If available, get these details conversationally: (1) total nightly rate including all taxes and fees, (2) whether they offer on-site propane refills for RVs, (3) their cancellation policy.',
+    'If they ask for a credit card, say: "Paul is going to call you right back in about 5 minutes to give you his card and lock it in. Could you hold that spot? What\'s the best direct number and a contact name so he reaches the right person?"',
+    'Do NOT provide any card numbers under any circumstances.',
+    'Before hanging up, warmly recap: nightly rate, propane situation, cancellation policy, and the callback number and contact name.'
   ].filter(Boolean).join(' ');
 
   if (statusEl) {
@@ -18330,7 +18337,8 @@ async function _labsStartCall() {
         to_number:             parkPhone.replace(/\D/g, '').replace(/^(\d{10})$/, '+1$1').replace(/^(\d{11})$/, '+$1'),
         conversation_config_override: {
           agent: {
-            prompt: { prompt: systemPrompt }     /* full system prompt per call */
+            prompt: { prompt: systemPrompt },    /* full system prompt per call */
+            first_message: "Hi there! This is Alex calling on behalf of Paul Maass. I'm their travel coordinator and I'm helping plan their family RV trip — I wanted to check on availability for their RV and get a few details if you have a moment."
           }
         }
       })
