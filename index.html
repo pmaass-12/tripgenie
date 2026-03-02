@@ -9108,13 +9108,12 @@ function getPlannedForStop(stopId, forDay) {
     /* val===true (legacy) → show only on first day of stop; otherwise match exact day */
     if (val === true ? forDay === firstStopDay : val === forDay) result.activities.push(ai);
   }
-  /* Also surface custom (AI-planned) activities */
+  /* Also surface custom (AI-planned) activities — not yet day-specific, show on any day of stop */
   for (var ci = 0; ci < customActs.length; ci++) {
     var cIdx = stopActs.length + ci;
     var cval = appState.planned['p_' + stopId + '_a_' + cIdx];
     if (!cval) continue;
-    if (forDay == null) { result.customActivities.push(ci); continue; }
-    if (cval === true ? forDay === firstStopDay : cval === forDay) result.customActivities.push(ci);
+    result.customActivities.push(ci); /* show on any day of this stop */
   }
   for (var ri = 0; ri < stopRests.length; ri++) {
     var valr = appState.planned['p_' + stopId + '_r_' + ri];
@@ -10166,13 +10165,11 @@ function renderGalleryTab() {
     });
   });
 
-  // Also include photos from unified photoPool (if not already in journal)
+  // Also include photos from unified photoPool (direct gallery uploads only — journal photos
+  // are already included above via _journalEntries to avoid duplicates)
   if (appState.photoPool && appState.photoPool.length > 0) {
-    var poolPhotoIds = {};
     appState.photoPool.forEach(function(poolPhoto) {
-      poolPhotoIds[poolPhoto.id] = true;
-    });
-    appState.photoPool.forEach(function(poolPhoto) {
+      if (poolPhoto.source === 'journal') return; /* already shown via journal entries loop */
       var stop = poolPhoto.stopId ? getStop(poolPhoto.stopId) : null;
       allPhotos.push({
         src: poolPhoto.dataUrl,
@@ -10798,6 +10795,16 @@ function renderPlannerAgenda() {
         });
       }
       if (d.title && !_activities.length) _activities.push({ icon:'📍', text: d.title });
+      /* Also include any planned custom (AI-added) activities for this stop */
+      if (_stop && appState.customActivities && appState.customActivities[_stop.id]) {
+        var _pca_staticLen = (_stop.activities || []).length;
+        appState.customActivities[_stop.id].forEach(function(ca, ci) {
+          var _pcaIdx = _pca_staticLen + ci;
+          if (appState.planned && appState.planned['p_' + _stop.id + '_a_' + _pcaIdx]) {
+            _activities.push({ icon: '✅', text: ca.name + (ca.duration ? ' · ' + ca.duration : '') });
+          }
+        });
+      }
 
       /* Breakfast */
       html += '<div style="' + _row + '">'
@@ -16113,8 +16120,32 @@ function planStopEvent(planId, evName, stopId) {
     }
   }
 
-  /* Re-render stops tab if visible so the activity appears immediately */
-  if (typeof renderStops === 'function' && document.getElementById('stops-content')) renderStops();
+  /* Re-render stops tab if visible so the activity appears immediately.
+     Preserve which stop cards were expanded and which attraction panels were open. */
+  if (typeof renderStops === 'function' && document.getElementById('stops-content')) {
+    var _openStopIds = [], _openAttrIds = [];
+    document.querySelectorAll('#stops-content [data-stop-id]').forEach(function(card) {
+      var sid = card.getAttribute('data-stop-id');
+      var det = document.getElementById('stop-detail-' + sid);
+      if (det && !det.classList.contains('hidden')) {
+        _openStopIds.push(sid);
+        var ap = document.getElementById('stop-attractions-panel-' + sid);
+        if (ap && !ap.classList.contains('hidden')) _openAttrIds.push(sid);
+      }
+    });
+    renderStops();
+    /* Re-open previously expanded stop cards */
+    _openStopIds.forEach(function(sid) {
+      var det  = document.getElementById('stop-detail-' + sid);
+      var chev = document.getElementById('stop-chevron-' + sid);
+      if (det) { det.classList.remove('hidden'); if (chev) chev.textContent = '▲'; }
+    });
+    /* Re-open attraction panels — reset loaded flag so they reload with updated state */
+    _openAttrIds.forEach(function(sid) {
+      if (typeof _stopAttractionsLoaded !== 'undefined') delete _stopAttractionsLoaded[sid];
+      if (typeof toggleStopAttractions === 'function') toggleStopAttractions(sid);
+    });
+  }
 }
 
 /* ── ATTRACTIONS NEAR A STOP ─────────────────────────────────────── */

@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-02 (Session 18, fourteenth context)
+2026-03-02 (Session 18, fifteenth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -56,6 +56,15 @@ tripgenie/
 ## Recent Changes
 
 ### Session 18 (fifteenth context) — 2026-03-02
+
+- **Planned activities three-way sync fix**: When a user taps "+ Plan" on an attraction in the Day Planner Attractions panel, planned items now appear in all three places:
+  1. **Day Planner card (Activities section)**: `planStopEvent` now preserves which stop cards are expanded (and which Attractions panels are open) before calling `renderStops()`, then re-opens them after rebuild. Previously the rebuild collapsed all cards.
+  2. **DDM (orange header day modal)**: `getPlannedForStop` custom-activities loop changed to include planned custom activities on ANY day of the stop (not just the first day). Custom activities aren't yet day-specific, so this is correct behavior.
+  3. **Agenda view**: `renderPlannerAgenda()` now reads `appState.customActivities[stopId]` and `appState.planned` to include AI-planned items in the `_activities` array alongside static `d.activities`.
+
+- **Gallery duplicate photos fix**: `renderGalleryTab` was adding photoPool items WITH `source:'journal'` to `allPhotos`, causing journal photos to appear twice (once from `_journalEntries` loop, once from photoPool loop). Now skips pool photos where `source === 'journal'` since they're already shown.
+
+### Session 18 (fourteenth context) — 2026-03-02
 
 - **Route map left-rail: dates removed**: `metaHtml` in `renderStopNavigator` now shows only nights count (e.g. "2n") instead of date ranges. Date ranges were unreliable when phaseExtraDays offsets were complex; the Agenda view is the authoritative date reference.
 
