@@ -11425,8 +11425,121 @@ async function _initGuestMode(tripId) {
   body.style.display = 'flex';
   body.style.flexDirection = 'row';
 
+  /* ── "Where are they now?" ─────────────────────────────────────── */
+  _guestShowWhereNow(stops, guestArrivals, guestDepartures);
+
   _renderGuestStopsList(stops, tripId);
   setTimeout(function() { _initGuestMapInst(stops, guestArrivals, guestDepartures); }, 300);
+}
+
+/* ── "Where are they now?" logic ─────────────────────────────────── */
+function _guestShowWhereNow(stops, arrivals, departures) {
+  var el    = document.getElementById('guest-where-now');
+  var lblEl = document.getElementById('guest-where-label');
+  var subEl = document.getElementById('guest-where-sub');
+  if (!el || !lblEl || !subEl) return;
+
+  var today    = new Date();
+  var todayStr = today.getFullYear() + '-'
+    + String(today.getMonth() + 1).padStart(2, '0') + '-'
+    + String(today.getDate()).padStart(2, '0');
+  var tripStart = CONFIG && CONFIG.startDate ? new Date(CONFIG.startDate + 'T00:00:00') : null;
+  var tripEnd   = CONFIG && CONFIG.endDate   ? new Date(CONFIG.endDate   + 'T23:59:59') : null;
+
+  var label = '', sub = '';
+
+  /* ── Pre-trip ─────────────────────────────────────────────────── */
+  if (tripStart && today < tripStart) {
+    var daysUntil = Math.ceil((tripStart - today) / 86400000);
+    label = '\u23f3 Departure in ' + daysUntil + (daysUntil === 1 ? ' day!' : ' days!');
+    sub   = 'Trip starts ' + CONFIG.startDate;
+
+  /* ── Post-trip ────────────────────────────────────────────────── */
+  } else if (tripEnd && today > tripEnd) {
+    label = '\ud83c\udfe0 Back home \u2014 adventure complete!';
+    sub   = 'Trip ended ' + CONFIG.endDate;
+
+  } else {
+    /* ── Priority 1: arrivals/departures (check-in data from Paul's device) ── */
+    var arrivIds = Object.keys(arrivals || {}).map(Number).filter(function(id) {
+      return arrivals[id] && arrivals[id].time;
+    });
+    /* Sort by arrival time descending — most recent first */
+    arrivIds.sort(function(a, b) {
+      return new Date(arrivals[b].time) - new Date(arrivals[a].time);
+    });
+    var foundStop = null;
+    var inTransit = false;
+    for (var i = 0; i < arrivIds.length; i++) {
+      var sid = arrivIds[i];
+      var dep = departures && departures[sid] && departures[sid].time;
+      if (!dep) {
+        /* Arrived, not yet departed — currently here */
+        foundStop = stops.find(function(s) { return s.id === sid; });
+        break;
+      }
+      /* If most recent arrival also has a departure, they're in transit */
+      if (i === 0) { inTransit = true; }
+    }
+
+    if (foundStop) {
+      label = '\ud83d\udccd ' + foundStop.name + (foundStop.state ? ', ' + foundStop.state : '');
+      sub   = 'Currently here \u2014 leave them a tip!';
+    } else if (inTransit && arrivIds.length > 0) {
+      /* Find the next stop after the last departed one */
+      var lastDep = arrivIds[0];
+      var lastDepStop = stops.find(function(s) { return s.id === lastDep; });
+      /* Try to find next from TRIP_DAYS */
+      var nextStop = null;
+      if (typeof TRIP_DAYS !== 'undefined') {
+        var lastDepDays = TRIP_DAYS.filter(function(d) { return d.stopId === lastDep; });
+        if (lastDepDays.length) {
+          var lastDayNum = lastDepDays[lastDepDays.length - 1].day;
+          for (var j = 0; j < TRIP_DAYS.length; j++) {
+            if (TRIP_DAYS[j].day > lastDayNum && !TRIP_DAYS[j].driveDay) {
+              nextStop = stops.find(function(s) { return s.id === TRIP_DAYS[j].stopId; });
+              if (nextStop) break;
+            }
+          }
+        }
+      }
+      var dest = nextStop ? (nextStop.name + (nextStop.state ? ', ' + nextStop.state : '')) : 'next stop';
+      label = '\ud83d\ude90 In transit to ' + dest;
+      sub   = 'On the road right now!';
+
+    } else if (typeof TRIP_DAYS !== 'undefined' && TRIP_DAYS.length) {
+      /* ── Priority 2: date-based using TRIP_DAYS ── */
+      var todayEntries = TRIP_DAYS.filter(function(d) { return d.date === todayStr; });
+      if (todayEntries.length) {
+        var entry = todayEntries[0];
+        if (entry.driveDay) {
+          /* Find next non-drive stop */
+          var nxt = null;
+          for (var k = 0; k < TRIP_DAYS.length; k++) {
+            if (TRIP_DAYS[k].day > entry.day && !TRIP_DAYS[k].driveDay) {
+              nxt = stops.find(function(s) { return s.id === TRIP_DAYS[k].stopId; });
+              if (nxt) break;
+            }
+          }
+          var nxtName = nxt ? (nxt.name + (nxt.state ? ', ' + nxt.state : '')) : 'next stop';
+          label = '\ud83d\ude90 In transit to ' + nxtName;
+          sub   = 'On the road today!';
+        } else {
+          var cur = stops.find(function(s) { return s.id === entry.stopId; });
+          if (cur) {
+            label = '\ud83d\udccd ' + cur.name + (cur.state ? ', ' + cur.state : '');
+            sub   = 'Spending time here \u2014 leave them a tip!';
+          }
+        }
+      }
+    }
+  }
+
+  if (label) {
+    lblEl.textContent = label;
+    subEl.textContent = sub;
+    el.style.display  = 'block';
+  }
 }
 
 /* ── 3. Render per-stop recommendation forms ─────────────────────── */
@@ -11732,8 +11845,49 @@ async function _loadFriendSuggestions() {
   var el = document.getElementById('friends-content');
   if (!el) return;
 
+  /* "Where are they now?" preview for Paul (same logic as guest page) */
+  var _wanNow = (function() {
+    var _wanArrivals   = (appState && appState.arrivals)   || {};
+    var _wanDepartures = (appState && appState.departures) || {};
+    var _wanStops      = (typeof TRIP_STOPS !== 'undefined') ? TRIP_STOPS : [];
+    var _wanToday      = new Date();
+    var _wanStr        = _wanToday.getFullYear() + '-' + String(_wanToday.getMonth()+1).padStart(2,'0') + '-' + String(_wanToday.getDate()).padStart(2,'0');
+    var _wanLabel = '', _wanSub = '';
+    var _tripS = CONFIG && CONFIG.startDate ? new Date(CONFIG.startDate + 'T00:00:00') : null;
+    var _tripE = CONFIG && CONFIG.endDate   ? new Date(CONFIG.endDate   + 'T23:59:59') : null;
+    if (_tripS && _wanToday < _tripS) {
+      var _du = Math.ceil((_tripS - _wanToday) / 86400000);
+      _wanLabel = '\u23f3 Departure in ' + _du + (_du===1?' day!':' days!');
+      _wanSub   = 'Trip starts ' + CONFIG.startDate;
+    } else if (_tripE && _wanToday > _tripE) {
+      _wanLabel = '\ud83c\udfe0 Back home \u2014 adventure complete!'; _wanSub = 'Trip ended ' + CONFIG.endDate;
+    } else if (typeof TRIP_DAYS !== 'undefined') {
+      var _aIds = Object.keys(_wanArrivals).map(Number).filter(function(id){return _wanArrivals[id]&&_wanArrivals[id].time;});
+      _aIds.sort(function(a,b){return new Date(_wanArrivals[b].time)-new Date(_wanArrivals[a].time);});
+      var _fStop=null, _iTrans=false;
+      for(var _ai=0;_ai<_aIds.length;_ai++){
+        var _asid=_aIds[_ai]; if(!_wanDepartures[_asid]||!_wanDepartures[_asid].time){_fStop=_wanStops.find(function(s){return s.id===_asid;});break;}
+        if(_ai===0)_iTrans=true;
+      }
+      if(_fStop){ _wanLabel='\ud83d\udccd '+_fStop.name+(_fStop.state?', '+_fStop.state:''); _wanSub='Currently here'; }
+      else if(_iTrans){ _wanLabel='\ud83d\ude90 In transit'; _wanSub='On the road'; }
+      else {
+        var _te=TRIP_DAYS.filter(function(d){return d.date===_wanStr;});
+        if(_te.length){ var _ent=_te[0]; if(_ent.driveDay){_wanLabel='\ud83d\ude90 Drive day';_wanSub='In transit today';}
+          else{var _cs=_wanStops.find(function(s){return s.id===_ent.stopId;});if(_cs){_wanLabel='\ud83d\udccd '+_cs.name+(_cs.state?', '+_cs.state:'');_wanSub='Currently here';}}
+        }
+      }
+    }
+    return _wanLabel ? ('<div style="background:linear-gradient(135deg,#7B5EA7,#9B6FCA);border-radius:12px;padding:12px 16px;margin-bottom:16px;color:#fff;">'
+      + '<div style="font-size:.6rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.75;margin-bottom:4px;">Where are they now?</div>'
+      + '<div style="font-size:.95rem;font-weight:900;">' + _wanLabel + '</div>'
+      + (_wanSub ? '<div style="font-size:.72rem;opacity:.78;margin-top:2px;">' + _wanSub + '</div>' : '')
+      + '</div>') : '';
+  })();
+
   /* Header row */
-  var hdrHtml = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">'
+  var hdrHtml = _wanNow
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">'
     + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-lightbulb"></i> Friend &amp; Family Suggestions</h2>'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;">'
     + '<button onclick="_loadFriendSuggestions()" style="background:var(--card);color:var(--text-2);border:1.5px solid var(--border);border-radius:100px;padding:7px 14px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-rotate-right"></i> Refresh</button>'
@@ -27150,12 +27304,18 @@ function _smRenderAll() {
 <div id="guest-overlay" style="display:none;position:fixed;inset:0;z-index:99999;background:#f5f0ff;flex-direction:column;overflow:hidden;">
 
   <!-- Sticky guest header -->
-  <div style="background:linear-gradient(135deg,#7B5EA7,#9B6FCA);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:sticky;top:0;z-index:2;box-shadow:0 2px 12px rgba(123,94,167,.25);">
-    <div>
+  <div style="background:linear-gradient(135deg,#7B5EA7,#9B6FCA);color:#fff;padding:14px 20px 12px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;position:sticky;top:0;z-index:2;box-shadow:0 2px 12px rgba(123,94,167,.25);">
+    <div style="flex:1;min-width:0;">
       <div style="font-size:.65rem;font-weight:700;letter-spacing:.1em;opacity:.8;text-transform:uppercase;margin-bottom:2px;">🚐 TripGenie — Friends View</div>
       <div id="guest-trip-name" style="font-size:1.05rem;font-weight:900;">Loading trip…</div>
+      <!-- WHERE ARE THEY NOW — populated after trip data loads -->
+      <div id="guest-where-now" style="display:none;margin-top:8px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);border-radius:10px;padding:7px 12px;">
+        <div style="font-size:.6rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;opacity:.75;margin-bottom:2px;">Where are they now?</div>
+        <div id="guest-where-label" style="font-size:.92rem;font-weight:900;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+        <div id="guest-where-sub"   style="font-size:.68rem;opacity:.75;margin-top:1px;"></div>
+      </div>
     </div>
-    <div style="font-size:1.8rem;">🗺️</div>
+    <div style="font-size:1.8rem;flex-shrink:0;margin-left:12px;">🗺️</div>
   </div>
 
   <!-- Loading state -->
