@@ -2342,6 +2342,51 @@
   #guest-overlay { flex-direction:column; }
   #guest-body     { flex:1; min-height:0; }
 
+  /* ══════════════════════════════════════════════════════════
+     UX IMPROVEMENTS — 2026-03
+     ══════════════════════════════════════════════════════════ */
+
+  /* 1. Safe-area bottom padding so content is never hidden under
+        the iOS home indicator or Android gesture bar              */
+  .tab-panel {
+    padding-bottom: calc(var(--sp-6, 24px) + env(safe-area-inset-bottom, 0px)) !important;
+  }
+  @media (min-width: 768px) {
+    .tab-panel { padding-bottom: calc(22px + env(safe-area-inset-bottom, 0px)) !important; }
+  }
+
+  /* 2. Loading spinner for Add Destination wizard and similar    */
+  @keyframes ux-spin { to { transform: rotate(360deg); } }
+  .ux-spinner {
+    width: 36px; height: 36px;
+    border: 3px solid var(--border);
+    border-top-color: var(--orange);
+    border-radius: 50%;
+    animation: ux-spin .9s linear infinite;
+    margin: 0 auto 12px;
+  }
+
+  /* 3. Modal close buttons — enforce 44×44 minimum touch target  */
+  button[onclick*="close"][style*="width:30px"],
+  button[onclick*="close"][style*="width:32px"],
+  button[onclick*="close"][style*="width:34px"] {
+    width: 44px !important; height: 44px !important;
+    font-size: 1.1rem !important;
+  }
+
+  /* 4. Font size normalisation — collapse the sub-caption zoo to
+        two steps: caption (.75rem) and micro (.68rem)            */
+  [style*="font-size:.61rem"], [style*="font-size:.62rem"],
+  [style*="font-size:.66rem"] {
+    font-size: var(--fs-caption, .68rem) !important;
+  }
+
+  /* 5. Consistent modal header gradient — purple-to-blue unified */
+  .modal-hdr-unified {
+    background: linear-gradient(135deg, var(--blue) 0%, #1a3a5c 100%);
+    color: #fff;
+  }
+
   </style>
 </head>
 <body>
@@ -3105,10 +3150,10 @@
     </div>
 
     <!-- Loading state (shared between steps) -->
-    <div id="adm-loading" class="hidden" style="text-align:center;padding:28px 20px;color:var(--text-2);">
-      <div style="font-size:1.6rem;margin-bottom:10px;">&#128269;</div>
-      <div id="adm-loading-msg" style="font-size:.9rem;font-weight:600;">Looking up place…</div>
-      <div style="font-size:.78rem;color:var(--text-3);margin-top:4px;">Asking TripGenie…</div>
+    <div id="adm-loading" class="hidden" style="text-align:center;padding:32px 20px;color:var(--text-2);">
+      <div class="ux-spinner"></div>
+      <div id="adm-loading-msg" style="font-size:.9rem;font-weight:700;color:var(--text);">Looking up place…</div>
+      <div style="font-size:.78rem;color:var(--text-3);margin-top:5px;">Asking TripGenie AI…</div>
     </div>
 
     <!-- Step 2: Confirmation -->
@@ -4034,7 +4079,7 @@ var CONFIG = {
   startDate: '2026-02-28',
   endDate:   '2026-04-14',
   totalDays: 46,
-  totalMiles: 7000,
+  totalMiles: 5705,
 };
 
 /* ── BUILTIN TRIP SNAPSHOT (original hardcoded data, never mutated) ──────── */
@@ -4044,7 +4089,7 @@ var _BUILTIN_TRIP = {
   startDate: '2026-02-28',
   endDate:   '2026-04-14',
   totalDays: 46,
-  totalMiles: 7000,
+  totalMiles: 5705,
   tripName:  'Maass Family RV 2026'
 };
 
@@ -10053,12 +10098,16 @@ function renderTripStats() {
 
   // Trip-wide totals
   var totalMiles = 0, totalDriveHours = 0, driveDays = 0, exploreDays = 0;
+  var untrackedLegs = 0; // drive days with no miles set (custom trip wizard adds these)
   var removedStopIds = appState.removedStops || {};
   TRIP_DAYS.forEach(function(d) {
     if (removedStopIds[d.stopId]) return;
-    totalMiles += d.miles || 0;
+    totalMiles    += d.miles || 0;
     totalDriveHours += d.driveHours || 0;
-    if (d.driveDay) driveDays++; else exploreDays++;
+    if (d.driveDay) {
+      driveDays++;
+      if (!d.miles) untrackedLegs++;
+    } else { exploreDays++; }
   });
 
   // ── Build HTML ──────────────────────────────────────────────────
@@ -10073,7 +10122,7 @@ function renderTripStats() {
     { n: activeStops.length,  label: 'Destinations',  emoji: '📍' },
     { n: states.length,       label: 'States',         emoji: '🗺️' },
     { n: totalActivities,     label: 'Planned Activities', emoji: '⭐' },
-    { n: Math.round(totalMiles).toLocaleString() + ' mi', label: 'Total Miles', emoji: '🛣️', raw: true },
+    { n: Math.round(totalMiles).toLocaleString() + ' mi', label: untrackedLegs > 0 ? 'Tracked Miles' : 'Total Miles', emoji: '🛣️', raw: true },
     { n: driveDays,           label: 'Drive Days',     emoji: '🚗' },
     { n: exploreDays,         label: 'Explore Days',   emoji: '🏕️' },
   ];
@@ -10085,6 +10134,16 @@ function renderTripStats() {
       + '</div>';
   });
   html += '</div>';
+
+  /* Untracked-legs warning — shown when custom trip destinations have no drive miles */
+  if (untrackedLegs > 0) {
+    html += '<div style="background:#fff8e6;border:1.5px solid #f5c842;border-radius:var(--radius-s);padding:11px 15px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px;">'
+      + '<span style="font-size:1.1rem;flex-shrink:0;">⚠️</span>'
+      + '<div style="font-size:.8rem;color:#7a5c00;line-height:1.45;">'
+      + '<strong>' + untrackedLegs + ' drive leg' + (untrackedLegs > 1 ? 's' : '') + ' have no mileage set</strong> — total is understated. '
+      + 'Open the <strong>Day Planner</strong>, tap each driving day, and set the miles for any stops added via "Add Destination."'
+      + '</div></div>';
+  }
 
   // States bar
   html += '<div style="background:var(--green-l);border:1px solid #a8d5b8;border-radius:var(--radius-s);padding:12px 16px;margin-bottom:16px;">';
