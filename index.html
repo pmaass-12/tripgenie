@@ -6842,29 +6842,19 @@ function _clearAndRebuildMapMarkers(mapObj) {
   buildMapMarkers(mapObj);
 }
 
-/* Jump from map popup → Day Planner, scrolled to the first day at this stop */
+/* Jump from map popup → Day Planner tab, scrolled to that stop's card */
 function _jumpToStopPlans(stopId) {
   /* Close any open Leaflet popup */
   if (window.mainMap) window.mainMap.closePopup();
-  /* Switch to the Planner tab */
+  /* Switch to Planner tab first */
   if (typeof switchTab === 'function') switchTab('planner');
-  /* Switch to the Schedule segment inside the planner */
-  if (typeof _mainSeg === 'function') _mainSeg('schedule');
-  /* Scroll to the first schedule row for this stop */
+  /* Switch to Day Planner (stops) segment — this calls renderStops() */
+  if (typeof _mainSeg === 'function') _mainSeg('stops');
+  /* After renderStops() has run, find and scroll to the stop card */
   setTimeout(function() {
-    var el = document.querySelector('[data-stop-id="' + stopId + '"]')
-          || document.querySelector('.phase-header[data-stopid="' + stopId + '"]')
-          || document.getElementById('phase-' + stopId)
-          || document.getElementById('stop-anchor-' + stopId);
-    if (!el) {
-      /* Fallback: find any schedule day row whose stop matches */
-      var rows = document.querySelectorAll('.sched-day-row, .phase-block');
-      for (var i = 0; i < rows.length; i++) {
-        if ((rows[i].dataset.stopId || rows[i].dataset.stopid) == stopId) { el = rows[i]; break; }
-      }
-    }
+    var el = document.querySelector('#stops-content [data-stop-id="' + stopId + '"]');
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 320);
+  }, 350);
 }
 
 function initMainMap() {
@@ -9141,11 +9131,18 @@ function renderStops() {
   if (!el) return;
 
   var todayNum = tripDay();
+  var _rsRemoved = appState.removedStops || {};
+  var _rsHomeStop = (typeof _tripHomeStop === 'function') ? _tripHomeStop() : null;
+  var _rsHomeId   = _rsHomeStop ? _rsHomeStop.id : 15;
+  /* Only count / show active, non-home stops */
+  var _rsVisible = TRIP_STOPS.filter(function(s) {
+    return !_rsRemoved[s.id] && s.id !== _rsHomeId && s.sleepType !== 'home';
+  });
   var totalActs = 0;
   var totalRests = 0;
-  for (var si2 = 0; si2 < TRIP_STOPS.length; si2++) {
-    totalActs  += (TRIP_STOPS[si2].activities  || []).length;
-    totalRests += (TRIP_STOPS[si2].restaurants || []).length;
+  for (var si2 = 0; si2 < _rsVisible.length; si2++) {
+    totalActs  += (_rsVisible[si2].activities  || []).length;
+    totalRests += (_rsVisible[si2].restaurants || []).length;
   }
   var totalPlanned = appState.planned ? Object.keys(appState.planned).length : 0;
 
@@ -9162,7 +9159,7 @@ function renderStops() {
 
   // Stats
   html += '<div class="grid-4" style="margin-bottom:20px;">'
-    + '<div class="stat-card"><div class="stat-icon">&#128205;</div><div class="stat-label">Destinations</div><div class="stat-value">' + TRIP_STOPS.length + '</div><div class="stat-sub">stops on the route</div></div>'
+    + '<div class="stat-card"><div class="stat-icon">&#128205;</div><div class="stat-label">Destinations</div><div class="stat-value">' + _rsVisible.length + '</div><div class="stat-sub">stops on the route</div></div>'
     + '<div class="stat-card"><div class="stat-icon">&#127939;</div><div class="stat-label">Activities</div><div class="stat-value">' + totalActs + '</div><div class="stat-sub">stroller-friendly picks</div></div>'
     + '<div class="stat-card"><div class="stat-icon">&#127869;</div><div class="stat-label">Restaurants</div><div class="stat-value">' + totalRests + '</div><div class="stat-sub">family-friendly picks</div></div>'
     + '<div class="stat-card"><div class="stat-icon">&#9989;</div><div class="stat-label">Planned</div><div class="stat-value">' + totalPlanned + '</div><div class="stat-sub">activities &amp; restaurants</div></div>'
@@ -9170,8 +9167,8 @@ function renderStops() {
 
   html += '<div style="display:flex;flex-direction:column;gap:20px;">';
 
-  for (var i = 0; i < TRIP_STOPS.length; i++) {
-    var stop = TRIP_STOPS[i];
+  for (var i = 0; i < _rsVisible.length; i++) {
+    var stop = _rsVisible[i];
     var stopDays = [];
     for (var di = 0; di < TRIP_DAYS.length; di++) {
       if (TRIP_DAYS[di].stopId === stop.id) stopDays.push(TRIP_DAYS[di]);
@@ -9198,7 +9195,7 @@ function renderStops() {
       : 'background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.04),0 4px 14px rgba(0,0,0,.07);';
     var headerBg = isCurrentStop ? 'var(--orange)' : isPastStop ? '#bbb' : 'var(--blue)';
 
-    html += '<div style="' + cardStyle + 'border-radius:var(--radius-s);overflow:hidden;">';
+    html += '<div data-stop-id="' + stop.id + '" style="' + cardStyle + 'border-radius:var(--radius-s);overflow:hidden;">';
 
     // Compute weather range for this stop — prefer live fetched data, fall back to static typical weather
     var _swHi = null, _swLo = null, _swIcon = '', _swTypical = false;
@@ -10202,8 +10199,9 @@ function renderGalleryTab() {
     html += '<div style="text-align:center;padding:60px 20px;color:var(--text-3);">'
       + '<div style="font-size:3rem;margin-bottom:12px;">📷</div>'
       + '<div style="font-weight:700;font-size:.95rem;margin-bottom:6px;">No photos yet</div>'
-      + '<div style="font-size:.83rem;">Add photos to your journal entries and they\'ll appear here.</div>'
-      + '<button onclick="switchTab(\'journal\')" style="margin-top:16px;padding:10px 20px;background:var(--orange);color:#fff;border:none;border-radius:20px;font-weight:700;cursor:pointer;font-family:var(--font);">Go to Journal</button>'
+      + '<div style="font-size:.83rem;">Photos you upload here and into a journal entry appear here.</div>'
+      + '<label for="gallery-tab-upload-empty" style="display:inline-block;margin-top:16px;padding:10px 20px;background:var(--orange);color:#fff;border-radius:20px;font-weight:700;cursor:pointer;font-family:var(--font);">📤 Add Photos</label>'
+      + '<input type="file" id="gallery-tab-upload-empty" accept="image/*,video/*" multiple style="display:none" onchange="_galleryUpload(this)">'
       + '</div>';
     el.innerHTML = html;
     return;
