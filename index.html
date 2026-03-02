@@ -7810,12 +7810,15 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
     + 'color:rgba(255,255,255,.75);border-radius:100px;padding:2px 8px;font-size:.65rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;white-space:nowrap;">'
     + '<i class="fa-solid fa-xmark"></i></button>';
 
-  /* Badges */
+  /* Badges — Split is ALWAYS visible; shows ✓ badge when resolved, ✂️ button otherwise */
   var badges = '';
   if (_splitResolved) {
     badges += '<span style="background:rgba(255,255,255,.22);border:1px solid rgba(255,255,255,.4);border-radius:100px;padding:2px 8px;font-size:.65rem;font-weight:800;flex-shrink:0;white-space:nowrap;">&#10003;\u00a0Split</span>';
-  } else if (_isLongDrive) {
-    badges += '<button onclick="event.stopPropagation();openDayDetail(' + d.day + ')" style="background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:2px 8px;font-size:.65rem;font-weight:800;cursor:pointer;white-space:nowrap;font-family:var(--font);flex-shrink:0;">&#9888;\u00a0Split</button>';
+  } else {
+    var _splitIcon = _isLongDrive ? '&#9888;\u00a0' : '&#9986;\u00a0';
+    var _originLabel = encodeURIComponent(_title.split(' \u2192 ')[0] || '');
+    var _destLabel   = encodeURIComponent(_title.split(' \u2192 ')[1] || '');
+    badges += '<button onclick="event.stopPropagation();_openSplitModal(\'' + _originLabel + '\',\'' + _destLabel + '\',' + d.day + ')" style="background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:2px 8px;font-size:.65rem;font-weight:800;cursor:pointer;white-space:nowrap;font-family:var(--font);flex-shrink:0;">' + _splitIcon + 'Split</button>';
   }
   if (isOverflow && d.sleepType !== 'home') {
     badges += '<span style="background:#c62828;color:#fff;font-size:.63rem;font-weight:800;padding:2px 7px;border-radius:100px;white-space:nowrap;flex-shrink:0;">&#128314;\u00a0Over</span>';
@@ -7903,12 +7906,106 @@ function _deleteDriveBar(dayNum) {
   renderSchedule();
 }
 
+/* ── SPLIT DRIVE MODAL ──────────────────────────────────────────────────
+   Opens a bottom sheet that asks WHERE to stop overnight and WHETHER to
+   start driving a day early, then fires a Change Plan request to TripGenie
+   with the user's chosen midpoint city.                                 ── */
+function _openSplitModal(encodedOrigin, encodedDest, dayNum) {
+  var origin = decodeURIComponent(encodedOrigin);
+  var dest   = decodeURIComponent(encodedDest);
+
+  var existing = document.getElementById('split-modal-overlay');
+  if (existing) existing.remove();
+
+  var ov = document.createElement('div');
+  ov.id = 'split-modal-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9200;display:flex;align-items:flex-end;justify-content:center;';
+  ov.onclick = function(e){ if(e.target===ov) ov.remove(); };
+
+  ov.innerHTML = '<div style="background:var(--card);border-radius:18px 18px 0 0;padding:22px 20px 36px;width:100%;max-width:480px;box-sizing:border-box;box-shadow:0 -4px 24px rgba(0,0,0,.18);">'
+    + '<div style="width:36px;height:4px;background:var(--border);border-radius:100px;margin:0 auto 16px;"></div>'
+    + '<div style="font-weight:900;font-size:1.05rem;margin-bottom:4px;">&#9986; Split This Drive</div>'
+    + '<div style="font-size:.82rem;color:var(--text-2);margin-bottom:18px;">'
+    + '<strong>' + origin + ' → ' + dest + '</strong>'
+    + '</div>'
+
+    /* WHERE to stop */
+    + '<div style="font-size:.82rem;font-weight:700;margin-bottom:6px;">Where do you want to stop overnight?</div>'
+    + '<input id="split-stop-input" type="text" placeholder="e.g. Amarillo, TX or Nashville, TN…" '
+    + 'style="width:100%;padding:10px 12px;border:1.5px solid var(--border);border-radius:var(--radius-s);font-size:.9rem;font-family:var(--font);background:var(--bg);color:var(--text);box-sizing:border-box;margin-bottom:6px;">'
+    + '<div style="font-size:.72rem;color:var(--text-3);margin-bottom:16px;">Leave blank and TripGenie will suggest a good midpoint for you.</div>'
+
+    /* TIMING option */
+    + '<div style="font-size:.82rem;font-weight:700;margin-bottom:8px;">When do you want to start?</div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:20px;">'
+    + '<button id="split-opt-dayof" onclick="_splitSetTiming(\'dayof\')" style="flex:1;padding:9px;border:1.5px solid var(--orange);border-radius:var(--radius-s);background:var(--orange);color:#fff;font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);">Same day<br><span style="font-weight:400;font-size:.7rem;">Stop halfway through</span></button>'
+    + '<button id="split-opt-dayprior" onclick="_splitSetTiming(\'dayprior\')" style="flex:1;padding:9px;border:1.5px solid var(--border);border-radius:var(--radius-s);background:var(--card);color:var(--text);font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);">Day before<br><span style="font-weight:400;font-size:.7rem;color:var(--text-3);">Start driving tomorrow</span></button>'
+    + '</div>'
+
+    /* Action buttons */
+    + '<button onclick="_doSplitDriveRequest(\'' + encodeURIComponent(origin) + '\',\'' + encodeURIComponent(dest) + '\',' + dayNum + ')" '
+    + 'style="width:100%;background:var(--orange);color:#fff;border:none;border-radius:var(--radius-s);padding:13px;font-size:.95rem;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:10px;">&#128204; Plan the Split</button>'
+    + '<button onclick="document.getElementById(\'split-modal-overlay\').remove()" '
+    + 'style="width:100%;background:transparent;border:1.5px solid var(--border);border-radius:var(--radius-s);padding:11px;font-size:.88rem;font-weight:700;cursor:pointer;font-family:var(--font);color:var(--text-2);">Cancel</button>'
+    + '</div>';
+
+  document.body.appendChild(ov);
+  setTimeout(function(){ var inp=document.getElementById('split-stop-input'); if(inp) inp.focus(); }, 100);
+}
+
+var _splitTiming = 'dayof'; /* 'dayof' | 'dayprior' */
+function _splitSetTiming(val) {
+  _splitTiming = val;
+  var onStyle  = 'flex:1;padding:9px;border:1.5px solid var(--orange);border-radius:var(--radius-s);background:var(--orange);color:#fff;font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);';
+  var offStyle = 'flex:1;padding:9px;border:1.5px solid var(--border);border-radius:var(--radius-s);background:var(--card);color:var(--text);font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);';
+  var bDay  = document.getElementById('split-opt-dayof');
+  var bPri  = document.getElementById('split-opt-dayprior');
+  if (bDay) bDay.style.cssText  = val === 'dayof'    ? onStyle : offStyle;
+  if (bPri) bPri.style.cssText  = val === 'dayprior' ? onStyle : offStyle;
+  /* restore inner spans */
+  if (bDay) bDay.innerHTML = 'Same day<br><span style="font-weight:400;font-size:.7rem;">Stop halfway through</span>';
+  if (bPri) bPri.innerHTML = 'Day before<br><span style="font-weight:400;font-size:.7rem;color:var(--text-3);">Start driving tomorrow</span>';
+}
+
+function _doSplitDriveRequest(encodedOrigin, encodedDest, dayNum) {
+  var origin = decodeURIComponent(encodedOrigin);
+  var dest   = decodeURIComponent(encodedDest);
+  var stopInput = (document.getElementById('split-stop-input') || {}).value || '';
+  var timing    = _splitTiming;
+
+  document.getElementById('split-modal-overlay').remove();
+
+  /* Build a Change Plan prompt and send it to TripGenie */
+  var midpointClause = stopInput.trim()
+    ? 'I want to stop overnight in ' + stopInput.trim() + '.'
+    : 'Please suggest a good midpoint city with an RV park or campground.';
+
+  var timingClause = timing === 'dayprior'
+    ? 'I would like to start the first leg the day BEFORE the current drive day — so I arrive at the midpoint the evening before, then continue to ' + dest + ' the next day.'
+    : 'I would like to split the drive into two halves on consecutive days, stopping at the midpoint on the first night and arriving at ' + dest + ' the next day.';
+
+  var prompt = 'The drive from ' + origin + ' to ' + dest + ' is too long for one day. '
+    + midpointClause + ' '
+    + timingClause + ' '
+    + 'Please adjust the trip plan to insert an overnight stop at the midpoint. '
+    + 'The midpoint stop should have 1 night, sleepType "rv_park", and the drive should be split into two legs.';
+
+  /* Open Change Plan modal with the pre-filled prompt */
+  openChangePlanModal();
+  setTimeout(function() {
+    var ta = document.getElementById('adj-voice-ta');
+    if (ta) { ta.value = prompt; ta.dispatchEvent(new Event('input')); }
+    showToast('✂️ Split request ready — tap Send to apply!', 3000);
+  }, 350);
+}
+
 /* ── VIRTUAL DRIVE SEPARATOR ─────────────────────────────────────────────
    Renders a drive pill for stop-to-stop transitions that have no explicit
    driveDay entry (e.g. AI-generated trips, or user-removed drive days).
    Uses haversine distance to estimate drive time; skipped if < 1 hour. ── */
 function _renderVirtualDriveSep(prevStop, destStop, d, effectiveDate, displayNum) {
   if (!prevStop || !destStop || !prevStop.lat || !prevStop.lng || !destStop.lat || !destStop.lng) return '';
+  var _vsMaxDriveH = (appState.drivingPrefs && appState.drivingPrefs.maxHours) || 4;
   /* Haversine distance in miles */
   var R = 3958.8;
   var lat1 = prevStop.lat * Math.PI / 180, lat2 = destStop.lat * Math.PI / 180;
@@ -7962,13 +8059,19 @@ function _renderVirtualDriveSep(prevStop, destStop, d, effectiveDate, displayNum
   var _estBadge = '<span style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:100px;'
     + 'padding:2px 8px;font-size:.65rem;font-weight:700;flex-shrink:0;white-space:nowrap;opacity:.85;">est.</span>';
 
+  /* Split button — always shown on virtual separators */
+  var _vSplitIcon = _estHours > _vsMaxDriveH ? '&#9888;\u00a0' : '&#9986;\u00a0';
+  var _vSplitBtn = '<button onclick="event.stopPropagation();_openSplitModal(\'' + encodeURIComponent(_sn(prevStop)) + '\',\'' + encodeURIComponent(_sn(destStop)) + '\',' + d.day + ')" '
+    + 'style="background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:2px 8px;font-size:.65rem;font-weight:800;cursor:pointer;white-space:nowrap;font-family:var(--font);flex-shrink:0;">'
+    + _vSplitIcon + 'Split</button>';
+
   return '<div style="display:flex;align-items:center;gap:0;position:relative;margin:5px 0 5px;cursor:pointer;" onclick="openDayDetail(' + d.day + ')" title="' + _title.replace(/'/g,"&#39;") + ' — estimated drive">'
     + '<div style="' + _line + '"></div>'
     + '<div style="flex-shrink:0;background:' + _pillBg + ';color:#fff;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;display:flex;align-items:center;flex-wrap:wrap;gap:6px;box-shadow:' + _shadow + ';max-width:90%;">'
     + '<i class="fa-solid fa-rv" style="flex-shrink:0;font-size:.85rem;"></i>'
     + '<span style="white-space:nowrap;">' + _title + '</span>'
     + '<span style="font-weight:500;opacity:.82;font-size:.7rem;white-space:nowrap;">' + metaParts.join(' &middot; ') + '</span>'
-    + _departChip + _arrivalChip + _estBadge
+    + _departChip + _arrivalChip + _estBadge + _vSplitBtn
     + '</div>'
     + '<div style="' + _line + '"></div>'
     + '</div>';
