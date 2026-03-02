@@ -16601,7 +16601,7 @@ function renderCalendar() {
 
   /* Build skip set (removed stops) */
   var _calRemoved = {};
-  (appState.removedStops || []).forEach(function(id) { _calRemoved[id] = true; });
+  Object.keys(appState.removedStops || {}).forEach(function(id) { _calRemoved[id] = true; });
   var _calSkip = {};
   TRIP_DAYS.forEach(function(d) { if (_calRemoved[d.stopId]) _calSkip[d.day] = true; });
 
