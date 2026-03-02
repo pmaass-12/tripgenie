@@ -6947,11 +6947,33 @@ function printTripPlan() {
     stopDaysMap[d.stopId].push(d);
   });
 
-  /* Count total drive days and miles */
-  var totalMiles = 0, driveDayCount = 0;
+  /* Count total drive days and miles (tracked legs + haversine estimates for untracked) */
+  var totalMiles = 0, driveDayCount = 0, _sNavUntracked = 0;
   TRIP_DAYS.forEach(function(d) {
-    if (d.driveDay && d.miles) { totalMiles += (d.miles || 0); driveDayCount++; }
+    if (!d.driveDay) return;
+    driveDayCount++;
+    if (d.miles) { totalMiles += d.miles; } else { _sNavUntracked++; }
   });
+  if (_sNavUntracked > 0) {
+    var _sNavStopMap = {};
+    TRIP_STOPS.forEach(function(s) { _sNavStopMap[s.id] = s; });
+    var _sNavPrevId = null;
+    TRIP_DAYS.slice().sort(function(a,b){return a.day-b.day;}).forEach(function(d) {
+      if (_removedIds[d.stopId]) return;
+      if (d.driveDay && !d.miles && _sNavPrevId) {
+        var _sf = _sNavStopMap[_sNavPrevId], _st = _sNavStopMap[d.stopId];
+        if (_sf && _st && _sf.lat && _st.lat) {
+          var _R=3958.8, _p1=_sf.lat*Math.PI/180, _p2=_st.lat*Math.PI/180;
+          var _dp=(_st.lat-_sf.lat)*Math.PI/180, _dl=(_st.lng-_sf.lng)*Math.PI/180;
+          var _a=Math.sin(_dp/2)*Math.sin(_dp/2)+Math.cos(_p1)*Math.cos(_p2)*Math.sin(_dl/2)*Math.sin(_dl/2);
+          totalMiles += _R*2*Math.atan2(Math.sqrt(_a),Math.sqrt(1-_a))*1.2;
+        }
+      }
+      if (!d.driveDay) _sNavPrevId = d.stopId;
+    });
+  }
+  /* Use CONFIG.totalMiles as a floor so a manually-set total is never hidden */
+  totalMiles = Math.max(Math.round(totalMiles), CONFIG.totalMiles || 0);
 
   /* Count visible days (excluding removed stops) */
   var visibleDays = TRIP_DAYS.filter(function(d) {
