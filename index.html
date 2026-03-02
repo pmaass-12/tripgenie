@@ -3314,6 +3314,11 @@
           style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:100px;padding:6px 13px;font-size:.73rem;font-weight:800;cursor:pointer;font-family:var(--font);user-select:none;-webkit-user-select:none;display:flex;align-items:center;gap:5px;white-space:nowrap;">
           &#128666; We Left
         </button>
+        <button id="ddm-booking-btn"
+          onclick="openDDMBookingActions()"
+          style="background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:100px;padding:6px 13px;font-size:.73rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;display:flex;align-items:center;gap:5px;">
+          📞 Booking
+        </button>
         <!-- ddm-music-btn kept hidden so JS refs don't break -->
         <button id="ddm-music-btn" style="display:none;" onclick="openLocalMusic()"></button>
       </div>
@@ -14845,6 +14850,55 @@ function closeDayDetail() {
   document.body.style.overflow = '';
 }
 
+/* ── DDM BOOKING ACTIONS ─────────────────────────────────────────────
+   Opens a booking action sheet for the current stop shown in the DDM.
+   Shows existing booking confirmations + Book via Agent quick-launch. */
+function openDDMBookingActions() {
+  var stop = window._ddmCurrentStop;
+  var stopId = stop ? stop.id : null;
+
+  /* Find days for this stop to get check-in / check-out */
+  var stopDays = stopId ? TRIP_DAYS.filter(function(d) { return d.stopId === stopId && !d.driveDay; }) : [];
+  var checkin  = stopDays.length > 0 ? stopDays[0].date : '';
+  var checkout = stopDays.length > 0 ? stopDays[stopDays.length - 1].date : '';
+
+  /* Existing booking confirmations */
+  var bcs = (appState.bookingConfirmations && stopId && appState.bookingConfirmations[stopId]) || [];
+  var bcHtml = '';
+  if (bcs.length > 0) {
+    bcHtml = '<div style="margin-bottom:12px;">'
+      + bcs.map(function(bc) {
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--green-l);border:1px solid #a5d6a7;border-radius:8px;margin-bottom:5px;cursor:pointer;" onclick="openBookingModal(' + stopId + ')">'
+            + '<div><div style="font-weight:700;font-size:.82rem;">' + (bc.propertyName || 'Booking') + '</div>'
+            + '<div style="font-size:.72rem;color:var(--text-2);">🎫 Tap to view confirmation</div></div>'
+            + '<span style="font-size:1.1rem;">📄</span></div>';
+        }).join('')
+      + '</div>';
+  }
+
+  /* Pre-populate lodging name from the stop's sleep field */
+  var lodgingName = (stopDays[0] && stopDays[0].sleep) || (stop ? (stop.emoji ? stop.emoji + ' ' : '') + stop.name : '');
+
+  /* Store booking data in global queue */
+  if (!window._labsBookCards) window._labsBookCards = [];
+  var bIdx = window._labsBookCards.push({ n: lodgingName, p: '', ci: checkin, co: checkout, sn: stop ? _sn(stop) : '' }) - 1;
+
+  var m = document.createElement('div');
+  m.id = 'ddm-booking-modal';
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.52);z-index:9999;display:flex;align-items:flex-end;justify-content:center;';
+  m.innerHTML = '<div style="background:#fff;border-radius:18px 18px 0 0;padding:20px 18px 28px;width:100%;max-width:480px;box-shadow:0 -4px 32px rgba(0,0,0,.18);">'
+    + '<div style="width:40px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 16px;"></div>'
+    + '<div style="font-size:1rem;font-weight:800;margin-bottom:3px;">📞 Booking Actions</div>'
+    + '<div style="font-size:.75rem;color:var(--text-2);margin-bottom:14px;">' + (stop ? _sn(stop) : 'Current stop') + (checkin ? ' · ' + checkin + ' → ' + checkout : '') + '</div>'
+    + bcHtml
+    + '<button onclick="document.getElementById(\'ddm-booking-modal\').remove();_labsQuickBookModal(' + bIdx + ')" style="width:100%;background:var(--blue);color:#fff;border:none;border-radius:12px;padding:13px;font-size:.88rem;font-weight:800;cursor:pointer;font-family:var(--font);margin-bottom:8px;">📞 Book via AI Calling Agent</button>'
+    + '<button onclick="document.getElementById(\'ddm-booking-modal\').remove();openBookingModal(' + stopId + ')" style="width:100%;background:var(--bg);border:1.5px solid var(--border);color:var(--text);border-radius:12px;padding:11px;font-size:.84rem;font-weight:700;cursor:pointer;font-family:var(--font);margin-bottom:8px;">📄 View / Add Booking Confirmation</button>'
+    + '<button onclick="document.getElementById(\'ddm-booking-modal\').remove()" style="width:100%;background:none;border:none;color:var(--text-3);font-size:.8rem;cursor:pointer;padding:6px;">Cancel</button>'
+    + '</div>';
+  document.body.appendChild(m);
+  m.addEventListener('click', function(e) { if (e.target === m) m.remove(); });
+}
+
 function openTripGenieAboutStop(question) {
   var stop = window._ddmCurrentStop;
   var stopName = stop ? (stop.name + (stop.state ? ', ' + stop.state : '')) : '';
@@ -16757,7 +16811,7 @@ function loadStopHotels(stopId) {
 
       /* Store booking data in global queue so onclick can reference by index safely */
       if (!window._labsBookCards) window._labsBookCards = [];
-      var _bIdx = window._labsBookCards.push({ n: plName, p: plPhone, ci: arrivalDate, co: departDate, sn: _sn(stop) }) - 1;
+      var _bIdx = window._labsBookCards.push({ n: plName, p: plPhone, ci: arrivalDate, co: departDate, sn: _sn(stop), t: plType }) - 1;
 
       html += '<div style="display:flex;gap:11px;padding:12px 14px;'
         + (count > 0 ? 'border-top:1px solid var(--border);' : '')
@@ -17665,32 +17719,51 @@ function _labsQuickBookConfirm(idx) {
   if (!info) return;
   var phoneEl = document.getElementById('lqb-phone');
   var phone = phoneEl ? phoneEl.value.trim() : info.p;
-  if (!phone) { showToast('⚠️ Enter the campground phone number first', 2800); return; }
+  if (!phone) { showToast('⚠️ Enter the phone number first', 2800); return; }
   var modal = document.getElementById('labs-qb-modal');
   if (modal) modal.remove();
-  _labsDirectCall(info.n, phone, info.ci, info.co);
+  var isHotel = (info.t || '').toLowerCase().indexOf('hotel') >= 0;
+  _labsDirectCall(info.n, phone, info.ci, info.co, '', isHotel);
 }
 
-/* Shared call-maker used by both quick-book and the Labs form */
-async function _labsDirectCall(parkName, parkPhone, checkin, checkout, special) {
+/* Shared call-maker used by both quick-book and the Labs form.
+   isHotel = true  → hotel script (room types, breakfast, no propane/hookups)
+   isHotel = false → campground/RV park script (hookups, propane)            */
+async function _labsDirectCall(parkName, parkPhone, checkin, checkout, special, isHotel) {
   var cfg = appState.labsPhoneBooking || {};
   if (!cfg.elvKey)  { showToast('⚠️ Add your ElevenLabs API key in the Labs tab first', 3000); return; }
   if (!cfg.agentId) { showToast('⚠️ Add your ElevenLabs Agent ID in the Labs tab first', 3000); return; }
 
-  var systemPrompt = [
-    'You are an AI assistant calling on behalf of the Maass family to book a campground reservation.',
-    'RV: ' + (cfg.rvName || 'Class A RV') + ', ' + (cfg.rvLen || '40') + ' ft, needs ' + (cfg.rvAmps || '50') + ' amp hookup.',
-    'Guests: ' + (cfg.adults || '2') + ' adults, ' + (cfg.kids || 'several children') + '.',
-    cfg.hasPets ? 'Pets: ' + cfg.hasPets + '.' : 'No pets.',
-    cfg.extraCar ? 'Extra vehicle: ' + cfg.extraCar + '.' : '',
-    'Reservation: ' + parkName + ', check-in ' + checkin + ', check-out ' + checkout + '.',
-    special ? 'Special requests: ' + special : '',
-    'Contact: ' + (cfg.phone || 'will provide') + '.',
-    'If the campground asks for a credit card or payment at any point, say: "Could you hold that reservation for about 5 minutes? Paul is going to call you right back to give you his card number directly. Could I get the best number and a contact name for him to reach?" Then confirm they will hold it and end the call politely. Do NOT provide any card numbers under any circumstances.',
-    'Before ending the call, always ask these three questions: (1) "What is the total nightly rate including all taxes and fees?" (2) "Do you offer propane refills for RVs on site?" (3) "What is your cancellation policy — how many hours or days in advance do we need to cancel to avoid a charge?"',
-    'Before hanging up, clearly summarize back: the all-in nightly rate with taxes, whether propane is available, the cancellation policy, and the direct callback number.',
-    'Be friendly, professional, confirm all reservation details, and always get a direct callback number and confirm any hold before ending.'
-  ].filter(Boolean).join(' ');
+  var systemPrompt;
+  if (isHotel) {
+    systemPrompt = [
+      'You are an AI assistant calling on behalf of the Maass family to check availability and rates at a hotel.',
+      'Guests: ' + (cfg.adults || '2') + ' adults, ' + (cfg.kids || 'several children') + '.',
+      cfg.hasPets ? 'Pets: ' + cfg.hasPets + '.' : 'No pets.',
+      'Stay: ' + parkName + ', check-in ' + checkin + ', check-out ' + checkout + '.',
+      special ? 'Special requests: ' + special : '',
+      'Ask about availability for either a room with two double/queen beds, or a king bed room with a sofa bed — whichever is available for a family.',
+      'If a credit card or payment is required to hold the room, say: "Could you hold that reservation for about 5 minutes? Paul is going to call you right back to give you his card number directly. Could I get the best number and a contact name for him to reach?" Then confirm they will hold it and end the call politely. Do NOT provide any card numbers under any circumstances.',
+      'Before ending the call, always ask these three questions: (1) "What is the total nightly rate including all taxes and fees?" (2) "Is breakfast included, and if so what does it include?" (3) "What is your cancellation policy — how many hours or days in advance do we need to cancel to avoid a charge?"',
+      'Before hanging up, clearly summarize: room type available, all-in nightly rate, breakfast details, cancellation policy, and direct callback number.',
+      'Be friendly and professional. Confirm all details before ending.'
+    ].filter(Boolean).join(' ');
+  } else {
+    systemPrompt = [
+      'You are an AI assistant calling on behalf of the Maass family to book a campground reservation.',
+      'RV: ' + (cfg.rvName || 'Class A RV') + ', ' + (cfg.rvLen || '40') + ' ft, needs ' + (cfg.rvAmps || '50') + ' amp hookup.',
+      'Guests: ' + (cfg.adults || '2') + ' adults, ' + (cfg.kids || 'several children') + '.',
+      cfg.hasPets ? 'Pets: ' + cfg.hasPets + '.' : 'No pets.',
+      cfg.extraCar ? 'Extra vehicle: ' + cfg.extraCar + '.' : '',
+      'Reservation: ' + parkName + ', check-in ' + checkin + ', check-out ' + checkout + '.',
+      special ? 'Special requests: ' + special : '',
+      'Contact: ' + (cfg.phone || 'will provide') + '.',
+      'If the campground asks for a credit card or payment at any point, say: "Could you hold that reservation for about 5 minutes? Paul is going to call you right back to give you his card number directly. Could I get the best number and a contact name for him to reach?" Then confirm they will hold it and end the call politely. Do NOT provide any card numbers under any circumstances.',
+      'Before ending the call, always ask these three questions: (1) "What is the total nightly rate including all taxes and fees?" (2) "Do you offer propane refills for RVs on site?" (3) "What is your cancellation policy — how many hours or days in advance do we need to cancel to avoid a charge?"',
+      'Before hanging up, clearly summarize back: the all-in nightly rate with taxes, whether propane is available, the cancellation policy, and the direct callback number.',
+      'Be friendly, professional, confirm all reservation details, and always get a direct callback number and confirm any hold before ending.'
+    ].filter(Boolean).join(' ');
+  }
 
   /* Request browser notification permission before the call so it\'s ready when the call ends */
   if ('Notification' in window && Notification.permission === 'default') {
@@ -17774,9 +17847,11 @@ function _labsNotifyCallBack(callInfo, convData) {
     var rateMatch = allText.match(/\$[\d,]+(?:\.\d{2})?(?:\s*(?:per|a|\/)\s*night)?/i)
                  || allText.match(/[\d,]+(?:\.\d{2})?\s*dollars?\s*(?:per|a)\s*night/i);
     if (rateMatch) rateInfo = rateMatch[0].trim();
-    /* Propane */
+    /* Propane (campgrounds) or Breakfast (hotels) */
     if      (/propane.{0,40}(?:yes|available|offer|have|fill|refill|do)/i.test(allText)) propaneInfo = '✅ Propane available on site';
     else if (/(?:no|don.t|not).{0,20}propane|propane.{0,20}(?:no\b|not|don.t)/i.test(allText)) propaneInfo = '❌ No propane on site';
+    else if (/breakfast.{0,60}(?:include|complimentary|free|hot|continental)/i.test(allText)) propaneInfo = '🍳 Breakfast included';
+    else if (/(?:no|not|don.t).{0,20}breakfast|breakfast.{0,20}(?:not|no\b|extra)/i.test(allText)) propaneInfo = '🍳 Breakfast not included';
     /* Cancellation policy */
     var cancelMatch = allText.match(/cancel.{0,120}?(\d+\s*(?:hour|day|week)s?[^.]*)/i)
                    || allText.match(/(\d+\s*(?:hour|day|week)s?[^.]*?cancel[^.]*)/i);
@@ -17807,10 +17882,11 @@ function _labsNotifyCallBack(callInfo, convData) {
 
   /* Browser notification */
   if ('Notification' in window && Notification.permission === 'granted') {
-    var body = 'Call' + (phone ? ' ' + phone : ' them') + ' back to provide your credit card.'
-      + (rateInfo    ? ' Rate: ' + rateInfo + '.' : '')
-      + (propaneInfo ? ' ' + propaneInfo + '.' : '')
-      + (cancelInfo  ? ' Cancel: ' + cancelInfo + '.' : '');
+    var bodyLines = ['Call' + (phone ? ' ' + phone : ' them') + ' back to provide your credit card.'];
+    if (rateInfo)   bodyLines.push('💰 Rate: ' + rateInfo);
+    if (propaneInfo) bodyLines.push(propaneInfo);
+    if (cancelInfo)  bodyLines.push('🚫 Cancel: ' + cancelInfo);
+    var body = bodyLines.join('\n');
     var n = new Notification('📞 Call ' + name + ' back now!', {
       body: body,
       icon: '/favicon.ico',
