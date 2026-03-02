@@ -55,6 +55,14 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (twenty-seventh context) — 2026-03-02
+
+- **CRITICAL BUG FIX — Planner tab floating over all other views**: `#tab-planner { display:flex !important }` in CSS was overriding `.tab-panel { display:none }` (ID specificity + `!important` beats class specificity). This caused the entire Planner tab (Schedule, Day Planner, all sub-views) to always be `display:flex` — floating on top of Dashboard and every other tab simultaneously. Fix: removed `display` from the base `#tab-planner` rule; added `#tab-planner.active { display:flex !important }` so flex layout only kicks in when the tab is actually selected.
+
+- **`_labsTestCall()` function** (completes test mode feature): Reads the phone number from `labs-test-phone` and scenario from `labs-test-scenario` radio. Calls `_labsDirectCall` with a fake venue name, today as check-in/tomorrow as checkout, and "TEST CALL — no real booking" as special instructions. Shows status in `labs-test-status` div. On error, surfaces the error message in the status box.
+
+- **`_labsSavePhoneBookingConfig` now saves test settings**: When Save Profile is clicked, also reads `labs-test-phone` and `labs-test-scenario` radio and persists them to `appState.labsPhoneBooking.testPhone` / `.testScenario` alongside the rest of the profile.
+
 ### Session 18 (twenty-sixth context) — 2026-03-02
 
 - **"📞 Book via Agent" button on every Hotels & RV Parks card**: Each lodging card in `loadStopHotels` now has a blue "📞 Book via Agent" button. The Gemini prompt was updated to include a `PHONE:` field so phone numbers are parsed alongside name/type/price. Each card stores its data in `window._labsBookCards[]` (indexed by position) so the onclick can reference it safely. Phone number is shown inline next to the button.

@@ -17707,6 +17707,11 @@ function _labsSavePhoneBookingConfig() {
   cfg.phone    = (document.getElementById('labs-phone')     || {}).value || '';
   cfg.elvKey   = (document.getElementById('labs-elv-key')   || {}).value || '';
   cfg.agentId  = (document.getElementById('labs-agent-id')  || {}).value || '';
+  /* Test mode settings */
+  var _tpEl = document.getElementById('labs-test-phone');
+  var _tsEl = document.querySelector('input[name="labs-test-scenario"]:checked');
+  if (_tpEl && _tpEl.value) cfg.testPhone    = _tpEl.value;
+  if (_tsEl)                 cfg.testScenario = _tsEl.value;
   /* Also save elvKey to top-level appState for voice features */
   if (cfg.elvKey) appState.elevenLabsKey = cfg.elvKey;
   saveState();
@@ -18051,6 +18056,48 @@ function _labsNotifyCallBack(callInfo, convData) {
       requireInteraction: true
     });
     n.onclick = function() { window.focus(); n.close(); };
+  }
+}
+
+/* ── TEST MODE: call yourself to test the agent script ───────────── */
+async function _labsTestCall() {
+  var phoneEl    = document.getElementById('labs-test-phone');
+  var statusEl   = document.getElementById('labs-test-status');
+  var scenarioEl = document.querySelector('input[name="labs-test-scenario"]:checked');
+  var testPhone  = phoneEl ? phoneEl.value.trim() : '';
+  var scenario   = scenarioEl ? scenarioEl.value : 'campground';
+  if (!testPhone) {
+    if (statusEl) { statusEl.style.display = 'block'; statusEl.style.background = '#fff0f0'; statusEl.style.color = 'var(--red)'; statusEl.textContent = '⚠️ Enter a phone number to call.'; }
+    return;
+  }
+  var cfg = appState.labsPhoneBooking || {};
+  if (!cfg.elvKey || !cfg.agentId) {
+    if (statusEl) { statusEl.style.display = 'block'; statusEl.style.background = '#fff0f0'; statusEl.style.color = 'var(--red)'; statusEl.innerHTML = '⚠️ Save your ElevenLabs API key &amp; Agent ID first (Save Profile above).'; }
+    return;
+  }
+  /* Save test settings */
+  if (!appState.labsPhoneBooking) appState.labsPhoneBooking = {};
+  appState.labsPhoneBooking.testPhone    = testPhone;
+  appState.labsPhoneBooking.testScenario = scenario;
+  saveState();
+
+  var isHotel = (scenario === 'hotel');
+  var venueName = isHotel ? 'Test Hotel Front Desk' : 'Test Campground Office';
+  var today = new Date();
+  var ci = today.toISOString().slice(0,10);
+  var co = new Date(today.getTime() + 86400000).toISOString().slice(0,10);
+
+  if (statusEl) {
+    statusEl.style.display = 'block';
+    statusEl.style.background = '#fffbeb';
+    statusEl.style.color = '#92400e';
+    statusEl.innerHTML = '📞 Calling <strong>' + testPhone + '</strong>\u2026 Answer and pretend you\'re the ' + (isHotel ? 'hotel front desk' : 'campground office') + '!';
+  }
+
+  try {
+    await _labsDirectCall(venueName, testPhone, ci, co, 'TEST CALL — no real booking', isHotel, null);
+  } catch(e) {
+    if (statusEl) { statusEl.style.background = '#fff0f0'; statusEl.style.color = 'var(--red)'; statusEl.textContent = '\u274c Error: ' + (e.message || e); }
   }
 }
 
