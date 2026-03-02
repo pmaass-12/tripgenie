@@ -17275,7 +17275,7 @@ function renderLabsTools() {
     + '<strong>5. Copy Agent ID:</strong> From the agent page URL or settings — looks like <code>agent_XXXXXXXX</code><br>'
     + '<strong>6. Get API key:</strong> Profile → API Keys → Create key → copy it here<br>'
     + '<strong style="color:#92400e;">⚠️ Cost:</strong> ElevenLabs charges per minute for phone calls. Check their pricing. Each booking call typically runs 3–8 minutes.<br>'
-    + '<strong style="color:#92400e;">⚠️ Credit card:</strong> The agent CANNOT provide payment info. When asked for a card, the agent will say it will call back — you then complete payment directly with the park.'
+    + '<strong style="color:#92400e;">⚠️ Credit card:</strong> The agent CANNOT provide payment info. When the park asks for a card, the agent says <em>"Paul will call you back to finalize payment"</em> and ends the call. <strong>You then call the park yourself</strong> to give your card and confirm. The AI just handles the availability check and reservation hold — payment is always done by you directly.'
     + '</div></div>'
 
     /* How it works */
@@ -17413,7 +17413,7 @@ async function _labsStartCall() {
     'Reservation: ' + parkName + ', check-in ' + checkin + ', check-out ' + checkout + '.',
     special ? 'Special requests: ' + special : '',
     'Contact: ' + (cfg.phone || 'will provide') + '.',
-    'If asked for a credit card, politely say you\'ll call back with payment or complete online. Do NOT provide card numbers.',
+    'If asked for a credit card or payment, say: "Paul will call you back shortly to provide payment and finalize the reservation — can I get a name and direct number for him to call?" Do NOT provide any card numbers under any circumstances.',
     'Be friendly, professional, and confirm all reservation details before ending the call.'
   ].filter(Boolean).join(' ');
 
