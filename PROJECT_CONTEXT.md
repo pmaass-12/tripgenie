@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-02 (Session 18, ninth context)
+2026-03-02 (Session 18, tenth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -346,6 +346,11 @@ tripgenie/
     - Shows weather pill if available, TODAY badge, stop break time on drive days
     - Month headers, phase name labels, "Full day detail →" button on explore days
     - Helper functions: `_calFmtTime(h, m)`, `_calAddHours(h, m, float)`, `_calActivity(title)`
+
+- Session 18 continued (2026-03-02, tenth context):
+  - **Agenda view in Planner tab**: New "📅 Agenda" button added to Planner segmented control (between Schedule and Day Planner). Renders `renderPlannerAgenda()` into a new `#agenda-content` div. Same Google Calendar–style time blocks as Tools Calendar but lives in the Planner tab for quick access during trip planning. Drive days show departure → drive → check-in → explore → dinner blocks; explore days show breakfast → main activity → lunch → afternoon → camp → dinner.
+  - **`_homeId` fix in `_recalcDriveMiles`**: Line 7465 referenced `_homeId` which was not defined in that function's scope. Fixed to `var _recalcHome = _tripHomeStop(); var homeId = _recalcHome ? _recalcHome.id : 15;` — resolves "ReferenceError: _homeId is not defined" Promise rejection when tapping "Recalculate Drive Miles".
+  - **Drive bar origin state fix**: `_getDriveDayTitle` was using raw `prevPhase` string (which lacks state suffix) as the origin city label, producing "Winchester → Wytheville, VA" (Winchester missing state). Fixed: prefer `_sn(getStop(prevDay.stopId))` which appends state via `_inferStopState` lookup, falling back to `prevPhase` only if no stop object found.
 
 ## Suggested Next Steps
 - **0-day waypoint stops**: User wants stops with 0 nights for driving waypoints (fuel, Walmart overnight, route planning) — not yet built

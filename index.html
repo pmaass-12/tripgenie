@@ -2776,13 +2776,15 @@
 
     <!-- PLANNER TAB (Schedule + Stops combined) -->
     <div class="tab-panel" id="tab-planner">
-      <div style="display:flex;gap:8px;margin-bottom:20px;padding-top:4px;">
-        <button id="plan-seg-schedule" onclick="_mainSeg('schedule')" style="flex:1;padding:9px 16px;border:1.5px solid var(--orange);border-radius:50px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-calendar-days"></i> Schedule</button>
-        <button id="plan-seg-stops" onclick="_mainSeg('stops')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-map-pin"></i> Day Planner</button>
-        <button id="plan-seg-stats" onclick="_mainSeg('stats')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-star"></i> Trip Stats</button>
-        <button id="plan-seg-friends" onclick="_mainSeg('friends')" style="flex:1;padding:9px 16px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.82rem;font-weight:700;cursor:pointer;transition:all .15s;"><i class="fa-solid fa-lightbulb"></i> Suggestions</button>
+      <div style="display:flex;gap:6px;margin-bottom:20px;padding-top:4px;flex-wrap:wrap;">
+        <button id="plan-seg-schedule" onclick="_mainSeg('schedule')" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--orange);border-radius:50px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><i class="fa-solid fa-calendar-days"></i> Schedule</button>
+        <button id="plan-seg-agenda" onclick="_mainSeg('agenda')" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;">📅 Agenda</button>
+        <button id="plan-seg-stops" onclick="_mainSeg('stops')" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><i class="fa-solid fa-map-pin"></i> Day Planner</button>
+        <button id="plan-seg-stats" onclick="_mainSeg('stats')" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><i class="fa-solid fa-star"></i> Trip Stats</button>
+        <button id="plan-seg-friends" onclick="_mainSeg('friends')" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><i class="fa-solid fa-lightbulb"></i> Suggestions</button>
       </div>
       <div id="schedule-content" style="display:block"></div>
+      <div id="agenda-content" style="display:none"></div>
       <div id="stops-content" style="display:none"></div>
       <div id="stats-content" style="display:none"></div>
       <div id="friends-content" style="display:none"></div>
@@ -5000,8 +5002,9 @@ function _getDriveDayTitle(d) {
   }
   var prevPhase = prevDay.phase || '';
   if (prevPhase !== myPhase) {
-    // Different phase — standard case: use prev phase name as origin
-    var originName = prevPhase || (getStop(prevDay.stopId) ? _sn(getStop(prevDay.stopId)) : '');
+    // Different phase — prefer the stop's full name (includes state via _sn) over raw phase string
+    var _originStop = getStop(prevDay.stopId);
+    var originName = (_originStop ? _sn(_originStop) : '') || prevPhase;
     return originName ? (originName + ' \u2192 ' + destName) : d.title;
   } else {
     // Same phase as previous day — multi-leg drive (e.g. Day 2 of return trip).
@@ -7462,7 +7465,8 @@ function _refreshAll(silent) {
 async function _recalcDriveMiles(silent) {
   var days  = (appState && appState.customTripData && appState.customTripData.days)  || TRIP_DAYS;
   var stops = (appState && appState.customTripData && appState.customTripData.stops) || TRIP_STOPS;
-  var homeId = _homeId || 15;
+  var _recalcHome = _tripHomeStop();
+  var homeId = _recalcHome ? _recalcHome.id : 15;
 
   if (!silent) showToast('⏳ Calculating real drive distances…', 3000);
 
@@ -9935,12 +9939,276 @@ function renderTripStats() {
   el.innerHTML = html;
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   PLANNER AGENDA VIEW — Google Calendar–style time-block agenda
+   Renders into #agenda-content inside the Planner tab.
+   ══════════════════════════════════════════════════════════════════ */
+function renderPlannerAgenda() {
+  var el = document.getElementById('agenda-content');
+  if (!el) return;
+
+  /* Build skip set (removed stops) */
+  var _agRemoved = {};
+  (appState.removedStops || []).forEach(function(id) { _agRemoved[id] = true; });
+  var _agSkip = {};
+  TRIP_DAYS.forEach(function(d) { if (_agRemoved[d.stopId]) _agSkip[d.day] = true; });
+
+  /* Sort days chronologically */
+  var _agSorted = TRIP_DAYS.slice().sort(function(a,b){
+    if (a.date < b.date) return -1; if (a.date > b.date) return 1; return (a.day||0)-(b.day||0);
+  });
+
+  /* Visible day numbering */
+  var _agNum = {}, _agCtr = 0;
+  _agSorted.forEach(function(d) {
+    if (d.sleepType === 'home' && !d.driveDay) return;
+    if (_agSkip[d.day]) return;
+    _agCtr++; _agNum[d.day] = _agCtr;
+  });
+
+  /* Pause offsets (shift effective dates past pauses) */
+  var _agPauses = (appState.pauseDays || []).filter(function(p){return p.startDate&&p.endDate;})
+    .sort(function(a,b){return a.startDate<b.startDate?-1:1;});
+  var _agPI = 0, _agCN = 0;
+
+  /* Driving prefs */
+  var _agDepart  = (appState.drivingPrefs && appState.drivingPrefs.departureTime) || '08:00';
+  var _agMaxH    = (appState.drivingPrefs && appState.drivingPrefs.maxHours)       || 4;
+  var _agSbEvery = (appState.drivingPrefs && appState.drivingPrefs.stopBreakEvery) || 0;
+  var _agSbMins  = (appState.drivingPrefs && appState.drivingPrefs.stopBreakMins)  || 30;
+
+  var todayStr  = new Date().toISOString().slice(0,10);
+  var lastMonth = '';
+
+  /* ── Shared micro-styles ── */
+  var _row  = 'display:flex;align-items:flex-start;gap:0;padding:6px 0;border-bottom:1px solid rgba(0,0,0,.05);';
+  var _time = 'min-width:54px;font-size:.68rem;font-weight:700;color:var(--text-3);padding-top:2px;flex-shrink:0;line-height:1.2;';
+  var _ico  = 'width:24px;font-size:.9rem;flex-shrink:0;text-align:center;line-height:1.6;';
+  var _txt  = 'flex:1;font-size:.8rem;color:var(--text);line-height:1.35;';
+  var _sub  = 'font-size:.68rem;color:var(--text-3);margin-top:1px;';
+
+  var html = '<div style="padding:0 0 80px 0;">';
+
+  for (var ai = 0; ai < _agSorted.length; ai++) {
+    var d = _agSorted[ai];
+    if (d.sleepType === 'home' && !d.driveDay) continue;
+    if (_agSkip[d.day]) continue;
+
+    /* Advance pause offset counter */
+    while (_agPI < _agPauses.length && _agPauses[_agPI].startDate <= d.date) {
+      _agCN += Math.max(0, Math.round((new Date(_agPauses[_agPI].endDate+'T00:00:00') - new Date(_agPauses[_agPI].startDate+'T00:00:00')) / 86400000));
+      _agPI++;
+    }
+    var _eMs  = new Date(d.date+'T00:00:00').getTime() + _agCN * 86400000;
+    var _eObj = new Date(_eMs);
+    var _eStr = _eObj.toISOString().slice(0,10);
+
+    /* Month divider */
+    var _mLabel = _eObj.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+    if (_mLabel !== lastMonth) {
+      html += '<div style="font-weight:900;font-size:.88rem;color:var(--blue);margin:' + (lastMonth?'20px':'2px') + ' 0 8px 0;'
+        + 'padding:5px 12px;background:#eef4fb;border-radius:8px;letter-spacing:.01em;">'
+        + _mLabel + '</div>';
+      lastMonth = _mLabel;
+    }
+
+    var _isToday = (_eStr === todayStr);
+    var _isDrive = d.driveDay;
+    var _isSB    = d.springBreak;
+    var _isHome  = d.sleepType === 'home';
+    var _stop    = getStop(d.stopId);
+    var _dispNum = _agNum[d.day] || d.day;
+
+    /* Accent colors */
+    var _hdrBg = _isToday ? '#E8813A' : _isDrive ? '#c05a10' : _isSB ? '#7B5EA7' : _isHome ? '#3A8A5C' : '#2C5F8A';
+
+    /* Weekday/date labels */
+    var _wday = _eObj.toLocaleDateString('en-US', { weekday:'short' });
+    var _mday = _eObj.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    var _wdayFull = _eObj.toLocaleDateString('en-US', { weekday:'long' });
+
+    /* Weather */
+    var _wx = (appState.weather && appState.weather[d.stopId] && appState.weather[d.stopId][_eStr]) || null;
+    var _wxStr = _wx && _wx.high != null
+      ? wxIcon(_wx.code) + ' ' + _wx.high + '&#176;/' + _wx.low + '&#176;' + (_wx.type==='typical'?'<span style="opacity:.65;font-size:.6rem;"> (typical)</span>':'')
+      : '';
+
+    /* ── Day card ── */
+    html += '<div style="margin-bottom:10px;border-radius:10px;overflow:hidden;box-shadow:0 1px 5px rgba(0,0,0,.09);">';
+
+    /* Header row */
+    html += '<div style="background:' + _hdrBg + ';color:#fff;padding:9px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;">';
+    html += '<div style="display:flex;align-items:center;gap:10px;">'
+      + '<div style="background:rgba(255,255,255,.22);border-radius:7px;padding:4px 9px;text-align:center;min-width:40px;">'
+      + '<div style="font-size:.68rem;font-weight:700;opacity:.9;line-height:1.3;">' + _mday + '</div>'
+      + '<div style="font-size:.58rem;font-weight:700;opacity:.7;line-height:1.1;">Day ' + _dispNum + '</div>'
+      + '</div>'
+      + '<div>'
+      + '<div style="font-weight:900;font-size:.92rem;line-height:1.2;">' + _wdayFull
+        + (_isToday ? ' <span style="background:rgba(255,255,255,.3);font-size:.58rem;padding:1px 7px;border-radius:100px;vertical-align:middle;font-weight:800;">TODAY</span>' : '')
+      + '</div>'
+      + '<div style="font-size:.72rem;opacity:.85;margin-top:2px;">'
+        + (_isDrive ? '🚗 Drive Day' : _isSB ? '🌟 Spring Break' : _isHome ? '🏠 Home' : (_stop ? (_stop.emoji||'') + ' ' : '') + (d.phase||''))
+      + '</div></div></div>';
+    if (_wxStr) html += '<div style="font-size:.7rem;text-align:right;line-height:1.5;">' + _wxStr + '</div>';
+    html += '</div>'; /* end header */
+
+    /* Body: time blocks */
+    html += '<div style="background:var(--card);padding:8px 12px;">';
+
+    /* ── DRIVE DAY ── */
+    if (_isDrive) {
+      var _dpt  = (appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].departTime) || _agDepart;
+      var _dptH = parseInt(_dpt.split(':')[0], 10);
+      var _dptM = parseInt(_dpt.split(':')[1]||'0', 10);
+      var _drH  = d.driveHours || 0;
+      var _sbN  = (_agSbEvery>0 && _drH>0) ? Math.floor(_drH/_agSbEvery) : 0;
+      var _sbH  = _sbN>0 ? Math.round((_sbN*_agSbMins)/60*10)/10 : 0;
+      var _totH = _drH + _sbH;
+      var _arrT = _calAddHours(_dptH, _dptM, _totH);
+      var _ciT  = _calAddHours(_arrT.h, _arrT.m, 0.75);
+      var _aftT = _calAddHours(_ciT.h, _ciT.m, 0.5);
+      var _drTitle = (typeof _getDriveDayTitle==='function') ? _getDriveDayTitle(d) : (d.title||'Drive day');
+      var _slpIcon = d.sleepType==='rv_park'?'🏕':d.sleepType==='walmart'?'🛒':d.sleepType==='boondock'?'🏕':'⛺';
+
+      /* 7 AM — breakfast */
+      html += '<div style="' + _row + '">'
+        + '<div style="' + _time + '">' + _calFmtTime(7) + '</div>'
+        + '<div style="' + _ico  + '">🍳</div>'
+        + '<div style="' + _txt  + '"><strong>Breakfast &amp; Pack Up</strong>'
+        + '<div style="' + _sub  + '">Get the RV road-ready</div></div></div>';
+
+      /* Departure — drive block */
+      html += '<div style="' + _row + 'background:#fff8f3;margin:0 -12px;padding:7px 12px;">'
+        + '<div style="' + _time + '">' + _calFmtTime(_dptH, _dptM) + '</div>'
+        + '<div style="' + _ico  + '">🚗</div>'
+        + '<div style="' + _txt  + '"><strong>' + _drTitle + '</strong>'
+        + '<div style="' + _sub  + '">'
+          + (d.miles ? d.miles.toLocaleString() + ' mi · ' : '')
+          + (_drH ? _drH + 'h drive' : '')
+          + (_sbH ? ' + ' + _sbH + 'h stops' : '')
+          + ' · Arrive ~' + _calFmtTime(_arrT.h, _arrT.m)
+        + '</div></div></div>';
+
+      /* Arrive + check-in */
+      if (_isHome) {
+        html += '<div style="' + _row + '">'
+          + '<div style="' + _time + '">' + _calFmtTime(_arrT.h, _arrT.m) + '</div>'
+          + '<div style="' + _ico  + '">🏠</div>'
+          + '<div style="' + _txt  + '"><strong>Welcome Home!</strong>'
+          + '<div style="' + _sub  + '">Unpack, decompress, celebrate 🎉</div></div></div>';
+      } else if (d.sleep) {
+        html += '<div style="' + _row + '">'
+          + '<div style="' + _time + '">' + _calFmtTime(_arrT.h, _arrT.m) + '</div>'
+          + '<div style="' + _ico  + '">' + _slpIcon + '</div>'
+          + '<div style="' + _txt  + '"><strong>Arrive &amp; Check In</strong>'
+          + '<div style="' + _sub  + '">' + d.sleep + '</div></div></div>';
+      }
+
+      /* Afternoon explore if arriving before 5 PM */
+      if (!_isHome && _aftT.h < 17) {
+        html += '<div style="' + _row + '">'
+          + '<div style="' + _time + '">' + _calFmtTime(_aftT.h, _aftT.m) + '</div>'
+          + '<div style="' + _ico  + '">🌄</div>'
+          + '<div style="' + _txt  + '"><strong>Explore the Area</strong>'
+          + '<div style="' + _sub  + '">Short walk, local sights, or just relax</div></div></div>';
+      }
+
+      /* Dinner */
+      if (!_isHome) {
+        html += '<div style="' + _row + 'border-bottom:none;">'
+          + '<div style="' + _time + '">6:30\u00a0PM</div>'
+          + '<div style="' + _ico  + '">🍽</div>'
+          + '<div style="' + _txt  + '"><strong>Dinner</strong>'
+          + '<div style="' + _sub  + '">' + (d.dinner || 'Camp cooking or local restaurant') + '</div></div></div>';
+      }
+
+    /* ── EXPLORE / ACTIVITY DAY ── */
+    } else {
+      var _activities = [];
+      if (d.activities && d.activities.length) {
+        d.activities.forEach(function(act) {
+          _activities.push({ icon:'🎯', text: act });
+        });
+      }
+      if (d.title && !_activities.length) _activities.push({ icon:'📍', text: d.title });
+
+      /* Breakfast */
+      html += '<div style="' + _row + '">'
+        + '<div style="' + _time + '">' + _calFmtTime(8) + '</div>'
+        + '<div style="' + _ico  + '">🍳</div>'
+        + '<div style="' + _txt  + '"><strong>Breakfast</strong>'
+        + '<div style="' + _sub  + '">' + (d.breakfast || 'Morning at camp') + '</div></div></div>';
+
+      /* Main activity / title */
+      var _mainAct = d.title || d.phase || (_stop ? (_stop.emoji||'') + ' ' + (_stop.name||'') : 'Free explore');
+      var _mainActClean = _calActivity(_mainAct) || _mainAct;
+      html += '<div style="' + _row + 'background:#f4f8ff;margin:0 -12px;padding:7px 12px;">'
+        + '<div style="' + _time + '">' + _calFmtTime(9) + '</div>'
+        + '<div style="' + _ico  + '">' + (_stop && _stop.emoji ? _stop.emoji : '🌎') + '</div>'
+        + '<div style="' + _txt  + '"><strong>' + _mainActClean + '</strong>';
+      if (d.notes) html += '<div style="' + _sub + '">' + d.notes + '</div>';
+      html += '</div></div>';
+
+      /* Extra activities if any */
+      if (_activities.length > 1) {
+        _activities.slice(1).forEach(function(a, idx) {
+          var _aH = 11 + idx;
+          html += '<div style="' + _row + '">'
+            + '<div style="' + _time + '">' + _calFmtTime(_aH) + '</div>'
+            + '<div style="' + _ico  + '">' + a.icon + '</div>'
+            + '<div style="' + _txt  + '">' + a.text + '</div></div>';
+        });
+      }
+
+      /* Lunch */
+      html += '<div style="' + _row + '">'
+        + '<div style="' + _time + '">' + _calFmtTime(12) + '</div>'
+        + '<div style="' + _ico  + '">🥙</div>'
+        + '<div style="' + _txt  + '"><strong>Lunch</strong>'
+        + '<div style="' + _sub  + '">' + (d.lunch || 'Packed lunch or local spot') + '</div></div></div>';
+
+      /* Afternoon */
+      html += '<div style="' + _row + '">'
+        + '<div style="' + _time + '">' + _calFmtTime(14) + '</div>'
+        + '<div style="' + _ico  + '">☀️</div>'
+        + '<div style="' + _txt  + '"><strong>Afternoon Free Time</strong>'
+        + '<div style="' + _sub  + '">Explore, swim, hike, or relax at camp</div></div></div>';
+
+      /* Sleep / camp arrival if listed */
+      if (d.sleep && !_isHome) {
+        var _slpI2 = d.sleepType==='rv_park'?'🏕':d.sleepType==='walmart'?'🛒':'⛺';
+        html += '<div style="' + _row + '">'
+          + '<div style="' + _time + '">' + _calFmtTime(16,30) + '</div>'
+          + '<div style="' + _ico  + '">' + _slpI2 + '</div>'
+          + '<div style="' + _txt  + '"><strong>Back at Camp</strong>'
+          + '<div style="' + _sub  + '">' + d.sleep + '</div></div></div>';
+      }
+
+      /* Dinner */
+      html += '<div style="' + _row + 'border-bottom:none;">'
+        + '<div style="' + _time + '">6:30\u00a0PM</div>'
+        + '<div style="' + _ico  + '">🍽</div>'
+        + '<div style="' + _txt  + '"><strong>Dinner</strong>'
+        + '<div style="' + _sub  + '">' + (d.dinner || 'Camp cooking or local restaurant') + '</div></div></div>';
+    }
+
+    html += '</div>'; /* end body */
+    html += '</div>'; /* end day card */
+  }
+
+  html += '</div>';
+  el.innerHTML = html;
+}
+
 function _mainSeg(which) {
   var schDiv = document.getElementById('schedule-content');
+  var agdDiv = document.getElementById('agenda-content');
   var stpDiv = document.getElementById('stops-content');
   var staDiv = document.getElementById('stats-content');
   var frnDiv = document.getElementById('friends-content');
   var btnSch = document.getElementById('plan-seg-schedule');
+  var btnAgd = document.getElementById('plan-seg-agenda');
   var btnStp = document.getElementById('plan-seg-stops');
   var btnSta = document.getElementById('plan-seg-stats');
   var btnFrn = document.getElementById('plan-seg-friends');
@@ -9948,12 +10216,16 @@ function _mainSeg(which) {
   var _on  = function(b) { if (b) { b.style.background='var(--orange)'; b.style.borderColor='var(--orange)'; b.style.color='#fff'; } };
   var _onP = function(b) { if (b) { b.style.background='#7B5EA7'; b.style.borderColor='#7B5EA7'; b.style.color='#fff'; } };
   var _off = function(b) { if (b) { b.style.background='var(--card)'; b.style.borderColor='var(--border)'; b.style.color='var(--text-2)'; } };
-  schDiv.style.display = 'none'; stpDiv.style.display = 'none';
+  schDiv.style.display = 'none';
+  if (agdDiv) agdDiv.style.display = 'none';
+  stpDiv.style.display = 'none';
   if (staDiv) staDiv.style.display = 'none';
   if (frnDiv) frnDiv.style.display = 'none';
-  _off(btnSch); _off(btnStp); _off(btnSta); _off(btnFrn);
+  _off(btnSch); _off(btnAgd); _off(btnStp); _off(btnSta); _off(btnFrn);
   if (which === 'schedule') {
     schDiv.style.display = 'block'; _on(btnSch);
+  } else if (which === 'agenda') {
+    if (agdDiv) { agdDiv.style.display = 'block'; renderPlannerAgenda(); } _on(btnAgd);
   } else if (which === 'stops') {
     stpDiv.style.display = 'block'; _on(btnStp); renderStops();
   } else if (which === 'stats') {
