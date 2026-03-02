@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-02 (Session 18, eighteenth context)
+2026-03-02 (Session 18, nineteenth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,16 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 18 (nineteenth context) — 2026-03-02
+
+- **Route Map date fix — pause days now included**: `renderStopNavigator` was missing `_schCumulativeNights` (pause day accumulation) while `renderSchedule` included it — causing dates to diverge when pause blocks exist. Fixed: Added `_navPauseOffset{}` pre-computation after `_navStopOffset`. Iterates `_navAllSeenIds` in order; for each stop, computes the preliminary first date (raw + phaseExtraDays), then sums all `appState.pauseDays` nights where `pd.startDate < prelimDate`. This offset is added to `_cumOff` alongside `_navStopOffset`. Now `renderStopNavigator` and `renderSchedule` both compute effective dates as: raw date + phaseExtraDays cascade + pause nights before this stop.
+
+- **Trip Stats mileage — full-route Haversine floor**: `displayMiles` was showing 3,075 (the sum of per-leg explicit miles from custom trip TRIP_DAYS) because `CONFIG.totalMiles` was also 3,075 (set when custom trip was loaded). Fixed: Added a full-route Haversine computation for ALL drive legs (not just untracked ones) using `TRIP_STOPS` coordinates. `displayMiles = Math.max(explicit+untracked estimate, full-route Haversine, CONFIG floor)`. This catches cases where per-leg explicit miles are underestimated — the Haversine total for a cross-US trip provides a better minimum.
+
+- **View Plans sticky header overlap**: When clicking "View Plans" from the Route Map, `_jumpToStopPlans()` would `scrollIntoView` the stop card to `block:'start'`, but the sticky planner nav bar (~60px) covered the card's location header. Fixed: added `el.style.scrollMarginTop = '64px'` before calling `scrollIntoView`, so the scroll target accounts for the sticky nav height and the card header is fully visible.
+
+- **Friends view city name consistency**: Some stops showed "Memphis" (no state) while others showed "Dallas, TX" (state embedded in name). Root cause: stop objects without `state` property and without state in name showed state-less labels. Fixed: In `_renderFriendSuggestionsFamily`, if `stopObj.name` has no comma and no `stopObj.state`, the code now tries `suggs[0].stop_name` (from the friend's form submission, which captures the full "City, ST" label). State suffix is only appended if the final name doesn't already contain a comma.
 
 ### Session 18 (eighteenth context) — 2026-03-02
 

@@ -6540,6 +6540,31 @@ function renderStopNavigator() {
     return d.toISOString().split('T')[0];
   };
 
+  /* ── Pre-compute pause nights accumulated before each stop ───────────
+     Matches renderSchedule's _schCumulativeNights logic so both views
+     show the same dates when pause days (side trips) are configured.   */
+  var _navPauses = (appState.pauseDays || [])
+    .filter(function(pd) { return pd.startDate && pd.endDate; })
+    .sort(function(a, b) { return a.startDate < b.startDate ? -1 : 1; });
+  var _navPauseOffset = {};
+  _navAllSeenIds.forEach(function(sid) {
+    var sdays2 = TRIP_DAYS.filter(function(d) { return d.stopId === sid; });
+    var rawFirst2 = sdays2.length ? sdays2[0].date : null;
+    if (!rawFirst2) { _navPauseOffset[sid] = 0; return; }
+    /* Preliminary first date = raw date + phaseExtraDays cascade (no pauses yet) */
+    var prelim = _navOffsetDate(rawFirst2, _navStopOffset[sid] || 0) || rawFirst2;
+    /* Sum pause nights from pauses starting BEFORE this stop's preliminary date */
+    var pNights = 0;
+    _navPauses.forEach(function(pd) {
+      if (pd.startDate < prelim) {
+        pNights += Math.max(0, Math.round(
+          (new Date(pd.endDate + 'T00:00:00') - new Date(pd.startDate + 'T00:00:00')) / 86400000
+        ));
+      }
+    });
+    _navPauseOffset[sid] = pNights;
+  });
+
   var html = '';
   _orderedIds.forEach(function(stopId, idx) {
     var stop    = getStop(stopId);
@@ -6549,8 +6574,8 @@ function renderStopNavigator() {
     var _navExtras = isWaypoint ? 0 : ((appState.phaseExtraDays && appState.phaseExtraDays[stopId]) || 0);
     var nights  = isWaypoint ? 0 : Math.max(0, stopDays.length + _navExtras);
 
-    /* Apply cumulative cascade offset + clamp to effective number of nights */
-    var _cumOff   = _navStopOffset[stopId] || 0;
+    /* Apply cumulative cascade offset (phaseExtraDays + pause nights) */
+    var _cumOff   = (_navStopOffset[stopId] || 0) + (_navPauseOffset[stopId] || 0);
     var rawFirst  = stopDays.length ? stopDays[0].date : '';
     var firstDate = _navOffsetDate(rawFirst, _cumOff);
     /* Effective last date = firstDate + (nights - 1) days — fully accounts for removed/added days */
@@ -6916,6 +6941,9 @@ function _jumpToStopPlans(stopId) {
         det.classList.remove('hidden');
         if (chev) chev.textContent = '▲';
       }
+      /* scroll-margin-top offsets the sticky planner nav bar (~60px) so it
+         doesn't cover the stop header row when scrolled into view */
+      el.style.scrollMarginTop = '64px';
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, 350);
@@ -10555,8 +10583,28 @@ function renderTripStats() {
       if (!d.driveDay) _lastSId = d.stopId;
     });
   }
-  /* Use CONFIG.totalMiles as a floor — consistent with renderStopNavigator */
-  var displayMiles = Math.max(Math.round(totalMiles + estimatedExtra), (typeof CONFIG !== 'undefined' && CONFIG.totalMiles) || 0);
+  /* Full-route Haversine for ALL drive legs — catches custom trips where per-leg
+     miles were underestimated or missing; uses stop coordinates from TRIP_STOPS.  */
+  var _havMapFull = {};
+  TRIP_STOPS.forEach(function(s) { _havMapFull[s.id] = s; });
+  var _havLastIdFull = null, _fullHavTotal = 0;
+  TRIP_DAYS.slice().sort(function(a, b) { return a.day - b.day; }).forEach(function(d) {
+    if (removedStopIds[d.stopId]) return;
+    if (d.driveDay && _havLastIdFull) {
+      var _fs = _havMapFull[_havLastIdFull], _ts = _havMapFull[d.stopId];
+      if (_fs && _ts && _fs.lat != null && _ts.lat != null) {
+        _fullHavTotal += _haversineM(_fs.lat, _fs.lng, _ts.lat, _ts.lng) * 1.2;
+      }
+    }
+    if (!d.driveDay) _havLastIdFull = d.stopId;
+  });
+  /* displayMiles = best of: explicit tracked + untracked estimate, full-route Haversine, CONFIG floor */
+  var _configMilesFloor = (typeof CONFIG !== 'undefined' && CONFIG.totalMiles) || 0;
+  var displayMiles = Math.max(
+    Math.round(totalMiles + estimatedExtra),
+    Math.round(_fullHavTotal),
+    _configMilesFloor
+  );
   var milesLabel   = 'Est. Miles'; // always estimated — road choice affects actual total
 
   // ── Build HTML ──────────────────────────────────────────────────
@@ -11600,8 +11648,19 @@ function _renderFriendSuggestionsFamily(rows) {
   stopOrder.forEach(function(key) {
     var suggs = byStop[key];
     var stopObj = TRIP_STOPS.find(function(s) { return String(s.id) === key; });
+    /* Build a consistent city+state label. Prefer stopObj data; fall back to
+       suggs[0].stop_name which may carry a richer "City, ST" format from the
+       submission form. Avoid adding a duplicate state if it's already in the name. */
+    var _snBase = stopObj ? (stopObj.name || '') : '';
+    var _stCode = stopObj ? (stopObj.state || '') : '';
+    /* If the stop object name lacks state info, try the submission's stop_name */
+    if (_snBase && !_snBase.includes(',') && !_stCode) {
+      var _sugg0nm = (suggs[0] && suggs[0].stop_name) || '';
+      if (_sugg0nm.includes(',')) _snBase = _sugg0nm; // richer name from form submission
+    }
+    var _stSuffix = (_stCode && !_snBase.includes(',')) ? ', ' + _stCode : '';
     var stopLabel = stopObj
-      ? ((stopObj.emoji ? stopObj.emoji + ' ' : '') + stopObj.name + (stopObj.state ? ', ' + stopObj.state : ''))
+      ? ((stopObj.emoji ? stopObj.emoji + ' ' : '') + _snBase + _stSuffix)
       : (suggs[0].stop_name || 'General Suggestions');
 
     html += '<div style="background:var(--card);border:1.5px solid #c9a8f5;border-radius:14px;overflow:hidden;">';
