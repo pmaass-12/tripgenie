@@ -3948,7 +3948,7 @@ function _resolveConflict(choice) {
     _cloudLoadedAt = new Date((appState._savedAt || 0)).getTime();
     localStorage.setItem('rv_state', JSON.stringify(appState));
     // Re-render everything including the map
-    renderDashboard(); renderSchedule(); renderDecisions(); renderSchedule();
+    renderDashboard(); renderSchedule(); renderDecisions();
     refreshMainMap();
     showToast('✓ Synced to ' + (appState._savedBy || 'their') + '\'s version', 3000);
     _setSyncStatus('&#9729;', 'Synced', 'rgba(255,255,255,.45)');
@@ -3999,6 +3999,7 @@ function loadState() {
   catch(e) { return {}; }
 }
 function saveState(state) {
+  if (state === undefined) state = appState; // allow bare saveState() calls
   if (_isViewer) return; // read-only mode — never persist
   state._savedAt = new Date().toISOString();
   if (_userName) state._savedBy = _userName;
@@ -5742,15 +5743,29 @@ function renderDashboard() {
     ? (_destWxRange + (_destWxDesc ? '<div style="font-size:.68rem;color:var(--text-2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _destWxDesc + '</div>' : ''))
     : '<span style="color:var(--text-3);font-size:.78rem;">Tap for forecast</span>';
   var _boxStyle = 'flex:1;min-width:0;padding:10px 12px;border-radius:var(--radius-s);text-align:center;cursor:pointer;';
+
+  /* ── Sleep box: smart routing ──────────────────────────────────────
+     If the current stop has a saved booking confirmation → open that.
+     Otherwise fall back to AI campground suggestions.               */
+  var _tonightBcs2 = (appState.bookingConfirmations && curStop && appState.bookingConfirmations[curStop.id]) || [];
+  var _hasBooking  = _tonightBcs2.length > 0;
+  var _sleepOnClick = _hasBooking
+    ? 'openBookingModal(' + (curStop ? curStop.id : 0) + ')'
+    : 'openCampInfo(' + dayNum + ')';
+  var _sleepLabel  = _hasBooking ? 'Sleep 🎫' : 'Sleep ✨';
+  var _sleepBorder = _hasBooking ? 'border:1.5px solid rgba(255,215,0,.5);' : 'border:1px solid rgba(44,95,138,.2);';
+  /* If booked, show the property name from the first confirmation instead of the day.sleep fallback */
+  var _sleepDisplay = _hasBooking ? (_tonightBcs2[0].propertyName || _destSub || '—') : (_destSub || '—');
+
   var tonightTile = (!_destIsHome && curStop)
     ? '<div style="display:flex;gap:8px;margin-top:12px;">'
       + '<div style="' + _boxStyle + 'background:var(--green-l);border:1px solid #a5d6a7;" onclick="showStopForecastModal(' + curStop.id + ')" title="Tap for weather forecast">'
         + '<div style="font-size:.6rem;font-weight:800;color:#2e7d32;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Destination</div>'
         + '<div style="font-weight:800;font-size:.85rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _destLabel + '</div>'
       + '</div>'
-      + '<div style="' + _boxStyle + 'background:var(--blue-l);border:1px solid rgba(44,95,138,.2);" onclick="openCampInfo(' + dayNum + ')" title="Tap for AI campground info">'
-        + '<div style="font-size:.6rem;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Sleep ✨</div>'
-        + '<div style="font-weight:700;font-size:.82rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + (_destSub || '—') + '</div>'
+      + '<div style="' + _boxStyle + 'background:var(--blue-l);' + _sleepBorder + '" onclick="' + _sleepOnClick + '" title="' + (_hasBooking ? 'View booking confirmation' : 'Tap for AI campground info') + '">'
+        + '<div style="font-size:.6rem;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">' + _sleepLabel + '</div>'
+        + '<div style="font-weight:700;font-size:.82rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _sleepDisplay + '</div>'
       + '</div>'
       + '<div style="' + _boxStyle + 'background:var(--orange-l);border:1px solid rgba(232,129,58,.25);" onclick="showStopForecastModal(' + curStop.id + ')" title="Tap for weather forecast">'
         + '<div style="font-size:.6rem;font-weight:800;color:var(--orange-d);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Tonight\'s Weather</div>'
@@ -5789,10 +5804,18 @@ function renderDashboard() {
             + '<div style="font-size:.6rem;font-weight:800;color:#2e7d32;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">First Stop</div>'
             + '<div style="font-weight:800;font-size:.78rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _fsName + '</div>'
           + '</div>'
-          + '<div style="' + _boxStyle + 'background:var(--blue-l);border:1px solid rgba(44,95,138,.2);cursor:pointer;" onclick="openCampInfo(1)" title="Tap for AI campground info">'
-            + '<div style="font-size:.6rem;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Sleep ✨</div>'
-            + '<div style="font-weight:700;font-size:.76rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _fsSleep + '</div>'
-          + '</div>'
+          + (function() {
+              var _fsBcs = (appState.bookingConfirmations && appState.bookingConfirmations[_fsId]) || [];
+              var _fsBooked = _fsBcs.length > 0;
+              var _fsSleepClick = _fsBooked ? 'openBookingModal(' + _fsId + ')' : 'openCampInfo(1)';
+              var _fsSleepLbl   = _fsBooked ? 'Sleep 🎫' : 'Sleep ✨';
+              var _fsSleepBord  = _fsBooked ? 'border:1.5px solid rgba(255,215,0,.5);' : 'border:1px solid rgba(44,95,138,.2);';
+              var _fsSleepName  = _fsBooked ? (_fsBcs[0].propertyName || _fsSleep) : _fsSleep;
+              return '<div style="' + _boxStyle + 'background:var(--blue-l);' + _fsSleepBord + 'cursor:pointer;" onclick="' + _fsSleepClick + '" title="' + (_fsBooked ? 'View booking confirmation' : 'Tap for AI campground info') + '">'
+                + '<div style="font-size:.6rem;font-weight:800;color:var(--blue);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">' + _fsSleepLbl + '</div>'
+                + '<div style="font-weight:700;font-size:.76rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _fsSleepName + '</div>'
+                + '</div>';
+            })()
           + '<div style="' + _boxStyle + 'background:var(--orange-l);border:1px solid rgba(232,129,58,.25);cursor:pointer;" onclick="showStopForecastModal(' + _fsId + ')">'
             + '<div style="font-size:.6rem;font-weight:800;color:var(--orange-d);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">' + _fsWxLabel + '</div>'
             + '<div style="font-weight:700;font-size:.8rem;color:var(--text);">' + _fsWxStr + '</div>'
@@ -7628,7 +7651,8 @@ function removeStopFromTrip(stopId, phaseName) {
 function restoreStopToTrip(stopId) {
   if (!appState.removedStops) appState.removedStops = {};
   delete appState.removedStops[stopId];
-  if (appState.phaseExtraDays) appState.phaseExtraDays[stopId] = 0;
+  if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
+  appState.phaseExtraDays[stopId] = 0;
   saveState(appState);
   renderSchedule(); refreshMainMap();
   /* Re-render audit log if it's currently visible so the removed-stops section updates */
@@ -7903,9 +7927,7 @@ function _deleteDriveBar(dayNum) {
   if (!appState.dayOverrides) appState.dayOverrides = {};
   if (!appState.dayOverrides[dayNum]) appState.dayOverrides[dayNum] = {};
   appState.dayOverrides[dayNum].deletedDriveBar = true;
-  /* Find the TRIP_DAYS entry and flip driveDay off */
-  var d = TRIP_DAYS.find(function(td){ return td.day === dayNum; });
-  if (d) { d.driveDay = false; d.miles = 0; d.driveHours = 0; }
+  /* Do NOT mutate TRIP_DAYS directly — renderSchedule reads dayOverrides.deletedDriveBar */
   saveState(appState);
   showToast('Drive day removed', 2000);
   renderSchedule();
@@ -8430,7 +8452,7 @@ function renderSchedule() {
     html += '</div>'; // card
 
     // After last day of a phase, inject extra flex days
-    var isLastInPhase = (i === TRIP_DAYS.length - 1) || (TRIP_DAYS[i + 1].phase !== d.phase);
+    var isLastInPhase = (i === _sortedDays.length - 1) || (_sortedDays[i + 1] && _sortedDays[i + 1].phase !== d.phase);
     if (isLastInPhase && appState.phaseExtraDays && appState.phaseExtraDays[d.stopId]) {
       var extCt = appState.phaseExtraDays[d.stopId];
       var pStop2 = getStop(d.stopId);
