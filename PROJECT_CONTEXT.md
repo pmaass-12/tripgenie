@@ -55,6 +55,10 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (twenty-eighth context) — 2026-03-02
+
+- **Driving Directions button in Drive Mode hero card**: Added `_ddBtn` variable in `_smRenderToday()`. On drive days, the blue hero card now shows a "Driving Directions" link at the bottom (map pin icon, frosted-white pill style) that opens Google Maps with the device's current location as start and the campground/hotel/first activity as destination. Destination priority: booking address → sleep stop name → first activity → stop city. Button only appears on drive days (`day.driveDay === true`); explore/rest day green card does NOT show it.
+
 ### Session 18 (twenty-seventh context) — 2026-03-02
 
 - **CRITICAL BUG FIX — Planner tab floating over all other views**: `#tab-planner { display:flex !important }` in CSS was overriding `.tab-panel { display:none }` (ID specificity + `!important` beats class specificity). This caused the entire Planner tab (Schedule, Day Planner, all sub-views) to always be `display:flex` — floating on top of Dashboard and every other tab simultaneously. Fix: removed `display` from the base `#tab-planner` rule; added `#tab-planner.active { display:flex !important }` so flex layout only kicks in when the tab is actually selected.

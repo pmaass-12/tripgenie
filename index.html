@@ -26534,6 +26534,33 @@ function _smRenderToday() {
   var _sleepLabel = day.sleep || stop.name || '';
   var _sleepType  = day.sleepType ? day.sleepType.replace(/_/g,' ') : '';
 
+  /* ── Driving Directions button ─────────────────────────────────── */
+  /* Destination priority: booking address → sleep name → first activity → stop city */
+  var _ddDest = '', _ddDestLabel = '';
+  var _bcs2 = (appState.bookingConfirmations && appState.bookingConfirmations[stop.id]) || [];
+  if (_bcs2.length && _bcs2[0].address) {
+    _ddDest = _bcs2[0].address;
+    _ddDestLabel = _bcs2[0].propertyName || _ddDest;
+  } else if (day.sleep) {
+    /* Sleep name gives best campground/hotel result; include city for disambiguation */
+    _ddDest = day.sleep + (stop.name ? ', ' + stop.name : '') + (stop.state ? ', ' + stop.state : '');
+    _ddDestLabel = day.sleep;
+  } else if (stop.activities && stop.activities.length) {
+    /* First activity — "first stop in that town" */
+    _ddDest = stop.activities[0].name + (stop.name ? ', ' + stop.name : '') + (stop.state ? ', ' + stop.state : '');
+    _ddDestLabel = stop.activities[0].name;
+  } else {
+    _ddDest = (stop.name || '') + (stop.state ? ', ' + stop.state : '');
+    _ddDestLabel = stop.name || toName;
+  }
+  var _ddUrl = 'https://www.google.com/maps/dir/?api=1&destination=' + encodeURIComponent(_ddDest);
+  var _ddBtn = '<div style="margin-top:10px;border-top:1px solid rgba(255,255,255,.18);padding-top:9px;">'
+    + '<a href="' + _ddUrl + '" target="_blank" rel="noopener" onclick="event.stopPropagation()" '
+    + 'style="display:inline-flex;align-items:center;gap:7px;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.25);border-radius:9px;padding:7px 14px;color:#fff;font-size:.8rem;font-weight:800;text-decoration:none;-webkit-tap-highlight-color:transparent;">'
+    + '<i class="fa-solid fa-map-location-dot" style="font-size:.95rem;"></i> Driving Directions'
+    + '</a>'
+    + '</div>';
+
   /* 2. Next Stop card — combines heading-to info + tonight's stop/booking */
   var nextCard;
   if (day.driveDay) {
@@ -26553,6 +26580,7 @@ function _smRenderToday() {
       + '<div class="dm-route-labels"><span>' + fromName + '</span><span>' + toName + '</span></div>'
       + (_sleepLabel ? '<div style="border-top:1px solid rgba(255,255,255,.2);margin-top:10px;padding-top:9px;font-size:.77rem;opacity:.85;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-moon"></i> <strong>Tonight:</strong>&nbsp;' + _sleepLabel + (_sleepType ? ' · ' + _sleepType : '') + '</div>' : '')
       + _tonightBookingChip
+      + _ddBtn
       + '</div>';
   } else {
     nextCard = '<div class="dm-next-card" style="background:var(--green);" onclick="openCampInfo(' + (idx + 1) + ')">'
