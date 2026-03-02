@@ -103,8 +103,27 @@
   .day-actions { display:flex; gap:5px; margin-top:8px; }
   .day-action-btn { flex:1; padding:6px 8px; border:1px solid var(--border); border-radius:8px; background:var(--bg); font-size:.7rem; font-weight:700; cursor:pointer; text-align:center; color:var(--text-2); }
 
-  /* Annotation labels — hidden; were design-time annotations only */
+  /* Annotation labels — hidden */
   .label { display:none; }
+
+  /* ── Changes from last session ───────────────────────── */
+  /* × delete button: absolute top-right of pill card */
+  .ds-pill { position:relative; }
+  .ds-r1   { padding-right:36px; }
+  .ds-del  { position:absolute !important; top:8px; right:10px;
+             border-radius:8px !important; padding:4px 8px !important; }
+
+  /* Ideal stay badge hidden on mobile */
+  .ph-ideal { display:none !important; }
+
+  /* Day-number badge under date hidden on mobile */
+  .day-badge { display:none !important; }
+
+  /* Date column: blue background (matches actual app), "Mon" + "Mar 2" layout */
+  .day-date-col { background:var(--blue); color:#fff; }
+  .day-date-col .weekday { color:rgba(255,255,255,.8); font-size:.68rem; }
+  .day-date-col .date-num { color:#fff; font-size:.92rem; white-space:nowrap; }
+  .day-date-col .month { display:none; } /* month is now part of date-num */
 
   /* Desktop comparison pane */
   .desktop-pane { width:560px; }
@@ -173,10 +192,11 @@
         <!-- ── PHASE HEADER (blue, Winchester) ────────── -->
         <span class="label">▼ Phase Header</span>
         <div class="ph-wrap">
-          <!-- Title row -->
+          <!-- Title row: city name + edit btn + weather pill on same line -->
           <div class="ph-title-row">
-            <span class="ph-city">Winchester</span>
+            <span class="ph-city">Winchester, VA</span>
             <button class="ph-edit-btn">✏️</button>
+            <span class="ph-wx">⛅ 39° / 29°</span>
           </div>
           <!-- Meta row -->
           <div class="ph-meta">
@@ -185,9 +205,8 @@
             <button class="ph-stay-btn">🏨&thinsp;Hotel/Motel</button>
             <span class="ph-ideal">⭐ ideal: 1 day</span>
           </div>
-          <!-- Controls row (second row on mobile) -->
+          <!-- Controls row (second row on mobile) — weather removed, now in title row -->
           <div class="ph-ctrls">
-            <span class="ph-wx">⛅ 39° / 29°</span>
             <button class="ph-area-btn">🔍</button>
             <button class="ph-book-btn">🎫&nbsp;1</button>
             <div class="ph-days" style="margin-left:auto;">
@@ -204,9 +223,8 @@
         <div class="day-card">
           <div class="day-card-hdr">
             <div class="day-date-col">
-              <span class="weekday">Mon</span>
-              <span class="date-num">2</span>
-              <span class="month">Mar</span>
+              <span class="weekday">MON</span>
+              <span class="date-num">Mar&nbsp;2</span>
               <span class="day-badge">DAY 1</span>
             </div>
             <div class="day-body">
@@ -247,8 +265,9 @@
         <!-- ── PHASE HEADER (Wytheville) ──────────────── -->
         <div class="ph-wrap">
           <div class="ph-title-row">
-            <span class="ph-city">Wytheville</span>
+            <span class="ph-city">Wytheville, VA</span>
             <button class="ph-edit-btn">✏️</button>
+            <span class="ph-wx">☁️ 64° / 41°</span>
           </div>
           <div class="ph-meta">
             <span class="ph-meta-text">2 nights</span>
@@ -257,7 +276,6 @@
             <span class="ph-ideal">⭐ ideal: 1 day</span>
           </div>
           <div class="ph-ctrls">
-            <span class="ph-wx">☁️ 64° / 41°</span>
             <button class="ph-area-btn">🔍</button>
             <button class="ph-book-btn" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);">🎫</button>
             <div class="ph-days" style="margin-left:auto;">
@@ -272,10 +290,9 @@
         <!-- Day card (transit) -->
         <div class="day-card">
           <div class="day-card-hdr">
-            <div class="day-date-col" style="background:#f5f0ea;">
-              <span class="weekday">Tue</span>
-              <span class="date-num">3</span>
-              <span class="month">Mar</span>
+            <div class="day-date-col">
+              <span class="weekday">TUE</span>
+              <span class="date-num">Mar&nbsp;3</span>
               <span class="day-badge" style="background:#888;">DAY 2</span>
             </div>
             <div class="day-body">

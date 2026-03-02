@@ -7569,8 +7569,9 @@ function phaseHeaderHtml(phase, firstDay) {
     if (td.phase === phase && _allPhaseStopIds.indexOf(td.stopId) === -1) _allPhaseStopIds.push(td.stopId);
   });
   var _multiStop = _allPhaseStopIds.length > 1;
-  /* When the phase is a generic region name with multiple stops, use the actual stop's city name */
-  var _displayPhase = (_multiStop && pStop) ? _sn(pStop) : phase;
+  /* Always use _sn(pStop) when the stop object is available — ensures state is always shown.
+     Falls back to raw phase string only when no stop object is found. */
+  var _displayPhase = pStop ? _sn(pStop) : phase;
   var totalMi = 0;
   /* Count nights for this specific stopId only (handles multi-stop phases correctly) */
   var phaseDays = _multiStop
@@ -8741,7 +8742,7 @@ function renderSchedule() {
     html += '<div style="padding:10px 14px;cursor:pointer;" onclick="openDayDetail(' + d.day + ')" title="View day schedule">';
     html += '<div style="display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap;">';
     if (stop && stop.emoji) html += '<span style="font-size:.95rem">' + stop.emoji + '</span>';
-    html += '<span style="font-weight:700;font-size:1rem;color:var(--text);line-height:1.3;">' + (d.driveDay ? _getDriveDayTitle(d) : (_isTransit ? ('Morning in ' + (stop ? stop.name : (d.phase || 'town'))) : (d.title || d.name || 'Explore ' + (d.phase || 'day')))) + '</span>';
+    html += '<span style="font-weight:700;font-size:1rem;color:var(--text);line-height:1.3;">' + (d.driveDay ? _getDriveDayTitle(d) : (_isTransit ? ('Morning in ' + (stop ? _sn(stop) : (d.phase || 'town'))) : (d.title || d.name || 'Explore ' + (stop ? _sn(stop) : (d.phase || 'day'))))) + '</span>';
     if (isToday) html += '<span style="background:var(--orange);color:#fff;font-size:.68rem;font-weight:800;padding:2px 8px;border-radius:100px;text-transform:uppercase;">Today</span>';
     if (_isOverflow && d.sleepType !== 'home') html += '<span style="background:#c62828;color:#fff;font-size:.65rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;">🔺 Over Schedule</span>';
     html += '</div>';
@@ -8827,7 +8828,7 @@ function renderSchedule() {
       var _dpCustActs = (appState.customActivities && appState.customActivities[d.stopId]) || [];
       if (dp.activities.length > 0 || dp.restaurants.length > 0 || (dp.customActivities && dp.customActivities.length > 0)) {
         html += '<div style="padding:8px 12px 10px;border-top:1px solid var(--border);background:var(--green-l);">';
-        html += '<div style="font-size:.7rem;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">&#9989; Your Plan for ' + stopForDay2.name + '</div>';
+        html += '<div style="font-size:.7rem;font-weight:800;color:var(--green);text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px;">&#9989; Your Plan for ' + _sn(stopForDay2) + '</div>';
         html += '<div style="display:flex;flex-wrap:wrap;gap:5px;">';
         var sf2Acts  = stopForDay2.activities  || [];
         var sf2Rests = stopForDay2.restaurants || [];
@@ -8868,7 +8869,7 @@ function renderSchedule() {
           + '</div>';
         html += '<div style="padding:10px 14px;">';
         html += '<div style="font-size:.8rem;font-weight:700;color:var(--green);">&#127811; Bonus Explore Day — ' + d.phase + '</div>';
-        html += '<div style="font-size:.75rem;color:var(--text-2);margin-top:3px;">' + (pStop2 ? pStop2.emoji + ' ' + pStop2.name : '') + ' &mdash; free day to explore!</div>';
+        html += '<div style="font-size:.75rem;color:var(--text-2);margin-top:3px;">' + (pStop2 ? (pStop2.emoji ? pStop2.emoji + ' ' : '') + _sn(pStop2) : '') + ' &mdash; free day to explore!</div>';
         html += '</div>';
         html += '<div style="padding:8px 12px;"><button onclick="removePhaseDay(' + d.stopId + ')" style="background:var(--red-l);border:1px solid var(--red);color:var(--red);border-radius:12px;padding:4px 8px;font-size:.7rem;cursor:pointer;font-family:var(--font);">&#215; Remove</button></div>';
         html += '</div></div>';
