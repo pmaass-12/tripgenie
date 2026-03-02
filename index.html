@@ -8145,6 +8145,23 @@ function renderSchedule() {
     return sum + Math.max(0, Math.round((new Date(pd.endDate+'T00:00:00') - new Date(pd.startDate+'T00:00:00')) / 86400000));
   }, 0);
   var _plannedEndDate = new Date(new Date(CONFIG.endDate + 'T00:00:00').getTime() + _totalPauseNights * 86400000);
+
+  /* Pre-compute cumulative phaseExtraDays offset per stop (in TRIP_DAYS order).
+     When stop A has phaseExtraDays = -1, every stop that comes AFTER A in the
+     schedule is 1 day earlier — matching how the Stop Navigator computes dates. */
+  var _schPhaseOffset = {};
+  var _schPhaseCumOffset = 0;
+  var _schSeenStops = [];
+  TRIP_DAYS.forEach(function(d) {
+    if (_schSeenStops.indexOf(d.stopId) === -1) {
+      _schSeenStops.push(d.stopId);
+      /* This stop inherits the cumulative offset from all previous stops */
+      _schPhaseOffset[d.stopId] = _schPhaseCumOffset;
+      /* This stop's own delta cascades to subsequent stops */
+      var _extra = (appState.phaseExtraDays && appState.phaseExtraDays[d.stopId]) || 0;
+      _schPhaseCumOffset += _extra;
+    }
+  });
   var _overflowDayCount = 0;
 
   /* Sort by date (then day#) so customized trips always render in chronological order */
@@ -8177,8 +8194,9 @@ function renderSchedule() {
       _schPausePtrIdx++;
     }
 
-    /* Effective date = original date shifted by cumulative pause nights */
-    var _effectiveDate = new Date(new Date(d.date + 'T00:00:00').getTime() + _schCumulativeNights * 86400000);
+    /* Effective date = original date shifted by cumulative pause nights + phaseExtraDays cascade */
+    var _schPhOff = _schPhaseOffset[d.stopId] || 0;
+    var _effectiveDate = new Date(new Date(d.date + 'T00:00:00').getTime() + (_schCumulativeNights + _schPhOff) * 86400000);
     var _isOverflow = _effectiveDate > _plannedEndDate;
     if (_isOverflow) _overflowDayCount++;
 
@@ -23862,12 +23880,36 @@ function _smRenderToday() {
     + '</div>';
 
   /* Tonight's stop hero */
+  var _tonightBcs = (appState.bookingConfirmations && appState.bookingConfirmations[stop.id]) || [];
+  var _tonightBcFirst = _tonightBcs.length ? _tonightBcs[0] : null;
+  var _tonightBookingChip = _tonightBcFirst
+    ? '<div style="margin-top:7px;" onclick="event.stopPropagation();openBookingModal(' + stop.id + ')">'
+      + '<span style="background:rgba(255,215,0,.18);border:1px solid rgba(255,215,0,.55);color:rgba(255,240,160,.95);border-radius:100px;padding:4px 12px;font-size:.72rem;font-weight:800;display:inline-flex;align-items:center;gap:5px;letter-spacing:.01em;">'
+      + '🎫 ' + (_tonightBcFirst.propertyName || day.sleep || 'Confirmed')
+      + (_tonightBcFirst.confirmationNumber ? ' · <span style="opacity:.75;">#</span>' + _tonightBcFirst.confirmationNumber : '')
+      + (_tonightBcs.length > 1 ? ' <span style="opacity:.55;">+' + (_tonightBcs.length - 1) + ' more</span>' : '')
+      + '</span>'
+      + '</div>'
+    : '';
+  /* Also check legacy bookingStatus (booked + confirmNum) */
+  if (!_tonightBcFirst) {
+    var _legacyBs = (appState.bookingStatus && appState.bookingStatus[day.sleep]) || {};
+    if (_legacyBs.booked) {
+      _tonightBookingChip = '<div style="margin-top:7px;">'
+        + '<span style="background:rgba(255,215,0,.18);border:1px solid rgba(255,215,0,.55);color:rgba(255,240,160,.95);border-radius:100px;padding:4px 12px;font-size:.72rem;font-weight:800;display:inline-flex;align-items:center;gap:5px;">'
+        + '✓ Booked'
+        + (_legacyBs.confirmNum ? ' · #' + _legacyBs.confirmNum : '')
+        + '</span>'
+        + '</div>';
+    }
+  }
   var heroHtml = '<h2 class="section-head">Tonight</h2>'
     + '<div class="hero-card" onclick="openCampInfo(' + (idx + 1) + ')">'
     + '<div class="hero-bg"></div><div class="hero-overlay"></div>'
     + '<div class="hero-label"><i class="fa-solid fa-location-dot"></i> Tonight\'s stop</div>'
     + '<div class="hero-title">' + (stop.emoji || '📍') + ' ' + (stop.name || 'Unknown') + (stop.state ? ', ' + stop.state : '') + '</div>'
     + '<div class="hero-sub">' + (day.sleep || stop.name || '') + (day.sleepType ? ' · ' + day.sleepType.replace(/_/g,' ') : '') + '</div>'
+    + _tonightBookingChip
     + '</div>';
 
   /* Quick actions */
