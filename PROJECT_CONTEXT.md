@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-02 (Session 18, tenth context)
+2026-03-02 (Session 18, eleventh context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,22 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 18 (eleventh context) — 2026-03-02
+- **Postcard complete redesign**: Full rework to look like a real postcard — LEFT = photo collage (postcard front, fills full 560×800), RIGHT = classic postcard back with ornate "Post-Card" header (double-rule border, serif italic), dashed stamp box (RV emoji + FOREVER), ruled message lines, location caption overlay on photo, "KINDLY DELIVER TO:" with address lines, postmark circle, footer bar. Background now `#f9f8f4` (cream white). Fixed `backgroundColor: null` → `'#f9f8f4'` in html2canvas (was rendering transparent = black). Fixed broken bgStyle CSS syntax (`PC_BG_GRADIENT + ';background:...'` → `'background:' + PC_BG_GRADIENT`).
+- **Journal undefined stops**: Fixed `lo.textContent = st.emoji + ' ' + st.name + ', ' + st.state` → guarded with `(st.emoji ? st.emoji + ' ' : '')` and `(st.state ? ', ' + st.state : '')` in `renderJournal()` (same root fix as postcard dropdown from prior session).
+- **Voice mode auto-reveal**: Added `_tgRevealVoiceTranscripts()` called when voice mode is toggled off — automatically shows all hidden voice text divs (id `tgv*`) so user sees full transcript without having to click "See text" on each bubble.
+- **Attraction photos via Wikipedia**: Added `_tgFetchWikiPhotos()`, `_tgIsPhotoRequest()`, `_tgExtractPhotoSubject()` functions. When TripGenie receives a photo/picture request (regex-matched), it fetches up to 3 Wikipedia images for the attraction/location and displays them as a photo grid in the chat alongside Gemini's text response. Uses Wikipedia open CORS API — no API key needed.
+
+### Session 18 (prior contexts) — 2026-03-02
+- Gallery: add direct upload + duplicate detection + photoPool in modal
+- Gemini minimum-visit badge on stop headers
+- Security: SHA-256 password hashing, ALLOWED_ORIGINS env var for Gemini proxy, body size limit
+- Haversine × 1.2 miles estimation for untracked legs → "Est. Miles"
+- Agenda: removed "Day X" badge + blue highlight; added Print Agenda button
+- renderCalendar() forEach crash fix (removedStops is Object not Array)
+
+## Recent Changes (older)
 - Initial commit: TripGenie RV trip planner (all current files)
 - Added CLAUDE.md and PROJECT_CONTEXT.md for cross-device session continuity
 - Session 2 (2026-02-26): Applied 10 UX/feature fixes — purple return route line, TripBuddy→TripGenie rename, removed duplicate suggestions, auto drive time on reorder, drag hint moved to orange bar, diet prefs in trip settings, removed duplicate AI ask button, AI info modal on rec cards, reworked Pause Trip modal, enhanced Decisions tab with days-over counter
@@ -353,6 +369,8 @@ tripgenie/
   - **Drive bar origin state fix**: `_getDriveDayTitle` was using raw `prevPhase` string (which lacks state suffix) as the origin city label, producing "Winchester → Wytheville, VA" (Winchester missing state). Fixed: prefer `_sn(getStop(prevDay.stopId))` which appends state via `_inferStopState` lookup, falling back to `prevPhase` only if no stop object found.
 
 ## Suggested Next Steps
+- **Postcard flip animation**: User wants postcard to be "flippable" (front = photo, back = classic back) with a 3D CSS flip when tapped/shared — not yet built
+- **Postcard sharing**: User wants postcard shareable as a viewable link (not just image download) — would require server-side storage or Supabase
 - **0-day waypoint stops**: User wants stops with 0 nights for driving waypoints (fuel, Walmart overnight, route planning) — not yet built
 - Push to GitHub (git push) when network is available — commits pending from sessions 8+
 - User needs to create Mapbox public token at mapbox.com (no secret scopes), then enter it in Trip Settings → RV Profile & Map Routing
