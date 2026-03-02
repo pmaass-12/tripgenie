@@ -55,6 +55,14 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (twenty-ninth context) — 2026-03-02
+
+- **"Where are they now?" fix — correct destination on drive days**: The drive day branch was searching for the "next non-drive day" after today to determine the destination, which incorrectly skipped overnight-only stops (those with no explore days). Fixed: `entry.stopId` IS the destination for a drive day — look up that stop directly instead of scanning ahead. Winchester (an overnight-only stop) now shows correctly instead of jumping to Wytheville.
+
+- **TripGenie voice mode fix — iOS microphone permission**: `openTripGenieVoice()` was wrapping `_tgToggleHandsFree()` in a 500ms `setTimeout`, which broke the iOS/Safari requirement that microphone permission must be requested synchronously within the user gesture call stack. Fixed: removed `setTimeout`, call `_tgToggleHandsFree()` directly.
+
+- **ElevenLabs 401 — specific `convai_read` permission hint**: When the 401 response body has `status:"missing_permissions"`, the toast now shows: "API key missing permission. Go to ElevenLabs → Profile → API Keys → edit key → enable 'Conversational AI (Read)' scope."
+
 ### Session 18 (twenty-eighth context) — 2026-03-02
 
 - **Driving Directions button in Drive Mode hero card**: Added `_ddBtn` variable in `_smRenderToday()`. On drive days, the blue hero card now shows a "Driving Directions" link at the bottom (map pin icon, frosted-white pill style) that opens Google Maps with the device's current location as start and the campground/hotel/first activity as destination. Destination priority: booking address → sleep stop name → first activity → stop city. Button only appears on drive days (`day.driveDay === true`); explore/rest day green card does NOT show it.

@@ -11513,14 +11513,8 @@ function _guestShowWhereNow(stops, arrivals, departures) {
       if (todayEntries.length) {
         var entry = todayEntries[0];
         if (entry.driveDay) {
-          /* Find next non-drive stop */
-          var nxt = null;
-          for (var k = 0; k < TRIP_DAYS.length; k++) {
-            if (TRIP_DAYS[k].day > entry.day && !TRIP_DAYS[k].driveDay) {
-              nxt = stops.find(function(s) { return s.id === TRIP_DAYS[k].stopId; });
-              if (nxt) break;
-            }
-          }
+          /* entry.stopId IS the destination for a drive day — use it directly */
+          var nxt = stops.find(function(s) { return s.id === entry.stopId; });
           var nxtName = nxt ? (nxt.name + (nxt.state ? ', ' + nxt.state : '')) : 'next stop';
           label = '\ud83d\ude90 In transit to ' + nxtName;
           sub   = 'On the road today!';
@@ -18030,8 +18024,15 @@ async function _labsDirectCall(parkName, parkPhone, checkin, checkout, special, 
     } else {
       var httpCode = resp.status;
       var errDetail = (data.detail && (typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail))) || JSON.stringify(data);
-      var hint = httpCode === 401 ? ' — check your API key in Labs settings' : httpCode === 422 ? ' — check Phone Number ID (pn_...)' : '';
-      showToast('❌ ' + httpCode + ' ' + errDetail + hint, 7000);
+      var hint = '';
+      if (httpCode === 401) {
+        hint = data.status === 'missing_permissions'
+          ? ' — API key missing permission. Go to ElevenLabs → Profile → API Keys → edit key → enable "Conversational AI (Read)" scope'
+          : ' — check your API key in Labs settings';
+      } else if (httpCode === 422) {
+        hint = ' — check Phone Number ID (pn_...)';
+      }
+      showToast('❌ ' + httpCode + ' ' + errDetail + hint, 9000);
     }
   } catch(e) {
     showToast('❌ Network error: ' + e.message, 4000);
@@ -22781,10 +22782,10 @@ async function _tsTestElVoice() {
 /* Opens TripGenie and, on mobile, immediately activates hands-free voice loop */
 function openTripGenieVoice() {
   openTripGenie();
+  /* Call synchronously within the user gesture — iOS requires mic permission
+     to be requested in the same call stack as the tap event. setTimeout breaks this. */
   if (window.innerWidth <= 640) {
-    setTimeout(function() {
-      if (!_tgHandsFree) _tgToggleHandsFree();
-    }, 500);
+    if (!_tgHandsFree) _tgToggleHandsFree();
   }
 }
 
