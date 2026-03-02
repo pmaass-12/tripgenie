@@ -5900,7 +5900,7 @@ function renderDashboard() {
 
   // ── Stats row ─────────────────────────────────────────────────────
   var milesVal  = appState.tripStarted ? milesCompleted.toLocaleString() : '0';
-  var milesSub  = 'of ~' + CONFIG.totalMiles.toLocaleString() + ' total';
+  var milesSub  = 'of ~' + CONFIG.totalMiles.toLocaleString() + ' est.';
   var _si = function(cls) { return '<i class="fa-solid ' + cls + '"></i>'; };
   // Journal entries count (loaded from localStorage same way as renderJournal)
   var _journalCount = 0;
@@ -10124,6 +10124,36 @@ function renderTripStats() {
     } else { exploreDays++; }
   });
 
+  // Haversine straight-line distance (miles) between two lat/lng points
+  function _haversineM(lat1, lng1, lat2, lng2) {
+    var R = 3958.8;
+    var p1 = lat1*Math.PI/180, p2 = lat2*Math.PI/180;
+    var dp = (lat2-lat1)*Math.PI/180, dl = (lng2-lng1)*Math.PI/180;
+    var a = Math.sin(dp/2)*Math.sin(dp/2) + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)*Math.sin(dl/2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  // Estimate road miles for untracked legs using Haversine × 1.2 (crow-flies → road factor)
+  var estimatedExtra = 0;
+  if (untrackedLegs > 0) {
+    var _smMap = {};
+    TRIP_STOPS.forEach(function(s) { _smMap[s.id] = s; });
+    var _lastSId = null;
+    var _statSorted = TRIP_DAYS.slice().sort(function(a, b) { return a.day - b.day; });
+    _statSorted.forEach(function(d) {
+      if (removedStopIds[d.stopId]) return;
+      if (d.driveDay && !d.miles && _lastSId) {
+        var _fs = _smMap[_lastSId], _ts = _smMap[d.stopId];
+        if (_fs && _ts && (_fs.lat || _fs.lng) && (_ts.lat || _ts.lng)) {
+          estimatedExtra += _haversineM(_fs.lat, _fs.lng, _ts.lat, _ts.lng) * 1.2;
+        }
+      }
+      if (!d.driveDay) _lastSId = d.stopId;
+    });
+  }
+  var displayMiles = Math.round(totalMiles + estimatedExtra);
+  var milesLabel   = 'Est. Miles'; // always estimated — road choice affects actual total
+
   // ── Build HTML ──────────────────────────────────────────────────
   var activeCats = cats.filter(function(c) { return c.items.length > 0; });
   var totalActivities = activeCats.reduce(function(sum, c) { return sum + c.items.length; }, 0);
@@ -10136,7 +10166,7 @@ function renderTripStats() {
     { n: activeStops.length,  label: 'Destinations',  emoji: '📍' },
     { n: states.length,       label: 'States',         emoji: '🗺️' },
     { n: totalActivities,     label: 'Planned Activities', emoji: '⭐' },
-    { n: Math.round(totalMiles).toLocaleString() + ' mi', label: untrackedLegs > 0 ? 'Tracked Miles' : 'Total Miles', emoji: '🛣️', raw: true },
+    { n: displayMiles.toLocaleString() + ' mi', label: milesLabel, emoji: '🛣️', raw: true },
     { n: driveDays,           label: 'Drive Days',     emoji: '🚗' },
     { n: exploreDays,         label: 'Explore Days',   emoji: '🏕️' },
   ];
@@ -10149,14 +10179,13 @@ function renderTripStats() {
   });
   html += '</div>';
 
-  /* Untracked-legs warning — shown when custom trip destinations have no drive miles */
+  /* Breakdown note — always shown since miles are always an estimate */
   if (untrackedLegs > 0) {
-    html += '<div style="background:#fff8e6;border:1.5px solid #f5c842;border-radius:var(--radius-s);padding:11px 15px;margin-bottom:14px;display:flex;align-items:flex-start;gap:10px;">'
-      + '<span style="font-size:1.1rem;flex-shrink:0;">⚠️</span>'
-      + '<div style="font-size:.8rem;color:#7a5c00;line-height:1.45;">'
-      + '<strong>' + untrackedLegs + ' drive leg' + (untrackedLegs > 1 ? 's' : '') + ' have no mileage set</strong> — total is understated. '
-      + 'Open the <strong>Day Planner</strong>, tap each driving day, and set the miles for any stops added via "Add Destination."'
-      + '</div></div>';
+    html += '<div style="background:#f0f4fa;border:1px solid #c5d5ea;border-radius:var(--radius-s);padding:10px 15px;margin-bottom:14px;font-size:.78rem;color:var(--text-2);line-height:1.45;">'
+      + 'ℹ️ ' + Math.round(totalMiles).toLocaleString() + ' mi tracked + ~' + Math.round(estimatedExtra).toLocaleString()
+      + ' mi estimated (straight-line × 1.2) for ' + untrackedLegs + ' leg' + (untrackedLegs > 1 ? 's' : '')
+      + ' without exact mileage. Actual miles depend on the roads you take.'
+      + '</div>';
   }
 
   // States bar
@@ -10244,7 +10273,10 @@ function renderPlannerAgenda() {
   var _txt  = 'flex:1;font-size:.8rem;color:var(--text);line-height:1.35;';
   var _sub  = 'font-size:.68rem;color:var(--text-3);margin-top:1px;';
 
-  var html = '<div style="padding:0 0 80px 0;">';
+  var html = '<div style="padding:0 0 80px 0;">'
+    + '<div style="display:flex;justify-content:flex-end;margin-bottom:10px;">'
+    + '<button onclick="printAgenda()" style="background:var(--card);border:1px solid var(--border);color:var(--text-2);border-radius:100px;padding:6px 14px;font-size:.75rem;font-weight:700;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:5px;">🖨️ Print Agenda</button>'
+    + '</div>';
 
   for (var ai = 0; ai < _agSorted.length; ai++) {
     var d = _agSorted[ai];
@@ -10298,7 +10330,6 @@ function renderPlannerAgenda() {
     html += '<div style="display:flex;align-items:center;gap:10px;">'
       + '<div style="background:rgba(255,255,255,.22);border-radius:7px;padding:4px 9px;text-align:center;min-width:40px;">'
       + '<div style="font-size:.68rem;font-weight:700;opacity:.9;line-height:1.3;">' + _mday + '</div>'
-      + '<div style="font-size:.58rem;font-weight:700;opacity:.7;line-height:1.1;">Day ' + _dispNum + '</div>'
       + '</div>'
       + '<div>'
       + '<div style="font-weight:900;font-size:.92rem;line-height:1.2;">' + _wdayFull
@@ -10400,7 +10431,7 @@ function renderPlannerAgenda() {
       /* Main activity / title */
       var _mainAct = d.title || d.phase || (_stop ? (_stop.emoji||'') + ' ' + (_stop.name||'') : 'Free explore');
       var _mainActClean = _calActivity(_mainAct) || _mainAct;
-      html += '<div style="' + _row + 'background:#f4f8ff;margin:0 -12px;padding:7px 12px;">'
+      html += '<div style="' + _row + '">'
         + '<div style="' + _time + '">' + _calFmtTime(9) + '</div>'
         + '<div style="' + _ico  + '">' + (_stop && _stop.emoji ? _stop.emoji : '🌎') + '</div>'
         + '<div style="' + _txt  + '"><strong>' + _mainActClean + '</strong>';
@@ -10456,6 +10487,139 @@ function renderPlannerAgenda() {
 
   html += '</div>';
   el.innerHTML = html;
+}
+
+/* ── PRINT AGENDA ──────────────────────────────────────────────────
+   Opens a new tab with a clean, printer-friendly agenda layout.   */
+function printAgenda() {
+  var removedIds = appState.removedStops || {};
+  var sorted = TRIP_DAYS.slice().sort(function(a,b){
+    if (a.date < b.date) return -1; if (a.date > b.date) return 1; return (a.day||0)-(b.day||0);
+  });
+
+  // Pause offset calculation (same logic as renderPlannerAgenda)
+  var pauses = (appState.pauseDays || []).filter(function(p){return p.startDate&&p.endDate;})
+    .sort(function(a,b){return a.startDate<b.startDate?-1:1;});
+  var pIdx = 0, pOffset = 0;
+
+  var depart = (appState.drivingPrefs && appState.drivingPrefs.departureTime) || '08:00';
+  var maxH   = (appState.drivingPrefs && appState.drivingPrefs.maxHours) || 4;
+  var sbEvery= (appState.drivingPrefs && appState.drivingPrefs.stopBreakEvery) || 0;
+  var sbMins = (appState.drivingPrefs && appState.drivingPrefs.stopBreakMins)  || 30;
+
+  var lastMonth = '';
+  var rows = '';
+
+  sorted.forEach(function(d) {
+    if (d.sleepType === 'home' && !d.driveDay) return;
+    if (removedIds[d.stopId]) return;
+
+    while (pIdx < pauses.length && pauses[pIdx].startDate <= d.date) {
+      pOffset += Math.max(0, Math.round((new Date(pauses[pIdx].endDate+'T00:00:00') - new Date(pauses[pIdx].startDate+'T00:00:00')) / 86400000));
+      pIdx++;
+    }
+    var eMs  = new Date(d.date+'T00:00:00').getTime() + pOffset * 86400000;
+    var eObj = new Date(eMs);
+    var eStr = eObj.toISOString().slice(0,10);
+
+    var mLabel = eObj.toLocaleDateString('en-US', { month:'long', year:'numeric' });
+    if (mLabel !== lastMonth) {
+      rows += '<h2 class="month-head">' + mLabel + '</h2>';
+      lastMonth = mLabel;
+    }
+
+    var wday = eObj.toLocaleDateString('en-US', { weekday:'long' });
+    var mday = eObj.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+    var stop = getStop(d.stopId);
+    var isDrive = d.driveDay;
+    var hdrColor = isDrive ? '#b05010' : d.springBreak ? '#6b4ea0' : '#2a5a88';
+
+    rows += '<div class="day-block">';
+    rows += '<div class="day-hdr" style="background:' + hdrColor + '">';
+    rows += '<span class="day-date">' + mday + '</span>';
+    rows += '<div class="day-title"><strong>' + wday + '</strong><br>'
+          + (isDrive ? '🚗 Drive Day' : d.springBreak ? '🌟 Spring Break' : (stop ? (stop.emoji||'') + ' ' : '') + (d.phase||'')) + '</div>';
+    if (d.notes) rows += '<div class="day-notes">' + d.notes + '</div>';
+    rows += '</div>';
+
+    // Time blocks
+    rows += '<div class="day-body">';
+    if (isDrive) {
+      var dptH = parseInt(depart.split(':')[0],10), dptM = parseInt(depart.split(':')[1]||'0',10);
+      var drH = d.driveHours || 0;
+      var sbN = (sbEvery > 0 && drH > 0) ? Math.floor(drH / sbEvery) : 0;
+      var totalH = drH + (sbN * sbMins / 60);
+      var arrMs = dptH*60 + dptM + Math.round(totalH*60);
+      var arrH = Math.floor(arrMs/60) % 24, arrM = arrMs % 60;
+      var fmtT = function(h,m) {
+        var ap = h>=12?'PM':'AM'; var h12=h%12||12;
+        return h12 + (m?':'+String(m).padStart(2,'0'):'') + '\u00a0' + ap;
+      };
+      var fromStop = null;
+      for (var bi = sorted.indexOf(d)-1; bi >= 0; bi--) {
+        var prev = sorted[bi];
+        if (!prev.driveDay && !removedIds[prev.stopId]) { fromStop = getStop(prev.stopId); break; }
+      }
+      rows += '<div class="trow"><span class="tcol">' + fmtT(dptH,dptM) + '</span><span class="ticon">🍳</span><div><strong>Breakfast &amp; Pack Up</strong><div class="tsub">Get the RV road-ready</div></div></div>';
+      rows += '<div class="trow"><span class="tcol">' + fmtT(dptH+1,dptM) + '</span><span class="ticon">🚗</span><div><strong>' + (fromStop ? fromStop.name : 'Depart') + ' → ' + (stop ? stop.name : d.phase || 'Destination') + '</strong><div class="tsub">' + (d.miles?d.miles+' mi · ':'') + drH + 'h drive' + (sbN?' + ' + sbN+' break'+(sbN>1?'s':''):'') + '</div></div></div>';
+      rows += '<div class="trow"><span class="tcol">' + fmtT(arrH,arrM) + '</span><span class="ticon">🏕️</span><div><strong>Arrive &amp; Check In</strong>' + (d.sleep?'<div class="tsub">'+d.sleep+'</div>':'') + '</div></div>';
+      rows += '<div class="trow"><span class="tcol">1:00\u00a0PM</span><span class="ticon">🌄</span><div><strong>Explore the Area</strong><div class="tsub">Short walk, local sights, or just relax</div></div></div>';
+      rows += '<div class="trow last"><span class="tcol">6:30\u00a0PM</span><span class="ticon">🍽</span><div><strong>Dinner</strong><div class="tsub">' + (d.dinner||'Camp cooking or local restaurant') + '</div></div></div>';
+    } else {
+      var acts = (appState.events && appState.events[d.day]) || [];
+      var mainAct = d.title || (stop ? (stop.emoji||'') + ' ' + stop.name : d.phase || 'Free Day');
+      rows += '<div class="trow"><span class="tcol">8:00\u00a0AM</span><span class="ticon">🍳</span><div><strong>Breakfast</strong><div class="tsub">' + (d.breakfast||'Morning at camp') + '</div></div></div>';
+      rows += '<div class="trow"><span class="tcol">9:00\u00a0AM</span><span class="ticon">' + (stop&&stop.emoji?stop.emoji:'🌎') + '</span><div><strong>' + mainAct + '</strong>' + (d.notes?'<div class="tsub">'+d.notes+'</div>':'') + '</div></div>';
+      acts.slice(0,3).forEach(function(ev, ei) {
+        rows += '<div class="trow"><span class="tcol">' + (10+ei) + ':00\u00a0AM</span><span class="ticon">📌</span><div><strong>' + ev.title + '</strong>' + (ev.description?'<div class="tsub">'+ev.description+'</div>':'') + '</div></div>';
+      });
+      rows += '<div class="trow"><span class="tcol">12:00\u00a0PM</span><span class="ticon">🥙</span><div><strong>Lunch</strong><div class="tsub">' + (d.lunch||'Packed lunch or local spot') + '</div></div></div>';
+      rows += '<div class="trow"><span class="tcol">2:00\u00a0PM</span><span class="ticon">☀️</span><div><strong>Afternoon Free Time</strong><div class="tsub">Explore, swim, hike, or relax at camp</div></div></div>';
+      if (d.sleep && d.sleepType !== 'home') {
+        rows += '<div class="trow"><span class="tcol">4:30\u00a0PM</span><span class="ticon">🏕️</span><div><strong>Back at Camp</strong><div class="tsub">' + d.sleep + '</div></div></div>';
+      }
+      rows += '<div class="trow last"><span class="tcol">6:30\u00a0PM</span><span class="ticon">🍽</span><div><strong>Dinner</strong><div class="tsub">' + (d.dinner||'Camp cooking or local restaurant') + '</div></div></div>';
+    }
+    rows += '</div>'; // end body
+    rows += '</div>'; // end day-block
+  });
+
+  var printDate = new Date().toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Maass Family RV Adventure 2026 — Agenda</title>'
+    + '<style>'
+    + 'body{font-family:Georgia,serif;font-size:10pt;color:#1a1a1a;margin:0;padding:20px;}'
+    + 'h1{font-size:14pt;margin:0 0 4px;} .sub{font-size:8pt;color:#555;margin-bottom:16px;}'
+    + '.month-head{font-size:11pt;font-weight:700;color:#2a5a88;background:#eef3fa;border-radius:4px;padding:4px 10px;margin:16px 0 8px;letter-spacing:.02em;}'
+    + '.day-block{margin-bottom:10px;border:1px solid #ccc;border-radius:6px;overflow:hidden;page-break-inside:avoid;}'
+    + '.day-hdr{color:#fff;padding:7px 10px;display:flex;align-items:center;gap:10px;}'
+    + '.day-date{background:rgba(255,255,255,.25);border-radius:4px;padding:2px 7px;font-size:8.5pt;font-weight:700;white-space:nowrap;}'
+    + '.day-title{font-size:9pt;line-height:1.3;}'
+    + '.day-notes{font-size:7.5pt;opacity:.85;margin-left:auto;font-style:italic;}'
+    + '.day-body{padding:4px 8px;}'
+    + '.trow{display:flex;align-items:flex-start;gap:4px;padding:3px 0;border-bottom:1px solid #f0f0f0;}'
+    + '.trow.last{border-bottom:none;}'
+    + '.tcol{min-width:60px;font-size:7.5pt;color:#555;font-weight:700;padding-top:1px;flex-shrink:0;}'
+    + '.ticon{width:18px;font-size:9pt;flex-shrink:0;text-align:center;}'
+    + '.trow div{font-size:8.5pt;line-height:1.3;}'
+    + '.tsub{font-size:7.5pt;color:#777;margin-top:1px;}'
+    + '@media print{'
+    + '  body{padding:10px;} .month-head{background:#dde8f5 !important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+    + '  .day-hdr{-webkit-print-color-adjust:exact;print-color-adjust:exact;}'
+    + '  .day-block{page-break-inside:avoid;}'
+    + '}'
+    + '</style></head><body>'
+    + '<h1>🚐 Maass Family RV Adventure 2026</h1>'
+    + '<div class="sub">Printed ' + printDate + ' · tripgenie.app</div>'
+    + rows
+    + '</body></html>';
+
+  var w = window.open('', '_blank');
+  if (w) {
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(function() { w.print(); }, 600);
+  }
 }
 
 function _mainSeg(which) {
