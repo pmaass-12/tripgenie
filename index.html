@@ -6452,13 +6452,17 @@ function renderStopNavigator() {
   });
 
   /* ── Pre-compute cumulative date offset per stop ──────────────────
-     When phaseExtraDays removes/adds days from stop A, all subsequent
-     stops' effective dates shift by the same amount.                  */
+     Must iterate ALL unique stops in TRIP_DAYS order (including removed
+     ones) so that removed stops' phaseExtraDays still cascade forward —
+     matching renderSchedule's _schPhaseOffset logic exactly.            */
   var _navCumOffset = 0;
   var _navStopOffset = {};
-  _orderedIds.forEach(function(sid) {
-    _navStopOffset[sid] = _navCumOffset;
-    var extra = (appState.phaseExtraDays && appState.phaseExtraDays[sid]) || 0;
+  var _navAllSeenIds = [];
+  TRIP_DAYS.forEach(function(d) {
+    if (!d.stopId || _navAllSeenIds.indexOf(d.stopId) !== -1) return;
+    _navAllSeenIds.push(d.stopId);
+    _navStopOffset[d.stopId] = _navCumOffset;
+    var extra = (appState.phaseExtraDays && appState.phaseExtraDays[d.stopId]) || 0;
     _navCumOffset += extra;
   });
   var _navOffsetDate = function(ds, off) {
@@ -10993,8 +10997,18 @@ async function _initGuestMode(tripId) {
   if (!overlay) return;
   overlay.style.display = 'flex';
 
+  /* Guest mode skips initApp(), so TRIP_STOPS/TRIP_DAYS globals never get set from
+     appState.customTripData. Bootstrap them now so getStop() and other helpers work. */
+  if (appState && appState.customTripData) {
+    if (appState.customTripData.stops && appState.customTripData.stops.length) TRIP_STOPS = appState.customTripData.stops;
+    if (appState.customTripData.days  && appState.customTripData.days.length)  TRIP_DAYS  = appState.customTripData.days;
+    if (appState.customTripData.startDate) CONFIG.startDate = appState.customTripData.startDate;
+    if (appState.customTripData.totalMiles) CONFIG.totalMiles = appState.customTripData.totalMiles;
+  }
+
   var stops = null;
-  var tripName = (CONFIG && CONFIG.tripName) || 'Maass Family RV Adventure 2026';
+  var tripName = (appState && appState.tripSettings && appState.tripSettings.tripName)
+    || (CONFIG && CONFIG.tripName) || 'Maass Family RV Adventure 2026';
 
   var guestArrivals   = {};   // { stopId: { time: ISO } } — arrival check-ins
   var guestDepartures = {};   // { stopId: { time: ISO } } — departure check-outs

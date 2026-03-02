@@ -55,6 +55,12 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (fourteenth context) — 2026-03-02
+
+- **Friends view loads current stops**: `_initGuestMode` now bootstraps `TRIP_STOPS`/`TRIP_DAYS` from `appState.customTripData` before doing anything else — previously guest mode skipped `initApp()` so `TRIP_STOPS` was always stale built-in data. New stops added via wizard now appear correctly.
+
+- **Route map dates match schedule (root cause fixed)**: `renderStopNavigator`'s cumulative `phaseExtraDays` offset was computed only over visible (non-removed) stops. Removed stops still have `phaseExtraDays` that must cascade to subsequent stops (same as `renderSchedule`). Fixed: offset now iterates ALL unique stop IDs in TRIP_DAYS order (including removed ones) before rendering the visible list — exactly matching `renderSchedule`'s `_schPhaseOffset` logic. This eliminated the ~5-day date discrepancy between schedule and route map.
+
 ### Session 18 (thirteenth context) — 2026-03-02
 
 - **Departure date+time modal (complete)**: Rewrote `openDriveTimeModal(dayNum, originStopId, destStopId, dateMs)` — title now shows "City A → City B" format. Added departure DATE row with ← / → shift buttons (calls `_shiftDepartureDate` which delegates to `addPhaseDay`/`removePhaseDay`). Added `_shiftDepartureDate(stopId, direction)` function. Updated `_renderDriveSepA` and `_renderVirtualDriveSep` departure chip `onclick` to pass origin/dest stop IDs and current effective date.
