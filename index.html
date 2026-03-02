@@ -7451,6 +7451,11 @@ function _refreshAll(silent) {
   try { renderSchedule(); }       catch(e) {}
   try { renderStopNavigator(); }  catch(e) {}
   try { renderDashboard(); }      catch(e) {}
+  /* Also refresh Day Planner and Agenda if they are currently visible */
+  var _stpDiv = document.getElementById('stops-content');
+  if (_stpDiv && _stpDiv.style.display !== 'none') { try { renderStops(); } catch(e) {} }
+  var _agdDiv = document.getElementById('agenda-content');
+  if (_agdDiv && _agdDiv.style.display !== 'none') { try { renderPlannerAgenda(); } catch(e) {} }
   if (window.mainMap) setTimeout(function() {
     try { _clearAndRebuildMapMarkers(window.mainMap); } catch(e) {}
   }, 150);
@@ -9097,6 +9102,8 @@ function renderStops() {
     html += '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;">';
     html += '<a href="' + mUrl + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:var(--green-l);border:1px solid #a8d5b8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:var(--green);text-decoration:none;"><i class="fa-solid fa-map-location-dot"></i> Google Maps</a>';
     html += '<button id="stop-events-btn-' + stop.id + '" onclick="event.stopPropagation();toggleStopEvents(' + stop.id + ')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:var(--purple-l);border:1px solid #c9b8e8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:var(--purple);cursor:pointer;font-family:var(--font);"><i class="fa-solid fa-calendar-star"></i> Events Near Here</button>';
+    html += '<button id="stop-attractions-btn-' + stop.id + '" onclick="event.stopPropagation();toggleStopAttractions(' + stop.id + ')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:#e8f5f0;border:1px solid #a8d8c8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:#1a7a5a;cursor:pointer;font-family:var(--font);">🏛️ Attractions</button>';
+    html += '<button id="stop-hotels-btn-' + stop.id + '" onclick="event.stopPropagation();toggleStopHotels(' + stop.id + ')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:#e8f0f8;border:1px solid #a8c0d8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:#1a4a7a;cursor:pointer;font-family:var(--font);">🏨 Hotels &amp; RV Parks</button>';
     html += '</div>';
 
     // Events expandable panel
@@ -9106,6 +9113,24 @@ function renderStops() {
       + '<button onclick="event.stopPropagation();_stopEventsLoaded[' + stop.id + ']=false;loadStopEvents(' + stop.id + ')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
       + '</div>'
       + '<div id="stop-events-body-' + stop.id + '"></div>'
+      + '</div>';
+
+    // Attractions expandable panel
+    html += '<div id="stop-attractions-panel-' + stop.id + '" class="hidden" style="margin-top:6px;border:1px solid #a8d8c8;border-radius:var(--radius-s);overflow:hidden;">'
+      + '<div style="background:#1a7a5a;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;">'
+      + '<span style="font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;">🏛️ Top Attractions — ' + stop.name + '</span>'
+      + '<button onclick="event.stopPropagation();_stopAttractionsLoaded[' + stop.id + ']=false;loadStopAttractions(' + stop.id + ')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
+      + '</div>'
+      + '<div id="stop-attractions-body-' + stop.id + '"></div>'
+      + '</div>';
+
+    // Hotels & RV Parks expandable panel
+    html += '<div id="stop-hotels-panel-' + stop.id + '" class="hidden" style="margin-top:6px;border:1px solid #a8c0d8;border-radius:var(--radius-s);overflow:hidden;">'
+      + '<div style="background:#1a4a7a;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;">'
+      + '<span style="font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;">🏨 Hotels &amp; RV Parks — ' + stop.name + '</span>'
+      + '<button onclick="event.stopPropagation();_stopHotelsLoaded[' + stop.id + ']=false;loadStopHotels(' + stop.id + ')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
+      + '</div>'
+      + '<div id="stop-hotels-body-' + stop.id + '"></div>'
       + '</div>';
 
     html += '</div></div></div>';
@@ -10086,7 +10111,7 @@ function renderPlannerAgenda() {
 
   /* Build skip set (removed stops) */
   var _agRemoved = {};
-  (appState.removedStops || []).forEach(function(id) { _agRemoved[id] = true; });
+  Object.keys(appState.removedStops || {}).forEach(function(id) { _agRemoved[id] = true; });
   var _agSkip = {};
   TRIP_DAYS.forEach(function(d) { if (_agRemoved[d.stopId]) _agSkip[d.day] = true; });
 
@@ -15266,6 +15291,227 @@ function planStopEvent(planId, evName, stopId) {
     btn.style.color = isNowPlanned ? '#fff' : 'var(--orange)';
     btn.style.borderColor = isNowPlanned ? 'var(--green)' : 'var(--orange)';
   }
+}
+
+/* ── ATTRACTIONS NEAR A STOP ─────────────────────────────────────── */
+var _stopAttractionsLoaded = {};
+
+function toggleStopAttractions(stopId) {
+  var panel = document.getElementById('stop-attractions-panel-' + stopId);
+  if (!panel) return;
+  var isHidden = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden');
+  if (isHidden && !_stopAttractionsLoaded[stopId]) {
+    _stopAttractionsLoaded[stopId] = true;
+    loadStopAttractions(stopId);
+  }
+}
+
+function loadStopAttractions(stopId) {
+  var body = document.getElementById('stop-attractions-body-' + stopId);
+  if (!body) return;
+  var stop = getStop(stopId);
+  if (!stop) return;
+
+  body.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text-2);font-size:.84rem;">'
+    + '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i>Finding top attractions near ' + stop.name + '…</div>';
+
+  var stopDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
+  var arrivalDate = stopDays.length > 0 ? stopDays[0].date : '';
+  var departDate  = stopDays.length > 0 ? stopDays[stopDays.length - 1].date : '';
+  var visitRange = arrivalDate
+    ? ' We\'ll be there ' + formatDate(arrivalDate) + (departDate && departDate !== arrivalDate ? ' through ' + formatDate(departDate) : '') + '.'
+    : '';
+
+  var prompt = 'You are a family travel expert. List 6 must-see attractions near ' + _sn(stop) + '.'
+    + visitRange + ' We have kids ages 2, 4, and 9 and travel by RV. Prioritize outdoor adventures, '
+    + 'scenic spots, historic sites, state/national parks, and unique local landmarks that are great for families.\n\n'
+    + 'OUTPUT FORMAT — respond with ONLY these lines, no intro, no explanation:\n'
+    + 'ATTRACTION: [Full attraction name]\n'
+    + 'TYPE: [e.g. National Park, Historic Site, Waterfall, Museum, Scenic Drive, State Park]\n'
+    + 'DURATION: [Typical visit time, e.g. "2-3 hours" or "Half day"]\n'
+    + 'INFO: [One sentence describing it and why families love it]\n'
+    + '---\n'
+    + 'Repeat the ATTRACTION/TYPE/DURATION/INFO/--- block for each of the 6 attractions. No extra text.';
+
+  var reqBody = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: 800, temperature: 0.4 }
+  });
+
+  fetch(GEMINI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: reqBody })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    var text = '';
+    try { text = data.candidates[0].content.parts[0].text || ''; } catch(e) {}
+    if (!text) {
+      body.innerHTML = '<div style="padding:14px 16px;color:var(--text-2);font-size:.84rem;">Could not load attractions — try again later.</div>';
+      return;
+    }
+
+    var blocks = text.split('---');
+    var html = '';
+    var count = 0;
+    var typeEmojis = { 'national park':'🏔️', 'state park':'🌲', 'historic':'🏛️', 'museum':'🏛️', 'waterfall':'💧', 'scenic':'🚗', 'beach':'🏖️', 'lake':'🏞️', 'cave':'🦇', 'zoo':'🦁', 'aquarium':'🐠' };
+
+    blocks.forEach(function(block) {
+      var atName = (block.match(/ATTRACTION:\s*(.+)/i) || [])[1];
+      var atType = (block.match(/TYPE:\s*(.+)/i) || [])[1];
+      var atDur  = (block.match(/DURATION:\s*(.+)/i) || [])[1];
+      var atInfo = (block.match(/INFO:\s*(.+)/i) || [])[1];
+      if (!atName) return;
+      atName = atName.trim();
+      atType = (atType || '').trim();
+      atDur  = (atDur  || '').trim();
+      atInfo = (atInfo || '').trim();
+
+      var em = '🎯';
+      var typeLower = atType.toLowerCase();
+      for (var k in typeEmojis) { if (typeLower.indexOf(k) >= 0) { em = typeEmojis[k]; break; } }
+
+      var planKey = 'attr_' + stopId + '_' + count;
+      var isPlanned = appState.plannedEvents && appState.plannedEvents[planKey];
+
+      html += '<div style="display:flex;gap:11px;padding:12px 14px;'
+        + (count > 0 ? 'border-top:1px solid var(--border);' : '')
+        + 'align-items:flex-start;">'
+        + '<span style="font-size:1.4rem;flex-shrink:0;line-height:1.2;">' + em + '</span>'
+        + '<div style="min-width:0;flex:1;">'
+        + '<div style="font-weight:700;font-size:.87rem;color:var(--text);line-height:1.3;margin-bottom:2px;">' + atName + '</div>'
+        + (atType ? '<div style="font-size:.74rem;color:#1a7a5a;font-weight:700;margin-bottom:1px;">📍 ' + atType + '</div>' : '')
+        + (atDur  ? '<div style="font-size:.74rem;color:var(--orange);font-weight:600;margin-bottom:3px;">⏱️ ' + atDur + '</div>' : '')
+        + (atInfo ? '<div style="font-size:.79rem;color:var(--text-2);line-height:1.45;margin-bottom:6px;">' + atInfo + '</div>' : '')
+        + '<button id="attr-plan-btn-' + planKey + '" onclick="planStopEvent(\'' + planKey + '\',\'' + atName.replace(/'/g, "\\'") + '\',' + stopId + ')" '
+        + 'style="background:' + (isPlanned ? 'var(--green)' : '#e8f5f0') + ';color:' + (isPlanned ? '#fff' : '#1a7a5a') + ';border:1px solid ' + (isPlanned ? 'var(--green)' : '#a8d8c8') + ';border-radius:100px;padding:4px 12px;font-size:.73rem;font-weight:800;cursor:pointer;font-family:var(--font);">'
+        + (isPlanned ? '✅ Planned' : '+ Plan') + '</button>'
+        + '</div></div>';
+      count++;
+    });
+
+    if (count === 0) {
+      body.innerHTML = '<div style="padding:12px 16px;font-size:.83rem;color:var(--text-2);line-height:1.6;">'
+        + text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>') + '</div>';
+    } else {
+      body.innerHTML = html;
+    }
+
+    var btn = document.getElementById('stop-attractions-btn-' + stopId);
+    if (btn && count > 0) btn.innerHTML = '🏛️ Attractions (' + count + ')';
+  })
+  .catch(function() {
+    body.innerHTML = '<div style="padding:14px 16px;color:var(--red);font-size:.84rem;">Couldn\'t load attractions — check your connection.</div>';
+  });
+}
+
+/* ── HOTELS & RV PARKS NEAR A STOP ──────────────────────────────── */
+var _stopHotelsLoaded = {};
+
+function toggleStopHotels(stopId) {
+  var panel = document.getElementById('stop-hotels-panel-' + stopId);
+  if (!panel) return;
+  var isHidden = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden');
+  if (isHidden && !_stopHotelsLoaded[stopId]) {
+    _stopHotelsLoaded[stopId] = true;
+    loadStopHotels(stopId);
+  }
+}
+
+function loadStopHotels(stopId) {
+  var body = document.getElementById('stop-hotels-body-' + stopId);
+  if (!body) return;
+  var stop = getStop(stopId);
+  if (!stop) return;
+
+  body.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text-2);font-size:.84rem;">'
+    + '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i>Finding RV parks &amp; lodging near ' + stop.name + '…</div>';
+
+  var stopDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
+  var arrivalDate = stopDays.length > 0 ? stopDays[0].date : '';
+  var departDate  = stopDays.length > 0 ? stopDays[stopDays.length - 1].date : '';
+  var visitRange = arrivalDate
+    ? ' We\'ll be there ' + formatDate(arrivalDate) + (departDate && departDate !== arrivalDate ? ' through ' + formatDate(departDate) : '') + '.'
+    : '';
+
+  var prompt = 'You are an RV travel expert. List 3 top-rated RV parks or campgrounds AND 2 family hotels near ' + _sn(stop) + '.'
+    + visitRange + ' We travel in a large RV (38 ft) and need full hookups when possible. Family of 5 (kids 2, 4, 9).\n\n'
+    + 'OUTPUT FORMAT — respond with ONLY these lines, no intro, no explanation:\n'
+    + 'PLACE: [Full name of RV park or hotel]\n'
+    + 'TYPE: [RV Park, Campground, or Hotel]\n'
+    + 'PRICE: [Nightly rate range, e.g. "$45-65/night" or "$120-180/night"]\n'
+    + 'HOOKUPS: [Full hookups, Water/Electric, or No hookups — or N/A for hotels]\n'
+    + 'INFO: [One sentence on why it is good for families or RVers]\n'
+    + '---\n'
+    + 'Repeat the PLACE/TYPE/PRICE/HOOKUPS/INFO/--- block for each of the 5 options. No extra text.';
+
+  var reqBody = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: 700, temperature: 0.35 }
+  });
+
+  fetch(GEMINI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: reqBody })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    var text = '';
+    try { text = data.candidates[0].content.parts[0].text || ''; } catch(e) {}
+    if (!text) {
+      body.innerHTML = '<div style="padding:14px 16px;color:var(--text-2);font-size:.84rem;">Could not load lodging — try again later.</div>';
+      return;
+    }
+
+    var blocks = text.split('---');
+    var html = '';
+    var count = 0;
+
+    blocks.forEach(function(block) {
+      var plName    = (block.match(/PLACE:\s*(.+)/i) || [])[1];
+      var plType    = (block.match(/TYPE:\s*(.+)/i) || [])[1];
+      var plPrice   = (block.match(/PRICE:\s*(.+)/i) || [])[1];
+      var plHookups = (block.match(/HOOKUPS:\s*(.+)/i) || [])[1];
+      var plInfo    = (block.match(/INFO:\s*(.+)/i) || [])[1];
+      if (!plName) return;
+      plName    = plName.trim();
+      plType    = (plType    || '').trim();
+      plPrice   = (plPrice   || '').trim();
+      plHookups = (plHookups || '').trim();
+      plInfo    = (plInfo    || '').trim();
+
+      var isRVPark = plType.toLowerCase().indexOf('rv') >= 0 || plType.toLowerCase().indexOf('camp') >= 0;
+      var em = isRVPark ? '🏕️' : '🏨';
+      var accentColor = isRVPark ? '#1a4a7a' : '#5a3a7a';
+      var hookupBadge = (isRVPark && plHookups && plHookups !== 'N/A')
+        ? '<span style="display:inline-block;background:#e8f0f8;color:#1a4a7a;border:1px solid #a8c0d8;border-radius:100px;padding:2px 8px;font-size:.68rem;font-weight:700;margin-left:5px;">⚡ ' + plHookups + '</span>'
+        : '';
+
+      html += '<div style="display:flex;gap:11px;padding:12px 14px;'
+        + (count > 0 ? 'border-top:1px solid var(--border);' : '')
+        + 'align-items:flex-start;">'
+        + '<span style="font-size:1.4rem;flex-shrink:0;line-height:1.2;">' + em + '</span>'
+        + '<div style="min-width:0;flex:1;">'
+        + '<div style="font-weight:700;font-size:.87rem;color:var(--text);line-height:1.3;margin-bottom:2px;">' + plName
+        + hookupBadge + '</div>'
+        + '<div style="font-size:.74rem;font-weight:700;margin-bottom:1px;">'
+        + '<span style="color:' + accentColor + ';">' + plType + '</span>'
+        + (plPrice ? '<span style="color:var(--orange);margin-left:8px;">💰 ' + plPrice + '</span>' : '')
+        + '</div>'
+        + (plInfo ? '<div style="font-size:.79rem;color:var(--text-2);line-height:1.45;margin-top:3px;">' + plInfo + '</div>' : '')
+        + '</div></div>';
+      count++;
+    });
+
+    if (count === 0) {
+      body.innerHTML = '<div style="padding:12px 16px;font-size:.83rem;color:var(--text-2);line-height:1.6;">'
+        + text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>') + '</div>';
+    } else {
+      body.innerHTML = html;
+    }
+
+    var btn = document.getElementById('stop-hotels-btn-' + stopId);
+    if (btn && count > 0) btn.innerHTML = '🏨 Hotels &amp; RV Parks (' + count + ')';
+  })
+  .catch(function() {
+    body.innerHTML = '<div style="padding:14px 16px;color:var(--red);font-size:.84rem;">Couldn\'t load lodging — check your connection.</div>';
+  });
 }
 
 function fetchGeminiInfo(item, stop, type) {
