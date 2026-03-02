@@ -8197,7 +8197,7 @@ function renderSchedule() {
          if there's a different stop being visited (i.e. a cross-stop transition that
          has no explicit driveDay entry). Skip if either stop was removed.           */
       if (!d.driveDay && !removedStopIds[d.stopId] && !(_dIsHome && _lastHeaderWasHome)) {
-        if (lastStopId && lastStopId !== d.stopId && !_dIsHome && stop && stop.lat && stop.lng) {
+        if (lastStopId && lastStopId !== d.stopId && !_dIsHome && stop) {
           /* Look ahead: is there a real driveDay entry heading to THIS same stop
              (i.e. d.stopId) that hasn't been removed? If so, use its data for the
              separator and mark it to be skipped when we iterate to it — this fixes
@@ -8217,8 +8217,24 @@ function renderSchedule() {
           } else {
             var _prevStopForSep = getStop(lastStopId);
             if (_prevStopForSep && !removedStopIds[lastStopId]) {
-              var _vsep = _renderVirtualDriveSep(_prevStopForSep, stop, d, _effectiveDate, _dayDisplayNum[d.day] || d.day);
-              if (_vsep) html += _vsep;
+              /* Virtual separator: use haversine if coords available, otherwise render
+                 a simplified separator with no mileage (e.g. newly added stop before geocode) */
+              if (_prevStopForSep.lat && _prevStopForSep.lng && stop.lat && stop.lng) {
+                var _vsep = _renderVirtualDriveSep(_prevStopForSep, stop, d, _effectiveDate, _dayDisplayNum[d.day] || d.day);
+                if (_vsep) html += _vsep;
+              } else {
+                /* No coords — render basic pill without distance estimate */
+                var _vsTitle = _sn(_prevStopForSep) + ' \u2192 ' + _sn(stop);
+                var _vsLine  = 'flex:1;height:2px;background:repeating-linear-gradient(90deg,var(--orange) 0,var(--orange) 8px,transparent 8px,transparent 16px);min-width:8px;flex-shrink:1;';
+                html += '<div style="display:flex;align-items:center;gap:0;position:relative;margin:5px 0 5px;cursor:pointer;" onclick="openDayDetail(' + d.day + ')" title="' + _vsTitle.replace(/'/g,"&#39;") + '">'
+                  + '<div style="' + _vsLine + '"></div>'
+                  + '<div style="flex-shrink:0;background:var(--orange);color:#fff;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(232,129,58,.28);">'
+                  + '<i class="fa-solid fa-rv" style="flex-shrink:0;font-size:.85rem;"></i>'
+                  + '<span style="white-space:nowrap;">' + _vsTitle + '</span>'
+                  + '<span style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:100px;padding:2px 8px;font-size:.65rem;font-weight:700;white-space:nowrap;opacity:.85;">est.</span>'
+                  + '</div>'
+                  + '<div style="' + _vsLine + '"></div></div>';
+              }
             }
           }
         }
@@ -19821,8 +19837,9 @@ var _TG_MAX_SAVED = 60;   // max messages to keep in persistent memory
      → auto-sends → Genie replies → speaks → loops. Tap 🎙️ again to stop.
    Interruption: tapping mic while Genie is speaking pauses audio immediately.
    ──────────────────────────────────────────────────────────────── */
-var _tgVoiceMode   = true;    /* read responses aloud — always on with ElevenLabs */
+var _tgVoiceMode   = false;   /* read responses aloud — OFF by default; auto-enabled when mic is used */
 var _tgHandsFree   = false;   /* full hands-free auto-listen loop */
+var _tgLastInputWasVoice = false; /* true when the last message was sent via the mic (not keyboard) */
 var _tgRecognition = null;    /* active SpeechRecognition instance */
 var _tgAudioEl     = null;    /* <audio> element for ElevenLabs playback */
 var _tgPlayingEL   = false;   /* EL audio currently playing */
@@ -19968,7 +19985,8 @@ function _tgSpeakWebSpeech(text) {
 
 /* ── main speak entry point ── */
 function _tgSpeak(text) {
-  if (!_tgVoiceMode && !_tgHandsFree) return;
+  /* Called only when response should be spoken (mic input or hands-free loop).
+     Explicit voice-mode toggle is now opt-in — callers check _tgIsVoice first. */
   if (_elKey()) _tgSpeakEL(text);
   else _tgSpeakWebSpeech(text);
 }
@@ -20004,6 +20022,7 @@ function _tgStartVoice() {
     }
     _tgRecognition = null;
     _tgSetMicState(false);
+    _tgLastInputWasVoice = true; /* mic was used — response should be spoken */
     setTimeout(function() { askTripGenie(); }, 400);
   };
 
@@ -20311,7 +20330,10 @@ function askTripGenie() {
   });
   var _tgItinerary = _tgStopList.join(' → ');
 
-  var _tgIsVoice = _tgHandsFree || _tgVoiceMode;
+  /* Voice mode: speak when mic was used OR hands-free loop is active.
+     Text mode: typed messages never trigger speech (text → text).       */
+  var _tgIsVoice = _tgHandsFree || _tgLastInputWasVoice;
+  _tgLastInputWasVoice = false; /* reset — next send will be text unless mic fires again */
   var context  = 'You are TripGenie, a friendly and knowledgeable AI assistant for this family\'s RV trip. '
     + 'They are on a ' + _tgTripName + ' from ' + _tripStartCity()
     + (_tripIsRoundTrip() ? ' (round trip)' : ' to ' + _tripEndCity())
@@ -20325,8 +20347,8 @@ function askTripGenie() {
     + 'For local attraction questions, focus on family-friendly options. '
     + 'CRITICAL — BE CONCISE: Answer ONLY what was asked. Do NOT recite individual legs, full itinerary stops, trip background, or dates unless directly asked. For mileage/distance questions: give ONE total number and ONE sentence of context — never list each leg. '
     + (_tgIsVoice
-      ? 'VOICE MODE: Response will be READ ALOUD. Maximum 2 short sentences total. If asked about mileage, say only the single total (e.g. "About 7,000 miles total"). No lists, no breakdowns, no filler. Cut everything except the core answer. '
-      : 'Use bullet points only for multi-step instructions. Keep responses under 100 words unless complexity demands more. ')
+      ? 'VOICE MODE: Response will be READ ALOUD. Maximum 2 short sentences. No lists, no breakdowns. Cut everything except the core answer. '
+      : 'Use bullet points only for multi-step instructions. Keep responses under 150 words unless the question genuinely needs more. ')
     + _getPersonalizationContext();
 
   /* Build multi-turn conversation contents for Gemini — include last 6 turns of history */
@@ -20346,7 +20368,7 @@ function askTripGenie() {
 
   var body = JSON.stringify({
     contents: _tgContents,
-    generationConfig: { maxOutputTokens: _tgIsVoice ? 80 : 500, temperature: 0.7 }
+    generationConfig: { maxOutputTokens: _tgIsVoice ? 80 : 700, temperature: 0.7 }
   });
 
   fetch(GEMINI_URL, {
@@ -20364,6 +20386,7 @@ function askTripGenie() {
     /* In voice mode: speak the response but keep the chat uncluttered.
        Show a compact pill with a "See text" toggle for review if needed. */
     if (_tgIsVoice) {
+      /* Voice response: compact 🔊 pill with collapsed text toggle */
       var _vId = 'tgv' + Date.now();
       var _voicePill = '<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f0e8ff;border-radius:14px;font-size:.78rem;font-weight:700;color:#7B2FBE;">'
         + '<span style="font-size:1rem;">🔊</span>'
@@ -20372,10 +20395,11 @@ function askTripGenie() {
         + 'style="background:rgba(123,94,167,.15);border:none;border-radius:100px;padding:2px 8px;font-size:.65rem;color:#7B2FBE;cursor:pointer;font-weight:800;font-family:var(--font);">See text</button></div>'
         + '<div id="' + _vId + '" style="display:none;font-size:.82rem;color:var(--text);line-height:1.5;padding:6px 4px 2px;">' + _tgFormatResponse(_tgRawText) + '</div>';
       _tgAppendBubble('genie', _voicePill, _tgRawText);
+      _tgSpeak(_tgRawText); /* only speak when triggered by mic or hands-free */
     } else {
+      /* Text response: full formatted reply, no speech */
       _tgAppendBubble('genie', _tgFormatResponse(_tgRawText), _tgRawText);
     }
-    _tgSpeak(_tgRawText);
     _tgBusy = false;
   })
   .catch(function() {
