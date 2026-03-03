@@ -2728,7 +2728,7 @@
                transition:background .15s;">
         <i class="fa-solid fa-map-location-dot"></i>
       </button>
-      <button id="tg-btn" onclick="openTripGenieVoice()" title="Ask TripGenie anything">
+      <button id="tg-btn" onclick="openTripGenieVoiceMobile()" title="Ask TripGenie anything">
         <span style="font-size:.78rem;line-height:1;">✨</span><span class="tg-btn-label"> Ask TripGenie</span>
       </button>
       <button id="change-plan-btn" onclick="openChangePlanModal()" title="Tell TripGenie about a change to the plan"
@@ -22835,9 +22835,17 @@ async function _tsTestElVoice() {
 
 /* Opens TripGenie and, on mobile, immediately activates hands-free voice loop */
 function openTripGenieVoice() {
+  /* Always open in voice/hands-free mode (used by drive mode orb + mobile header btn).
+     Call _tgToggleHandsFree synchronously within the user gesture — iOS requires mic
+     permission to be requested in the same call stack as the tap event. */
   openTripGenie();
-  /* Call synchronously within the user gesture — iOS requires mic permission
-     to be requested in the same call stack as the tap event. setTimeout breaks this. */
+  if (!_tgHandsFree) _tgToggleHandsFree();
+}
+
+function openTripGenieVoiceMobile() {
+  /* Mobile header button only — restrict to narrow screens so tapping the
+     header icon on desktop doesn't auto-start the mic unexpectedly. */
+  openTripGenie();
   if (window.innerWidth <= 640) {
     if (!_tgHandsFree) _tgToggleHandsFree();
   }
@@ -26681,7 +26689,7 @@ function _smRenderToday() {
     + '</div>';
 
   /* 4. Big waveform TripGenie button — tap to ask, pulses when listening */
-  var genieBtn = '<button class="dm-genie-big" id="dm-genie-orb-btn" onclick="openTripGenie()">'
+  var genieBtn = '<button class="dm-genie-big" id="dm-genie-orb-btn" onclick="openTripGenieVoice()">'
     + '<div class="dm-genie-ring dm-genie-ring-1"></div>'
     + '<div class="dm-genie-ring dm-genie-ring-2"></div>'
     + '<div class="dm-genie-ring dm-genie-ring-3"></div>'
