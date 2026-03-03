@@ -4566,6 +4566,7 @@ function _applyProfile(name, color) {
       loadFromCloud(function() { initApp(); applyFriendMode(); });
     } else {
       showToast('&#9729;&#65039; Loading your trip data…', 1800);
+      _startupSnapshot();
       loadFromCloud(function() { initApp(); _updateHeaderProfile(); if (_userName) { _setSyncStatus('&#9729;', 'Hi ' + _userName + '!', 'rgba(255,255,255,.7)'); setTimeout(function(){ _setSyncStatus('&#9729;','Saved (' + _userName + ')','rgba(255,255,255,.45)'); }, 2500); } });
     }
   }
@@ -4782,6 +4783,23 @@ function _doLegacyInitAfterSbAuth() {
 var _snapLastSaved = 0;   // epoch-ms of last cloud snapshot
 var _snapAutoTimer = null;
 var _snapCache     = {};  // snapId → state object, populated during renderSnapshotsTab
+var _startupSnapDone = false; // prevent double-fire on session-resume path
+
+/* Called right before loadFromCloud so every device preserves its local state
+   before cloud sync can overwrite it.  Always writes a local backup; also pushes
+   a cloud snapshot (async, non-blocking) when the user is authenticated and the
+   local trip has meaningful data.                                               */
+function _startupSnapshot() {
+  if (_startupSnapDone) return;
+  _startupSnapDone = true;
+  var stops = (appState && appState.customTripData && appState.customTripData.stops) || [];
+  if (stops.length < 2) return; // nothing worth snapshotting
+  _saveLocalBackup(appState);
+  if (_sbUser) {
+    /* Fire-and-forget — don't await, don't block app init */
+    _saveCloudSnapshot('Startup').catch(function() {});
+  }
+}
 
 /* Toggle an inline stop-list preview beneath a snapshot card */
 function _toggleSnapPreview(id) {
@@ -5328,6 +5346,7 @@ function _tryAutoLogin() {
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     if (s.mode === 'family') {
+      _startupSnapshot();
       loadFromCloud(function() {
         initApp(); _updateHeaderProfile();
         if (_userName) { _setSyncStatus('☁', 'Hi ' + _userName + '!', 'rgba(255,255,255,.7)'); setTimeout(function(){ _setSyncStatus('☁','Saved (' + _userName + ')','rgba(255,255,255,.45)'); }, 2500); }
