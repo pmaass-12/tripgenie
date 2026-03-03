@@ -7876,9 +7876,9 @@ function _refreshAll(silent) {
   try { renderSchedule(); }       catch(e) {}
   try { renderStopNavigator(); }  catch(e) {}
   try { renderDashboard(); }      catch(e) {}
-  /* Also refresh Day Planner and Agenda if they are currently visible */
-  var _stpDiv = document.getElementById('stops-content');
-  if (_stpDiv && _stpDiv.style.display !== 'none') { try { renderStops(); } catch(e) {} }
+  /* Always refresh Day Planner and Agenda so they stay in sync with Schedule
+     regardless of which sub-tab is currently visible */
+  try { renderStops(); } catch(e) {}
   var _agdDiv = document.getElementById('agenda-content');
   if (_agdDiv && _agdDiv.style.display !== 'none') { try { renderPlannerAgenda(); } catch(e) {} }
   if (window.mainMap) setTimeout(function() {
@@ -22553,16 +22553,28 @@ function _tgToggleVoiceMode() {
     _tgRevealVoiceTranscripts();
   } else {
     if (window.speechSynthesis) window.speechSynthesis.getVoices(); /* pre-load voices */
+    _tgUnlockAudio(); /* unlock iOS audio while still in user-gesture context */
   }
   _tgUpdateVoiceUI();
   showToast(_tgVoiceMode ? ('🔊 Voice ON' + (_elKey() ? ' · ElevenLabs' : ' · system voice')) : '🔇 Voice off', 2000);
 }
 
 /* ── hands-free toggle ── */
+function _tgUnlockAudio() {
+  /* iOS blocks audio autoplay from async callbacks unless the audio element
+     has been "unlocked" by a play() call within a real user-gesture context.
+     Call this synchronously from a tap handler before any async TTS fetch. */
+  if (!_tgAudioEl) { _tgAudioEl = document.createElement('audio'); document.body.appendChild(_tgAudioEl); }
+  /* Tiny silent WAV — just enough to grant autoplay permission */
+  _tgAudioEl.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+  _tgAudioEl.play().catch(function() { /* permission denied is OK — we tried */ });
+}
+
 function _tgToggleHandsFree() {
   _tgHandsFree = !_tgHandsFree;
   if (_tgHandsFree) {
     _tgVoiceMode = true; /* hands-free implies readback */
+    _tgUnlockAudio();    /* unlock iOS audio NOW while we're in user-gesture context */
     _tgUpdateVoiceUI();
     showToast('🎙️ Hands-free ON — speak after TripGenie finishes!', 2600);
     if (!_tgBusy && !_tgPlayingEL) _tgStartVoice(); /* start listening immediately */
