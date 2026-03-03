@@ -55,6 +55,10 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (thirty-fourth context) — 2026-03-03
+
+- **Spring Break removed**: Stripped all Spring Break references from the codebase. TRIP_DAYS Moab/Durango entries had `springBreak:true` → `false` and "🌟 SPRING BREAK — " stripped from titles. Removed: springBadge rendering, uBreak badge, spring break stat card in Road School, purple styling in schedule/school views, spring break special handling in school day toggle/expand, spring break label in Agenda. Desert Bistro description updated.
+
 ### Session 18 (thirty-third context) — 2026-03-03
 
 - **Startup snapshot safety net**: Added `_startupSnapshot()` and `_startupSnapDone` flag. Called right before `loadFromCloud` in both family-mode auth paths (legacy + new). Always writes a local backup if trip has ≥2 stops; also fires `_saveCloudSnapshot('Startup')` async/non-blocking when authenticated. Zero risk: never blocks init, never overwrites anything. Now every device preserves its local state before cloud sync can clobber it.
