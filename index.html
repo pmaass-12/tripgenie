@@ -4235,6 +4235,37 @@ function syncToCloud(state) {
   _syncTimer = setTimeout(function() { _doCloudSave(state); }, 1800);
 }
 
+function _saveLocalBackup(state) {
+  /* Keep a rolling set of up to 3 local snapshots in localStorage so data can be
+     recovered even if the cloud sync delivers a stale/regressed version. */
+  try {
+    var now = new Date().toISOString();
+    var snap = JSON.stringify({ ts: now, state: state });
+    // Rotate: backup_2 ← backup_1 ← backup_0 ← snap
+    var b1 = localStorage.getItem('rv_backup_1');
+    var b2 = localStorage.getItem('rv_backup_2');
+    if (b2) localStorage.setItem('rv_backup_3', b2);
+    if (b1) localStorage.setItem('rv_backup_2', b1);
+    localStorage.setItem('rv_backup_1', snap);
+  } catch(e) {}
+}
+
+function _restoreFromBackup(slot) {
+  try {
+    var raw = localStorage.getItem('rv_backup_' + slot);
+    if (!raw) { showToast('No backup #' + slot + ' found', 3000); return; }
+    var obj = JSON.parse(raw);
+    var ts  = obj.ts ? new Date(obj.ts).toLocaleString() : 'unknown time';
+    if (!confirm('Restore backup from ' + ts + '?\n\nThis will overwrite your current trip state and save to cloud.')) return;
+    appState = obj.state;
+    localStorage.setItem('rv_state', JSON.stringify(appState));
+    syncToCloud(appState);
+    if (_sbUser) _syncToSupabaseTrips(appState);
+    _refreshAll(true);
+    showToast('✅ Restored from backup (' + ts + ')', 4000);
+  } catch(e) { showToast('❌ Backup restore failed', 3000); }
+}
+
 function loadFromCloud(callback) {
   fetch(SUPA_URL + '/rest/v1/' + SUPA_TABLE + '?id=eq.' + SUPA_ROW + '&select=data,updated_at', {
     headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
@@ -4247,10 +4278,29 @@ function loadFromCloud(callback) {
       var localTs    = appState._savedAt ? new Date(appState._savedAt).getTime() : 0;
       _cloudLoadedAt = remoteTs; // remember what we loaded
       if (remoteTs > localTs) {
-        appState = remote;
-        localStorage.setItem('rv_state', JSON.stringify(appState));
-        var byWho = remote._savedBy ? ' by ' + remote._savedBy : '';
-        showToast('&#9729;&#65039; Synced from cloud' + byWho + ' — up to date!', 2500);
+        /* ── Data-regression check: if remote has fewer custom stops/days than local,
+           save a backup and show a conflict warning instead of silently overwriting. ── */
+        var localStops  = (appState.customTripData && appState.customTripData.stops  || []).length;
+        var remoteStops = (remote.customTripData   && remote.customTripData.stops    || []).length;
+        var localDays   = (appState.customTripData && appState.customTripData.days   || []).length;
+        var remoteDays  = (remote.customTripData   && remote.customTripData.days     || []).length;
+        var hasLocalData = localStops > 0 || localDays > 0;
+        var dataRegressed = hasLocalData && (remoteStops < localStops - 2 || remoteDays < localDays - 3);
+        if (dataRegressed) {
+          /* Take a backup of current local state before showing conflict */
+          _saveLocalBackup(appState);
+          /* Surface the same conflict-resolution banner (user chooses mine vs theirs) */
+          var theirName = remote._savedBy || 'cloud';
+          _showConflictBanner(appState, remote, theirName);
+          _cloudLoadedAt = localTs; // keep local as baseline since we're not loading remote yet
+        } else {
+          /* Normal sync: save backup then overwrite */
+          if (localTs > 0) _saveLocalBackup(appState); // only backup if we had real local data
+          appState = remote;
+          localStorage.setItem('rv_state', JSON.stringify(appState));
+          var byWho = remote._savedBy ? ' by ' + remote._savedBy : '';
+          showToast('&#9729;&#65039; Synced from cloud' + byWho + ' — up to date!', 2500);
+        }
       } else {
         _cloudLoadedAt = localTs; // use local timestamp as baseline
         _setSyncStatus('&#9729;', 'Saved', 'rgba(255,255,255,.45)');
@@ -11391,6 +11441,15 @@ async function _initGuestMode(tripId) {
         if (rows[0].name) tripName = rows[0].name;
         var td = rows[0].trip_data || {};
         if (td.customTripData && td.customTripData.stops) stops = td.customTripData.stops;
+        /* Also update globals so _guestShowWhereNow and other helpers use current Supabase data
+           (not stale defaults from the guest's local appState / built-in trip) */
+        if (td.customTripData) {
+          if (td.customTripData.stops && td.customTripData.stops.length) TRIP_STOPS = td.customTripData.stops;
+          if (td.customTripData.days  && td.customTripData.days.length)  TRIP_DAYS  = td.customTripData.days;
+          if (td.customTripData.startDate) CONFIG.startDate = td.customTripData.startDate;
+          if (td.customTripData.endDate)   CONFIG.endDate   = td.customTripData.endDate;
+          if (td.customTripData.totalDays) CONFIG.totalDays = td.customTripData.totalDays;
+        }
         if (td.arrivals)    guestArrivals    = td.arrivals;
         if (td.departures)  guestDepartures  = td.departures;
         if (td.removedStops) guestRemovedIds = td.removedStops;

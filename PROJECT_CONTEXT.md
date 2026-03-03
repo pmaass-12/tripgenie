@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-02 (Session 18, twenty-sixth context)
+2026-03-03 (Session 18, thirtieth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,17 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 18 (thirtieth context) — 2026-03-03
+
+- **Friends route map — loads current Supabase schedule**: `_initGuestMode` Supabase fetch was only updating the local `stops` variable, not the global `TRIP_DAYS`/`TRIP_STOPS`. Helpers like `_guestShowWhereNow` use those globals, so they were using stale built-in defaults on devices that aren't Paul's. Fix: after Supabase fetch, now also sets `TRIP_STOPS`, `TRIP_DAYS`, and `CONFIG.startDate/endDate/totalDays` from `td.customTripData`.
+
+- **Cloud sync data-loss safeguard**:
+  - Added `_saveLocalBackup(state)` — keeps a rolling set of 3 timestamped snapshots (`rv_backup_1`/`2`/`3`) in localStorage, taken automatically before any cloud overwrite.
+  - Added `_restoreFromBackup(slot)` — callable from console or Tools to restore backup 1/2/3 with confirmation and immediate cloud re-save.
+  - `loadFromCloud` now does a data-regression check before silent overwrite: if the remote data has meaningfully fewer custom stops or days than the current local state (suggesting the remote is stale/reverted), it saves a local backup and shows the conflict-resolution banner instead of silently overwriting. This prevents the data-loss scenario where another device saves old data with a newer timestamp.
+
+- **INCIDENT: Custom trip stops lost to cloud sync reversion**: Paul's post-Badlands homeward stops were lost when `loadFromCloud` silently loaded a stale cloud state. The remote `rv_state` had a newer `updated_at` timestamp but older trip data (fewer stops). Root cause: old data was saved to `rv_state` from a second device/tab, then loaded back. The new safeguard above prevents this in future. To rebuild lost stops, Paul must recall the homeward route and re-enter stops via the trip wizard.
 
 ### Session 18 (twenty-ninth context) — 2026-03-02
 
