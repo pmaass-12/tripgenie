@@ -55,6 +55,20 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (thirty-first context) — 2026-03-03
+
+- **Cloud Snapshot system (full implementation)**:
+  - `_saveCloudSnapshot(label)` — saves a new row to `trips` table with name starting with "📸"; also calls `_saveLocalBackup` first. Works signed-in or offline (local only).
+  - `_pruneCloudSnapshots()` — keeps max 15 snapshots per user; deletes oldest beyond that.
+  - `_restoreFromCloudSnapshot(snapId, safeLabel)` — saves current state as a new snapshot first, then restores the chosen version and re-inits the app.
+  - `renderSnapshotsTab()` — async Tools sub-tab showing: 3 local backups with restore buttons, plus all cloud snapshots (timestamp, stop count, restore button). Auth-gated for cloud section.
+  - `_startAutoSnapshot()` — interval timer (20 min) that fires `_saveCloudSnapshot('Auto')` if `appState._savedAt` is newer than `_snapLastSaved`.
+  - Cross-tab sync: `storage` event listener refreshes `appState` from localStorage when another tab saves — prevents stale tab from overwriting newer data.
+  - `_doLegacyInitAfterSbAuth` now calls `_startAutoSnapshot()` after sign-in.
+  - `loadFromCloud` now ALWAYS saves a local backup before any cloud overwrite (not just on regression).
+  - `_renderTripCards` filters out snapshot rows (names starting with "📸") from My Trips list.
+  - New "📸 Snapshots" tab added to Tools nav.
+
 ### Session 18 (thirtieth context) — 2026-03-03
 
 - **Friends route map — loads current Supabase schedule**: `_initGuestMode` Supabase fetch was only updating the local `stops` variable, not the global `TRIP_DAYS`/`TRIP_STOPS`. Helpers like `_guestShowWhereNow` use those globals, so they were using stale built-in defaults on devices that aren't Paul's. Fix: after Supabase fetch, now also sets `TRIP_STOPS`, `TRIP_DAYS`, and `CONFIG.startDate/endDate/totalDays` from `td.customTripData`.

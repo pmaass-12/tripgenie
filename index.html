@@ -4294,8 +4294,8 @@ function loadFromCloud(callback) {
           _showConflictBanner(appState, remote, theirName);
           _cloudLoadedAt = localTs; // keep local as baseline since we're not loading remote yet
         } else {
-          /* Normal sync: save backup then overwrite */
-          if (localTs > 0) _saveLocalBackup(appState); // only backup if we had real local data
+          /* Normal sync: ALWAYS save local backup first, then overwrite */
+          _saveLocalBackup(appState);
           appState = remote;
           localStorage.setItem('rv_state', JSON.stringify(appState));
           var byWho = remote._savedBy ? ' by ' + remote._savedBy : '';
@@ -4702,7 +4702,9 @@ async function _showMyTrips() {
     document.getElementById('my-trips-list').innerHTML = '<div style="color:var(--red);padding:20px;">Error loading trips: ' + error.message + '</div>';
     return;
   }
-  _renderTripCards(data || []);
+  /* Filter out snapshot rows (names starting with 📸) so they don't pollute My Trips */
+  var nonSnaps = (data || []).filter(function(t) { return !t.name || t.name.charAt(0) !== '\uD83D\uDCF8'; });
+  _renderTripCards(nonSnaps);
 }
 
 function _renderTripCards(trips) {
@@ -4768,7 +4770,202 @@ function _doLegacyInitAfterSbAuth() {
   document.getElementById('login-overlay').style.display = 'none';
   var mto = document.getElementById('my-trips-overlay');
   if (mto) mto.style.display = 'none';
+  /* Start cloud auto-snapshot timer once the user is authenticated */
+  if (_sbUser) _startAutoSnapshot();
 }
+
+/* ── CLOUD SNAPSHOT SYSTEM ───────────────────────────────────────
+   Snapshots are stored as extra rows in the `trips` table whose
+   names start with "📸".  They are separate from the active trip
+   row (_currentTripId).  Up to 15 snapshots are kept per user.
+   Auto-snapshot fires every 20 minutes when data has changed.     */
+var _snapLastSaved = 0;   // epoch-ms of last cloud snapshot
+var _snapAutoTimer = null;
+
+async function _saveCloudSnapshot(label) {
+  /* Always take a local backup regardless of cloud state */
+  _saveLocalBackup(appState);
+  var client = _initSbClient();
+  if (!client || !_sbUser) {
+    showToast('📸 Snapshot saved locally (not signed in for cloud)', 3000);
+    return;
+  }
+  var stops = (appState.customTripData && appState.customTripData.stops || []).length;
+  var ts    = new Date();
+  var name  = '\uD83D\uDCF8 '
+    + ts.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) + ' '
+    + ts.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})
+    + (label ? ' \u2014 ' + label : '')
+    + ' (' + stops + ' stops)';
+  try {
+    var insResult = await client.from('trips').insert({
+      user_id:    _sbUser.id,
+      name:       name,
+      trip_data:  appState,
+      start_date: CONFIG && CONFIG.startDate,
+      end_date:   CONFIG && CONFIG.endDate,
+      updated_at: new Date().toISOString()
+    });
+    if (!insResult.error) {
+      _snapLastSaved = Date.now();
+      showToast('\uD83D\uDCF8 Snapshot saved to cloud!', 2500);
+      _pruneCloudSnapshots();
+      if (_toolsTab === 'snapshots') renderSnapshotsTab();
+    } else {
+      showToast('\u274C Snapshot failed: ' + (insResult.error.message || 'unknown'), 3500);
+    }
+  } catch(e) { showToast('\u274C Snapshot failed', 3000); }
+}
+
+async function _pruneCloudSnapshots() {
+  var client = _initSbClient();
+  if (!client || !_sbUser) return;
+  try {
+    var res = await client.from('trips')
+      .select('id, updated_at')
+      .eq('user_id', _sbUser.id)
+      .like('name', '\uD83D\uDCF8%')
+      .order('updated_at', { ascending: false });
+    if (res.data && res.data.length > 15) {
+      var toDelete = res.data.slice(15).map(function(r) { return r.id; });
+      await client.from('trips').delete().in('id', toDelete);
+    }
+  } catch(e) {}
+}
+
+async function _restoreFromCloudSnapshot(snapId, safeLabel) {
+  var label = decodeURIComponent(safeLabel);
+  if (!confirm('Restore snapshot from ' + label + '?\n\nYour current state will be auto-saved as a new snapshot first, then this version loads.')) return;
+  var client = _initSbClient();
+  if (!client) return;
+  /* Save current state first so the user can undo the restore */
+  await _saveCloudSnapshot('Before restore');
+  var res = await client.from('trips').select('trip_data').eq('id', snapId).single();
+  if (res.error || !res.data) { showToast('\u274C Could not load snapshot', 3000); return; }
+  appState = res.data.trip_data || {};
+  localStorage.setItem('rv_state', JSON.stringify(appState));
+  syncToCloud(appState);
+  if (_sbUser) _syncToSupabaseTrips(appState);
+  initApp();
+  showToast('\u2705 Restored from snapshot: ' + label, 4500);
+  setToolsTab('snapshots');
+}
+
+async function renderSnapshotsTab() {
+  var el = document.getElementById('tools-sub-content');
+  if (!el) return;
+  /* Header + manual save button */
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px;">'
+    + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-camera-retro"></i> Trip Snapshots</h2>'
+    + '<button onclick="_saveCloudSnapshot(\'Manual\')" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:10px 20px;font-size:.87rem;font-weight:800;cursor:pointer;font-family:var(--font);">\uD83D\uDCF8 Save Snapshot Now</button>'
+    + '</div>'
+    + '<p style="font-size:.83rem;color:var(--text-2);margin-bottom:18px;line-height:1.5;">Cloud snapshots let you roll back from <em>any device</em>. Auto-saved every 20 minutes when the trip changes. Up to 15 kept. Before any restore, your current state is saved first so you can undo it.</p>';
+
+  /* ── Local device backups ── */
+  html += '<div style="background:var(--bg);border-radius:var(--radius-s);padding:14px 16px;margin-bottom:18px;">';
+  html += '<div style="font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:10px;">\uD83D\uDCBB Local Device Backups (up to 3)</div>';
+  var foundLocal = false;
+  [1,2,3].forEach(function(slot) {
+    try {
+      var raw = localStorage.getItem('rv_backup_' + slot);
+      if (!raw) return;
+      foundLocal = true;
+      var obj   = JSON.parse(raw);
+      var ts    = obj.ts ? new Date(obj.ts).toLocaleString() : 'Unknown time';
+      var stops = (obj.state && obj.state.customTripData && obj.state.customTripData.stops || []).length;
+      var days  = (obj.state && obj.state.customTripData && obj.state.customTripData.days  || []).length;
+      html += '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">'
+        + '<div style="flex:1;">'
+        + '<div style="font-size:.85rem;font-weight:700;color:var(--text);">' + ts + '</div>'
+        + '<div style="font-size:.75rem;color:var(--text-2);">' + stops + ' stops \u00B7 ' + days + ' days \u00B7 this device only</div>'
+        + '</div>'
+        + '<button onclick="_restoreFromBackup(' + slot + ');renderSnapshotsTab();" style="background:var(--blue);color:#fff;border:none;border-radius:100px;padding:7px 14px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);">\u21A9 Restore</button>'
+        + '</div>';
+    } catch(e) {}
+  });
+  if (!foundLocal) html += '<div style="color:var(--text-3);font-size:.82rem;padding:6px 0;">No local backups yet \u2014 these auto-save before any cloud overwrite.</div>';
+  html += '</div>';
+
+  el.innerHTML = html;
+
+  /* ── Cloud snapshots (async) ── */
+  var cloudDiv = document.createElement('div');
+  cloudDiv.style.cssText = 'background:var(--bg);border-radius:var(--radius-s);padding:14px 16px;';
+  cloudDiv.innerHTML = '<div style="font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:10px;">\u2601\uFE0F Cloud Snapshots</div>'
+    + '<div style="text-align:center;padding:24px;color:var(--text-2);font-size:.85rem;">\u23F3 Loading cloud snapshots\u2026</div>';
+  el.appendChild(cloudDiv);
+
+  var client = _initSbClient();
+  if (!client || !_sbUser) {
+    cloudDiv.innerHTML = '<div style="font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:10px;">\u2601\uFE0F Cloud Snapshots</div>'
+      + '<div style="padding:12px;color:var(--text-3);font-size:.83rem;">Sign in with an account to access cloud snapshots that work across all your devices.</div>';
+    return;
+  }
+  try {
+    var res = await client.from('trips')
+      .select('id, name, updated_at, trip_data')
+      .eq('user_id', _sbUser.id)
+      .like('name', '\uD83D\uDCF8%')
+      .order('updated_at', { ascending: false })
+      .limit(15);
+    var snaps = (res.data || []);
+    var cHtml = '<div style="font-size:.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text-3);margin-bottom:10px;">'
+      + '\u2601\uFE0F Cloud Snapshots (' + snaps.length + '/15)'
+      + '</div>';
+    if (snaps.length === 0) {
+      cHtml += '<div style="text-align:center;padding:24px;color:var(--text-3);font-size:.85rem;">No cloud snapshots yet. Tap \u201CSave Snapshot Now\u201D to create one, or wait for the auto-save (every 20 min).</div>';
+    } else {
+      snaps.forEach(function(snap) {
+        var ts    = snap.updated_at ? new Date(snap.updated_at).toLocaleString() : '?';
+        var stops = (snap.trip_data && snap.trip_data.customTripData && snap.trip_data.customTripData.stops || []).length;
+        var days  = (snap.trip_data && snap.trip_data.customTripData && snap.trip_data.customTripData.days  || []).length;
+        var safeTs = encodeURIComponent(ts);
+        cHtml += '<div style="background:var(--card);border-radius:10px;padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 6px rgba(0,0,0,.07);">'
+          + '<div style="display:flex;align-items:flex-start;gap:12px;">'
+          + '<span style="font-size:1.6rem;line-height:1;">\uD83D\uDCF8</span>'
+          + '<div style="flex:1;">'
+          + '<div style="font-size:.88rem;font-weight:800;color:var(--text);">' + ts + '</div>'
+          + '<div style="font-size:.75rem;color:var(--text-2);margin-top:3px;">' + stops + ' stops \u00B7 ' + days + ' days</div>'
+          + '</div>'
+          + '<button onclick="_restoreFromCloudSnapshot(\'' + snap.id + '\',\'' + safeTs + '\')" style="background:var(--blue);color:#fff;border:none;border-radius:100px;padding:8px 16px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;">\u21A9 Restore</button>'
+          + '</div>'
+          + '</div>';
+      });
+    }
+    cloudDiv.innerHTML = cHtml;
+  } catch(e) {
+    cloudDiv.innerHTML = '<div style="color:var(--red);padding:12px;">Could not load cloud snapshots</div>';
+  }
+}
+
+/* Auto-snapshot timer: fires every 20 minutes if data changed */
+function _startAutoSnapshot() {
+  if (_snapAutoTimer) clearInterval(_snapAutoTimer);
+  _snapAutoTimer = setInterval(function() {
+    if (_isTestMode || _isViewer || !_sbUser) return;
+    var lastSave = appState._savedAt ? new Date(appState._savedAt).getTime() : 0;
+    if (lastSave > _snapLastSaved && Date.now() - _snapLastSaved > 19 * 60 * 1000) {
+      _saveCloudSnapshot('Auto');
+    }
+  }, 20 * 60 * 1000);
+}
+
+/* Cross-tab sync: when another tab saves to localStorage, reload appState */
+(function() {
+  window.addEventListener('storage', function(e) {
+    if (e.key !== 'rv_state' || !e.newValue) return;
+    try {
+      var incoming = JSON.parse(e.newValue);
+      var incomingTs = incoming._savedAt ? new Date(incoming._savedAt).getTime() : 0;
+      var localTs    = appState._savedAt  ? new Date(appState._savedAt).getTime()  : 0;
+      if (incomingTs > localTs) {
+        /* Another tab just saved newer data — adopt it silently */
+        appState = incoming;
+        _refreshAll(true);
+      }
+    } catch(ex) {}
+  });
+})();
 
 var _sbSyncTimer = null;
 function _syncToSupabaseTrips(state) {
@@ -19230,6 +19427,7 @@ function renderTools() {
     { id:'rvlog',    icon:'🚐', label:'RV Log'        },
     { id:'membook',  icon:'📖', label:'Memory Book'   },
     { id:'profiles', icon:'👤', label:'Profiles'      },
+    { id:'snapshots',icon:'📸', label:'Snapshots'      },
     { id:'auditlog', icon:'📋', label:'Audit Log'     },
     { id:'health',   icon:'🩺', label:'Health Check'  },
     { id:'settings', icon:'⚙️', label:'Settings'       },
@@ -19254,6 +19452,7 @@ function _renderToolsSub() {
   if (_toolsTab === 'rvlog')    renderRVMaintenance();
   if (_toolsTab === 'membook')  renderMemoryBook();
   if (_toolsTab === 'profiles') renderProfiles();
+  if (_toolsTab === 'snapshots') renderSnapshotsTab();
   if (_toolsTab === 'auditlog') renderAuditLog();
   if (_toolsTab === 'health')   renderHealthCheckTab();
   if (_toolsTab === 'settings') renderTripSettings();
