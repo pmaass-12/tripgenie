@@ -4781,6 +4781,47 @@ function _doLegacyInitAfterSbAuth() {
    Auto-snapshot fires every 20 minutes when data has changed.     */
 var _snapLastSaved = 0;   // epoch-ms of last cloud snapshot
 var _snapAutoTimer = null;
+var _snapCache     = {};  // snapId → state object, populated during renderSnapshotsTab
+
+/* Toggle an inline stop-list preview beneath a snapshot card */
+function _toggleSnapPreview(id) {
+  var container = document.getElementById('snap-preview-' + id);
+  if (!container) return;
+  if (container.style.display === 'none' || container.style.display === '') {
+    /* Build preview if not already done */
+    if (!container.innerHTML) {
+      var state = _snapCache[id];
+      if (!state) { container.innerHTML = '<em style="color:var(--text-3);font-size:.8rem;">Preview not available</em>'; }
+      else {
+        var ct    = (state.customTripData) || {};
+        var stops = ct.stops || [];
+        var days  = ct.days  || [];
+        var name  = ct.tripName  || 'Custom Trip';
+        var sd    = ct.startDate ? new Date(ct.startDate + 'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+        var ed    = ct.endDate   ? new Date(ct.endDate   + 'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+        var h = '<div style="border-top:1px solid var(--border);padding-top:12px;margin-top:2px;">'
+              + '<div style="font-size:.77rem;font-weight:800;color:var(--purple);margin-bottom:8px;">'
+              + '\uD83D\uDDFA\uFE0F ' + name + ' &nbsp;·&nbsp; ' + sd + ' → ' + ed + ' &nbsp;·&nbsp; ' + days.length + ' days &nbsp;·&nbsp; ' + stops.length + ' stops'
+              + '</div>'
+              + '<ol style="margin:0;padding-left:1.5em;display:grid;grid-template-columns:1fr 1fr;gap:2px 16px;">';
+        stops.forEach(function(s, i) {
+          var loc = s.city ? s.city + (s.state ? ', ' + s.state : '') : (s.name || 'Stop ' + (i+1));
+          h += '<li style="font-size:.77rem;color:var(--text);line-height:1.6;">' + loc + '</li>';
+        });
+        h += '</ol></div>';
+        container.innerHTML = h;
+      }
+    }
+    container.style.display = 'block';
+    /* Flip caret */
+    var btn = document.getElementById('snap-prev-btn-' + id);
+    if (btn) btn.textContent = '▲ Hide';
+  } else {
+    container.style.display = 'none';
+    var btn = document.getElementById('snap-prev-btn-' + id);
+    if (btn) btn.textContent = '▼ Preview';
+  }
+}
 
 async function _saveCloudSnapshot(label) {
   /* Always take a local backup regardless of cloud state */
@@ -4874,12 +4915,18 @@ async function renderSnapshotsTab() {
       var ts    = obj.ts ? new Date(obj.ts).toLocaleString() : 'Unknown time';
       var stops = (obj.state && obj.state.customTripData && obj.state.customTripData.stops || []).length;
       var days  = (obj.state && obj.state.customTripData && obj.state.customTripData.days  || []).length;
-      html += '<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);">'
+      var localId = 'local_' + slot;
+      _snapCache[localId] = obj.state;
+      html += '<div style="padding:9px 0;border-bottom:1px solid var(--border);">'
+        + '<div style="display:flex;align-items:center;gap:10px;">'
         + '<div style="flex:1;">'
         + '<div style="font-size:.85rem;font-weight:700;color:var(--text);">' + ts + '</div>'
         + '<div style="font-size:.75rem;color:var(--text-2);">' + stops + ' stops \u00B7 ' + days + ' days \u00B7 this device only</div>'
         + '</div>'
+        + '<button id="snap-prev-btn-' + localId + '" onclick="_toggleSnapPreview(\'' + localId + '\')" style="background:transparent;color:var(--blue);border:1px solid var(--blue);border-radius:100px;padding:5px 12px;font-size:.75rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;">▼ Preview</button>'
         + '<button onclick="_restoreFromBackup(' + slot + ');renderSnapshotsTab();" style="background:var(--blue);color:#fff;border:none;border-radius:100px;padding:7px 14px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);">\u21A9 Restore</button>'
+        + '</div>'
+        + '<div id="snap-preview-' + localId + '" style="display:none;"></div>'
         + '</div>';
     } catch(e) {}
   });
@@ -4920,15 +4967,19 @@ async function renderSnapshotsTab() {
         var stops = (snap.trip_data && snap.trip_data.customTripData && snap.trip_data.customTripData.stops || []).length;
         var days  = (snap.trip_data && snap.trip_data.customTripData && snap.trip_data.customTripData.days  || []).length;
         var safeTs = encodeURIComponent(ts);
+        var sid   = 'cloud_' + snap.id;
+        _snapCache[sid] = snap.trip_data;
         cHtml += '<div style="background:var(--card);border-radius:10px;padding:14px 16px;margin-bottom:10px;box-shadow:0 1px 6px rgba(0,0,0,.07);">'
-          + '<div style="display:flex;align-items:flex-start;gap:12px;">'
-          + '<span style="font-size:1.6rem;line-height:1;">\uD83D\uDCF8</span>'
-          + '<div style="flex:1;">'
+          + '<div style="display:flex;align-items:center;gap:10px;">'
+          + '<span style="font-size:1.4rem;line-height:1;flex-shrink:0;">\uD83D\uDCF8</span>'
+          + '<div style="flex:1;min-width:0;">'
           + '<div style="font-size:.88rem;font-weight:800;color:var(--text);">' + ts + '</div>'
-          + '<div style="font-size:.75rem;color:var(--text-2);margin-top:3px;">' + stops + ' stops \u00B7 ' + days + ' days</div>'
+          + '<div style="font-size:.75rem;color:var(--text-2);margin-top:2px;">' + stops + ' stops \u00B7 ' + days + ' days</div>'
           + '</div>'
+          + '<button id="snap-prev-btn-' + sid + '" onclick="_toggleSnapPreview(\'' + sid + '\')" style="background:transparent;color:var(--blue);border:1px solid var(--blue);border-radius:100px;padding:6px 12px;font-size:.76rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;">▼ Preview</button>'
           + '<button onclick="_restoreFromCloudSnapshot(\'' + snap.id + '\',\'' + safeTs + '\')" style="background:var(--blue);color:#fff;border:none;border-radius:100px;padding:8px 16px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;">\u21A9 Restore</button>'
           + '</div>'
+          + '<div id="snap-preview-' + sid + '" style="display:none;"></div>'
           + '</div>';
       });
     }

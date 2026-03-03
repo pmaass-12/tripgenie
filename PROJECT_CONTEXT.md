@@ -55,6 +55,10 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (thirty-second context) — 2026-03-03
+
+- **Snapshot Preview button**: Added `_toggleSnapPreview(id)` function and `_snapCache` global. Each snapshot card (both local device and cloud) now has a "▼ Preview" button that expands an inline stop list showing: trip name, date range, day count, and all stops numbered with city/state in a 2-column grid. Collapses back on second click. Lets user identify which snapshot to restore before committing.
+
 ### Session 18 (thirty-first context) — 2026-03-03
 
 - **Cloud Snapshot system (full implementation)**:
