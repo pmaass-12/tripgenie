@@ -8057,7 +8057,7 @@ function phaseHeaderHtml(phase, firstDay) {
     + '</div>'
     + (_hasOverride ? '<div style="font-size:.72rem;opacity:.75;font-weight:600;margin-top:1px;">📍 ' + _cityDisp + '</div>' : '')
     + '<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
-    + (phaseDays.length > 0 ? '<span style="font-size:.75rem;opacity:.85;font-weight:700;">' + formatDate(phaseDays[0].date) + (phaseDays.length > 1 ? ' – ' + formatDate(phaseDays[phaseDays.length-1].date) : '') + '</span>' + '<span style="opacity:.35;font-size:.7rem;">·</span>' : '')
+    + (phaseDays.length > 0 && phaseDays[0].date ? '<span style="font-size:.75rem;opacity:.85;font-weight:700;">' + formatDate(phaseDays[0].date) + (phaseDays.length > 1 && phaseDays[phaseDays.length-1].date ? ' – ' + formatDate(phaseDays[phaseDays.length-1].date) : '') + '</span>' + '<span style="opacity:.35;font-size:.7rem;">·</span>' : '')
     + '<span style="font-size:.75rem;opacity:.7;font-weight:600;">' + (totalNights === 0 ? 'transit stop' : totalNights + ' night' + (totalNights !== 1 ? 's' : '')) + (extras > 0 ? ' <span style="opacity:.7">(+' + extras + ')</span>' : '') + '</span>'
     + '<span style="opacity:.35;font-size:.7rem;">·</span>'
     + '<button onclick="event.stopPropagation();_cycleStayType(' + _sid + ')" title="Change accommodation type" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">'
@@ -8169,7 +8169,7 @@ function _cycleToStayType(stopId, targetType) {
   showToast(meta.icon + ' Switched to ' + meta.label + ' for this stop', 2000);
   /* Re-render the day detail blocks so the buttons update immediately */
   if (typeof _ddmDayNum !== 'undefined' && _ddmDayNum) {
-    var _d = TRIP_DAYS[_ddmDayNum - 1];
+    var _d = getDay(_ddmDayNum);
     var _s = _d ? getStop(_d.stopId) : null;
     var blocksEl = document.getElementById('ddm-blocks');
     if (blocksEl && _d) blocksEl.innerHTML = renderDayTimeBlocks(_d, _s);
@@ -10599,7 +10599,7 @@ function aiCleanupJournal() {
   var author = authorEl ? authorEl.value : 'family member';
   var dayEl = document.getElementById('j-day');
   var dayNum = dayEl ? parseInt(dayEl.value) : 1;
-  var d = TRIP_DAYS[dayNum - 1];
+  var d = getDay(dayNum);
   var context = d ? 'Day ' + dayNum + ' of the trip (' + d.phase + ')' : 'a day on the trip';
   var prompt = 'You are helping ' + author + ' write a family travel journal entry for an RV trip. '
     + 'Here are their rough notes from ' + context + ':\n\n'
@@ -15162,7 +15162,7 @@ function pickMealRest(rests, meal, usedIdxs, skipIdxs) {
 var _musicCache = {}; // keyed by stopId
 
 function openLocalMusic() {
-  var d    = _ddmDayNum ? TRIP_DAYS[_ddmDayNum - 1] : null;
+  var d    = _ddmDayNum ? getDay(_ddmDayNum) : null;
   var stop = d ? getStop(d.stopId) : null;
   if (!stop) { showToast('No location info for this day', 2000); return; }
 
@@ -15326,7 +15326,7 @@ function _openMusicForStop(stopId) {
 var _ddmDayNum = null;
 
 function openDayDetail(dayNum) {
-  var d = TRIP_DAYS[dayNum - 1];
+  var d = getDay(dayNum);
   if (!d) return;
   var stop = getStop(d.stopId);
   _ddmDayNum = dayNum;
@@ -16792,7 +16792,7 @@ function openMapStopInfo(stopId) {
 
 /* ── CAMPGROUND INFO MODAL ───────────────────────────────────────── */
 function openCampInfo(dayNum) {
-  var d = TRIP_DAYS[dayNum - 1];
+  var d = getDay(dayNum);
   if (!d || !d.sleep) return;
   var stop = getStop(d.stopId);
   var campName = d.sleep;
@@ -20602,7 +20602,7 @@ function _rvSelectType(val) {
    Also provides deep links to Google Maps and Apple Maps.
    ──────────────────────────────────────────────────────────────────────────── */
 function openDriveDirections(dayNum) {
-  var d = TRIP_DAYS[dayNum - 1];
+  var d = getDay(dayNum);
   if (!d || !d.driveDay) return;
   var removedIds = appState.removedStops || {};
   var myPhase = d.phase || '';
@@ -23626,7 +23626,7 @@ function cancelLongPress() {
 }
 function openTimeEdit(type) {
   if (!_ddmDayNum) return;
-  var d = TRIP_DAYS[_ddmDayNum - 1]; if (!d) return;
+  var d = getDay(_ddmDayNum); if (!d) return;
   var ex = type === 'arrive'
     ? (appState.arrivals && appState.arrivals[d.stopId] ? new Date(appState.arrivals[d.stopId].time) : null)
     : (appState.departures && appState.departures[d.stopId] ? new Date(appState.departures[d.stopId].time) : null);
@@ -23640,7 +23640,7 @@ function confirmTimeEdit() {
   var type = document.getElementById('teo-time').dataset.editType;
   var val  = document.getElementById('teo-time').value;
   if (!val || !_ddmDayNum) return;
-  var d = TRIP_DAYS[_ddmDayNum - 1]; if (!d) return;
+  var d = getDay(_ddmDayNum); if (!d) return;
   var stop = getStop(d.stopId);
   var pts = val.split(':');
   var edited = new Date(d.date + 'T12:00:00');
@@ -23669,7 +23669,7 @@ function confirmTimeEdit() {
 function recordArrival() {
   if (_longPressTimer) return;
   if (!_ddmDayNum) return;
-  var d = TRIP_DAYS[_ddmDayNum - 1]; if (!d) return;
+  var d = getDay(_ddmDayNum); if (!d) return;
   var stop = getStop(d.stopId);
   var btn  = document.getElementById('ddm-arrive-btn');
   if (!appState.arrivals) appState.arrivals = {};
@@ -23689,7 +23689,7 @@ function recordArrival() {
 function recordDeparture() {
   if (_longPressTimer) return;
   if (!_ddmDayNum) return;
-  var d = TRIP_DAYS[_ddmDayNum - 1]; if (!d) return;
+  var d = getDay(_ddmDayNum); if (!d) return;
   var stop = getStop(d.stopId);
   var btn  = document.getElementById('ddm-leave-btn');
   if (!appState.departures) appState.departures = {};
