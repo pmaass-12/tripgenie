@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-04 (Session 18, thirty-eighth context)
+2026-03-04 (Session 18, thirty-ninth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -16,7 +16,7 @@ A personal RV trip planner web app for the Maass Family RV Adventure 2026. Stati
 
 ```
 tripgenie/
-├── index.html                    # Main app (primary working file, ~17,500 lines)
+├── index.html                    # Main app (primary working file, ~27,400 lines)
 ├── index2.html                   # Alternate version / experiment
 ├── simple-mode.html              # Simplified mode variant
 ├── mockup_desktop_v2.html        # Desktop layout mockup v2
@@ -54,6 +54,34 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 18 (thirty-ninth context) — 2026-03-04
+
+- **`openDayDetail` defensive try/catch**: Wrapped the modal body in nested try/catch blocks so the modal ALWAYS opens even if `renderDayTimeBlocks` throws. The day detail panel was failing silently after a prior session's commit, most likely due to browser cache serving stale JS.
+
+- **`renderDayTimeBlocks` gap-safe origin stop lookup**: The previous-stop loop used `TRIP_DAYS[d.day - 2]` (index-based), which returns the wrong entry for Paul's trip (day 33 gap means array index ≠ day number). Changed to a day-number scan using `getDay(_pn)`.
+
+- **Login card responsive width**: Changed fixed `width:420px` to `width: min(420px, 92vw); max-width: 92vw; box-sizing: border-box` so the card fits on 375px iPhone SE screens without horizontal scroll.
+
+- **Plan-nav no-wrap scrollable**: Changed `flex-wrap:wrap` to `flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none`. Added `min-width:90px/100px` to each nav button to prevent label truncation. Fixes "Suggestions" and other buttons falling to second line on phones.
+
+- **Trip selector dropdown responsive**: Changed `min-width:250px` to `min-width:min(250px,90vw); max-width:90vw` so the dropdown can't overflow on small phones.
+
+- **Mobile CSS — header label hiding**: Added `display:none !important` for `.hdr-mode-label`, `.hdr-help-label`, `.hdr-refresh-label` on `max-width:640px` to prevent header text from overflowing on phones. Also tightened `#header-right { gap: 4px }`.
+
+- **Photo modal caption fix**: Added `#photo-modal-caption { max-width: 90vw !important }` in the 640px media query.
+
+- **`_tgStartVoice` — iOS audio unlock**: Added `_tgUnlockAudio()` call synchronously inside `_tgStartVoice()` (the mic button tap handler). iOS Safari requires the AudioContext unlock to happen within the user-gesture call stack. Previously, `_tgUnlockAudio` was only called from the hands-free toggle, so tapping mic → AI speaks → nothing played on iOS. Also added `_tgVoiceMode = true` so voice is automatically on when mic is tapped.
+
+- **`_tgSpeakWebSpeech` — 100ms delay after cancel()**: iOS Safari silently fails when `speechSynthesis.speak()` is called immediately after `cancel()`. Added `setTimeout(function(){ speak(utt); }, 100)` inside `_doSpeak`. This fixes the "it says Speaking but I hear nothing" bug on iPhones.
+
+- **TripGenie voice response — always show text**: Replaced the hidden "See text" toggle button with always-visible formatted response text + a "🔊 Speaking aloud…" badge. Users can now read along and the UI is never blank after a voice reply.
+
+- **TripGenie button micro-labels**: Added tiny text labels ("Photo", "Speak", "Auto") below the three TripGenie icon buttons using `flex-direction:column`. Removes confusion about what the wave/mic/camera buttons do.
+
+- **Gallery cloud thumbnails**: `renderGalleryTab()` now shows `photoThumbs` (compressed 200px thumbnails synced via Supabase) from journal entries that have no local full-size photos. This lets other family members see photos uploaded by Paul (or vice versa). Cloud tiles show a ☁️ badge in the top-right corner and `opacity:.85` to visually distinguish them from local full-res photos.
+
+- **j-photos file input scoped positioning**: Added `position:relative` to the parent `<div>` and `top:0;left:0` to the `position:absolute` file input, preventing the invisible input from leaking outside its container on some layouts.
 
 ### Session 18 (thirty-eighth context) — 2026-03-04
 
