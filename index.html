@@ -7231,19 +7231,24 @@ function buildMapMarkers(mapObj) {
   var _allStopsArr = TRIP_STOPS.concat(_ctCustomArr.filter(function(s) { return !_builtinIdSet[s.id]; }));
   var _validStops = _allStopsArr.filter(function(s) { return s.lat && s.lng && s.id !== _homeStopId && !_removedIds[s.id]; });
 
+  /* Use customTripData.days when available so custom-stop IDs get numbered correctly */
+  var _activeDays = (appState.customTripData && appState.customTripData.days && appState.customTripData.days.length)
+    ? appState.customTripData.days
+    : TRIP_DAYS;
+
   /* Build stop number map (1-based, trip-day order, excluding home and waypoints) */
   /* Waypoints are stops whose only day has waypoint:true — they get a separate icon */
   var _waypointIds = {};
-  TRIP_DAYS.forEach(function(d) { if (d.waypoint) _waypointIds[d.stopId] = true; });
+  _activeDays.forEach(function(d) { if (d.waypoint) _waypointIds[d.stopId] = true; });
   var _stopNumMap = {}, _numSeenIds = {}, _numCtr = 1;
-  TRIP_DAYS.forEach(function(d) {
+  _activeDays.forEach(function(d) {
     if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeStopId || _waypointIds[d.stopId]) return;
     if (!_numSeenIds[d.stopId]) { _numSeenIds[d.stopId] = true; _stopNumMap[d.stopId] = _numCtr++; }
   });
 
   if (_validStops.length) {
     var _seenIds = {}, _orderedIds = [];
-    TRIP_DAYS.forEach(function(d) {
+    _activeDays.forEach(function(d) {
       if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeStopId) return;
       if (!_seenIds[d.stopId]) { _seenIds[d.stopId] = true; _orderedIds.push(d.stopId); }
     });
@@ -7314,7 +7319,7 @@ function buildMapMarkers(mapObj) {
           html: '<div style="width:32px;height:32px;background:#E8813A;border-radius:50%;border:2.5px solid white;box-shadow:0 2px 8px rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;font-size:' + (_stopNum > 9 ? '11' : '13') + 'px;font-weight:900;color:#fff;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">' + _stopNum + '</div>',
           className: '', iconSize: [32, 32], iconAnchor: [16, 16]
         });
-    const stopDays = TRIP_DAYS.filter(d => d.stopId === stop.id);
+    const stopDays = _activeDays.filter(d => d.stopId === stop.id);
     const firstDay = stopDays[0];
     const nights = _isWpStop ? 0 : stopDays.length;
     const acts = stop.activities || [];
@@ -9110,7 +9115,6 @@ function renderSchedule() {
 
     // Card background — border-free, whitespace + light shadow as separator
     var cardBg = isToday      ? 'border-left:4px solid var(--orange);background:var(--orange-l);box-shadow:0 1px 8px rgba(232,129,58,.12);'
-               :
                : _isTransit   ? 'border-left:4px solid #64748b;background:#f8fafc;box-shadow:0 1px 3px rgba(0,0,0,.04);'
                : isBefore     ? 'background:#fafaf8;opacity:.75;box-shadow:none;'
                : 'background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.04),0 3px 10px rgba(0,0,0,.06);';
