@@ -55,6 +55,14 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (thirty-seventh context) — 2026-03-04
+
+- **getDaySleep/getDayDriver crash fix**: Both used index-based `TRIP_DAYS[day-1]` which crashes when Paul's custom days have a gap (day 33 missing, so array length 47 but last day number is 48). Fixed to use `getDay(day)` which searches by day number.
+
+- **String stopId unquoted in onclick handlers**: Paul's trip uses string IDs like 'winchester'. These were injected directly into HTML onclick attributes without quoting, generating invalid JS like `_navFlyToStop(winchester,event)` → `ReferenceError`. Fixed by adding `var _sid = JSON.stringify(firstDay.stopId)` in `phaseHeaderHtml` and using it for all onclick injections. Also fixed `renderStopNavigator` nav item onclicks.
+
+- **Missing tab render calls**: `switchTab` handler was not calling render functions for journal, school, dashboard, and suggestions tabs. Added missing calls so these tabs re-render fresh on every visit.
+
 ### Session 18 (thirty-sixth context) — 2026-03-04
 
 - **Schedule tab not loading fix**: `_mainSeg('schedule')` was showing the div but never calling `renderSchedule()`, unlike every other segment (agenda, stops, stats, friends all call their render functions). Added `renderSchedule()` call. This also fixes day planner cards not being clickable (they weren't in the DOM because the schedule was never rendered).
