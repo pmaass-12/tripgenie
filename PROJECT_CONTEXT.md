@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-03 (Session 18, thirtieth context)
+2026-03-04 (Session 18, thirty-eighth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,22 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 18 (thirty-eighth context) — 2026-03-04
+
+- **Full TRIP_DAYS index-based crash sweep**: Found 10 more places using `TRIP_DAYS[dayNum-1]` / `TRIP_DAYS[_ddmDayNum-1]` which all crash for day 48 (Paul's array has 47 entries, last day number is 48 due to day 33 gap). Fixed all to use `getDay(n)`:
+  - `openDayDetail` — day planner cards now actually open
+  - `openCampInfo` — campground info modal
+  - `openDriveDirections` — drive directions modal
+  - `openLocalMusic` — music picker
+  - `openTimeEdit` — arrive/depart time editor
+  - `confirmTimeEdit` — save edited time
+  - `recordArrival` — We Arrived button
+  - `recordDeparture` — We Left button
+  - `_cycleToStayType` DDM refresh
+  - `aiCleanupJournal` day context lookup
+
+- **phaseHeaderHtml date guard**: Added `&& phaseDays[0].date` check before calling `formatDate()` to prevent "Invalid Date" text showing in blue bars when a day has no `.date` field. Dates will simply be omitted rather than showing garbage.
 
 ### Session 18 (thirty-seventh context) — 2026-03-04
 
