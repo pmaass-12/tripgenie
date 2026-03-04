@@ -55,6 +55,15 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (thirty-fifth context) — 2026-03-04
+
+- **Journal cloud sync**: Fixed journal entries not appearing across devices. `saveJournal()` now also stores text-only entries in `appState.journalEntries` and calls `saveState()`, so they sync to Supabase via the existing cloud path. `loadJournal()` now merges any cloud entries missing from localStorage. Photos intentionally excluded (too large for cloud sync — stay device-local). Corrected misleading help tooltip that falsely claimed "Changes sync to the cloud immediately."
+
+- **Previously uncommitted (from prior session)**:
+  - Dates in blue phase header bars (phaseHeaderHtml): shows date range for each stop section
+  - Via cities in drive day ribbons (_renderDriveSepA): supports `d.via` array for secondary city names
+  - Via cities in explore day cards (renderSchedule): same `d.via` rendering in the day card view
+
 ### Session 18 (thirty-fourth context) — 2026-03-03
 
 - **Spring Break removed**: Stripped all Spring Break references from the codebase. TRIP_DAYS Moab/Durango entries had `springBreak:true` → `false` and "🌟 SPRING BREAK — " stripped from titles. Removed: springBadge rendering, uBreak badge, spring break stat card in Road School, purple styling in schedule/school views, spring break special handling in school day toggle/expand, spring break label in Agenda. Desert Bistro description updated.

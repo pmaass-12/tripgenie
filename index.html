@@ -8048,6 +8048,7 @@ function phaseHeaderHtml(phase, firstDay) {
     + '</div>'
     + (_hasOverride ? '<div style="font-size:.72rem;opacity:.75;font-weight:600;margin-top:1px;">📍 ' + _cityDisp + '</div>' : '')
     + '<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+    + (phaseDays.length > 0 ? '<span style="font-size:.75rem;opacity:.85;font-weight:700;">' + formatDate(phaseDays[0].date) + (phaseDays.length > 1 ? ' – ' + formatDate(phaseDays[phaseDays.length-1].date) : '') + '</span>' + '<span style="opacity:.35;font-size:.7rem;">·</span>' : '')
     + '<span style="font-size:.75rem;opacity:.7;font-weight:600;">' + (totalNights === 0 ? 'transit stop' : totalNights + ' night' + (totalNights !== 1 ? 's' : '')) + (extras > 0 ? ' <span style="opacity:.7">(+' + extras + ')</span>' : '') + '</span>'
     + '<span style="opacity:.35;font-size:.7rem;">·</span>'
     + '<button onclick="event.stopPropagation();_cycleStayType(' + firstDay.stopId + ')" title="Change accommodation type" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">'
@@ -8588,6 +8589,7 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
     + '<div class="ds-line" style="' + _lineSt + '"></div>'
     + '<div class="ds-pill" style="background:' + _pillBg + ';color:#fff;box-shadow:' + _shadow + ';">'
     + '<div class="ds-r1"><i class="fa-solid fa-rv" style="font-size:.85rem;flex-shrink:0;"></i><span>' + _title + '</span></div>'
+    + (d.via && d.via.length ? '<div style="font-size:.68rem;font-weight:700;opacity:.75;margin:1px 0 0;letter-spacing:.01em;">📍 via ' + (Array.isArray(d.via) ? d.via.join(' · ') : d.via) + '</div>' : '')
     + '<div class="ds-r2">' + metaParts.join(' \xB7 ') + '</div>'
     + '<div class="ds-r3">' + _departChip + _arrivalChip + badges + _deleteChip + '</div>'
     + '</div>'
@@ -9147,6 +9149,7 @@ function renderSchedule() {
     if (isToday) html += '<span style="background:var(--orange);color:#fff;font-size:.68rem;font-weight:800;padding:2px 8px;border-radius:100px;text-transform:uppercase;">Today</span>';
     if (_isOverflow && d.sleepType !== 'home') html += '<span style="background:#c62828;color:#fff;font-size:.65rem;font-weight:800;padding:2px 8px;border-radius:100px;white-space:nowrap;">🔺 Over Schedule</span>';
     html += '</div>';
+    if (d.via && d.via.length) html += '<div style="font-size:.72rem;color:var(--text-2);font-weight:600;margin-bottom:3px;">📍 via ' + (Array.isArray(d.via) ? d.via.join(' · ') : d.via) + '</div>';
 
     // Meta row (date no longer here since it is in the badge)
     html += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">';
@@ -10145,6 +10148,21 @@ function loadJournal() {
     var raw = localStorage.getItem('rv_journal');
     _journalEntries = raw ? JSON.parse(raw) : [];
   } catch(e) { _journalEntries = []; }
+  // Merge any cloud-synced journal entries (text only — photos stay device-local)
+  try {
+    var cloudEntries = appState.journalEntries;
+    if (cloudEntries && cloudEntries.length) {
+      var localIds = {};
+      _journalEntries.forEach(function(e) { localIds[e.id] = true; });
+      var merged = false;
+      cloudEntries.forEach(function(e) {
+        if (!localIds[e.id]) { _journalEntries.push(e); merged = true; }
+      });
+      if (merged) {
+        try { localStorage.setItem('rv_journal', JSON.stringify(_journalEntries)); } catch(ex) {}
+      }
+    }
+  } catch(me) {}
 }
 
 function saveJournal() {
@@ -10153,6 +10171,19 @@ function saveJournal() {
   } catch(e) {
     showToast('Storage full — try removing some photos to free space', 4000);
   }
+  // Also sync text entries (no photo data — too large) to appState so they
+  // reach other family devices via the existing Supabase cloud sync path.
+  try {
+    appState.journalEntries = _journalEntries.map(function(e) {
+      return {
+        id: e.id, day: e.day, author: e.author, date: e.date,
+        stopId: e.stopId, location: e.location, text: e.text,
+        created: e.created
+        // photos and audio intentionally omitted — kept device-local only
+      };
+    });
+    saveState(appState);
+  } catch(se) {}
 }
 
 function renderJournal() {
@@ -26362,7 +26393,7 @@ var _PAGE_HELP = {
     { title: '✏️ Adding an Entry',     target: '#journal-content',       body: 'The compose form at the top of this page is always ready. Pick the day and author, write your notes, then tap <strong>Save Entry</strong>. Your name is pre-filled from your profile.' },
     { title: '📷 Adding Photos',       target: '#journal-content',       body: 'Inside an entry, tap the photo area to upload images from your device. They\'re stored per entry and appear in the Gallery tab automatically.' },
     { title: '🤖 AI Clean Up',         target: '#journal-content',       body: 'Tap <strong>🤖 Clean up</strong> on any entry to have AI polish the writing — better grammar, vivid details, improved flow. Review the result before saving.' },
-    { title: '🖊️ Edit & Delete',       target: '#journal-content',       body: 'Tap the pencil icon to edit any entry, or the trash icon to delete it. Changes sync to the cloud immediately.' }
+    { title: '🖊️ Edit & Delete',       target: '#journal-content',       body: 'Tap the 🤖 Clean up button to polish an entry with AI, or the trash icon to delete it. Text entries sync to the cloud so all family devices can see them; photos stay on the device they were taken from.' }
   ],
   gallery: [
     { title: '🖼️ Gallery',             target: '[data-tab="gallery"]',   body: 'All photos from your journal entries appear here in a 3-column grid, grouped by location. Add photos in the Journal tab and they show up here automatically.' },
