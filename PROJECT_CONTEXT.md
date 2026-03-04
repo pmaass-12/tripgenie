@@ -55,6 +55,10 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 18 (thirty-sixth context) — 2026-03-04
+
+- **Schedule tab not loading fix**: `_mainSeg('schedule')` was showing the div but never calling `renderSchedule()`, unlike every other segment (agenda, stops, stats, friends all call their render functions). Added `renderSchedule()` call. This also fixes day planner cards not being clickable (they weren't in the DOM because the schedule was never rendered).
+
 ### Session 18 (thirty-fifth context) — 2026-03-04
 
 - **Journal cloud sync**: Fixed journal entries not appearing across devices. `saveJournal()` now also stores text-only entries in `appState.journalEntries` and calls `saveState()`, so they sync to Supabase via the existing cloud path. `loadJournal()` now merges any cloud entries missing from localStorage. Photos intentionally excluded (too large for cloud sync — stay device-local). Corrected misleading help tooltip that falsely claimed "Changes sync to the cloud immediately."

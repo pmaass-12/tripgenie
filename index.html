@@ -11655,7 +11655,7 @@ function _mainSeg(which) {
   if (frnDiv) frnDiv.style.display = 'none';
   _off(btnSch); _off(btnAgd); _off(btnStp); _off(btnSta); _off(btnFrn);
   if (which === 'schedule') {
-    schDiv.style.display = 'block'; _on(btnSch);
+    schDiv.style.display = 'block'; _on(btnSch); renderSchedule();
   } else if (which === 'agenda') {
     if (agdDiv) { agdDiv.style.display = 'block'; renderPlannerAgenda(); } _on(btnAgd);
   } else if (which === 'stops') {
