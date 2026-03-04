@@ -330,7 +330,11 @@
       padding: 0 8px;
       flex-shrink: 0;
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
     }
+    #app-nav::-webkit-scrollbar { display: none; }
     .nav-tab {
       display: flex; align-items: center; gap: 0;
       padding: 14px 16px;
@@ -3099,10 +3103,10 @@
         <div class="journal-photos-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
           <div>
             <label style="font-size:.72rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:7px;text-transform:uppercase;letter-spacing:.04em;"><i class="fa-solid fa-camera"></i> Photos &amp; Videos</label>
-            <label for="j-photos" style="display:flex;align-items:center;gap:7px;padding:9px 14px;background:var(--blue-l);border:1px dashed #7aaac8;border-radius:var(--radius-s);cursor:pointer;font-size:.8rem;font-weight:700;color:var(--blue);">
+            <label for="j-photos" onclick="document.getElementById('j-photos').click();event.preventDefault();" style="display:flex;align-items:center;gap:7px;padding:9px 14px;background:var(--blue-l);border:1px dashed #7aaac8;border-radius:var(--radius-s);cursor:pointer;font-size:.8rem;font-weight:700;color:var(--blue);">
               <i class="fa-solid fa-cloud-arrow-up"></i> Choose photos or videos
             </label>
-            <input type="file" id="j-photos" accept="image/*,video/*" multiple style="display:none;" onchange="handlePhotoUpload(event)">
+            <input type="file" id="j-photos" accept="image/*,video/*" multiple style="position:absolute;opacity:0;width:1px;height:1px;overflow:hidden;" onchange="handlePhotoUpload(event)">
             <div id="j-photo-previews" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
           </div>
           <div>
@@ -6128,15 +6132,18 @@ function renderDashboard() {
   // ── Pre-compute stats (no logic inside template strings) ──────────
   var milesCompleted = 0;
   for (var mi = 0; mi < Math.min(dayNum, TRIP_DAYS.length); mi++) {
-    milesCompleted += TRIP_DAYS[mi].miles;
+    milesCompleted += (TRIP_DAYS[mi].miles || 0);
   }
   var visitedSet = {};
   var stopsVisited = 0;
   for (var vi = 0; vi < Math.min(dayNum, TRIP_DAYS.length); vi++) {
     var sid = TRIP_DAYS[vi].stopId;
-    if (sid < 15 && !visitedSet[sid]) { visitedSet[sid] = true; stopsVisited++; }
+    /* Count all unique stops visited (custom + builtin), excluding the home stop */
+    var _vsStop = getStop(sid);
+    if (_vsStop && !(_vsStop.sleepType === 'home') && !visitedSet[sid]) {
+      visitedSet[sid] = true; stopsVisited++;
+    }
   }
-  stopsVisited = Math.min(stopsVisited, 14);
   var fuelEst = appState.tripStarted
     ? ('$' + Math.round(milesCompleted / 12 * 3.5).toLocaleString())
     : '$0';
@@ -6162,7 +6169,8 @@ function renderDashboard() {
   var tripHigh = null, tripLow = null, tripHighStop = '', tripLowStop = '';
   if (appState.weather) {
     for (var ws in appState.weather) {
-      var wStop = getStop(parseInt(ws));
+      /* ws is a stopId which may be a string, number, or timestamp — try as-is then as int */
+      var wStop = getStop(ws) || getStop(parseInt(ws));
       var wStopName = wStop ? wStop.name : '';
       for (var wd in appState.weather[ws]) {
         var wx = appState.weather[ws][wd];
@@ -9031,7 +9039,11 @@ function renderSchedule() {
 
     /* Effective date = original date shifted by cumulative pause nights + phaseExtraDays cascade */
     var _schPhOff = _schPhaseOffset[d.stopId] || 0;
-    var _effectiveDate = new Date(new Date(d.date + 'T00:00:00').getTime() + (_schCumulativeNights + _schPhOff) * 86400000);
+    /* Guard: if a day has no .date field, compute it from startDate + (day# - 1) as fallback */
+    var _rawDateMs = d.date
+      ? new Date(d.date + 'T00:00:00').getTime()
+      : new Date(CONFIG.startDate + 'T00:00:00').getTime() + (d.day - 1) * 86400000;
+    var _effectiveDate = new Date(_rawDateMs + (_schCumulativeNights + _schPhOff) * 86400000);
     var _isOverflow = _effectiveDate > _plannedEndDate;
     if (_isOverflow) _overflowDayCount++;
 
@@ -10157,21 +10169,51 @@ function loadJournal() {
     var raw = localStorage.getItem('rv_journal');
     _journalEntries = raw ? JSON.parse(raw) : [];
   } catch(e) { _journalEntries = []; }
-  // Merge any cloud-synced journal entries (text only — photos stay device-local)
+  // Merge cloud-synced journal entries (text + photo thumbnails) from other family devices
   try {
     var cloudEntries = appState.journalEntries;
     if (cloudEntries && cloudEntries.length) {
-      var localIds = {};
-      _journalEntries.forEach(function(e) { localIds[e.id] = true; });
-      var merged = false;
-      cloudEntries.forEach(function(e) {
-        if (!localIds[e.id]) { _journalEntries.push(e); merged = true; }
+      var localMap = {};
+      _journalEntries.forEach(function(e) { localMap[e.id] = e; });
+      var changed = false;
+      cloudEntries.forEach(function(ce) {
+        if (!localMap[ce.id]) {
+          // New entry from another device — add it with any thumbnails they synced
+          _journalEntries.push(ce);
+          changed = true;
+        } else {
+          // Entry exists locally — merge in photoThumbs from cloud if local has none
+          var local = localMap[ce.id];
+          if (ce.photoThumbs && ce.photoThumbs.length && (!local.photoThumbs || !local.photoThumbs.length)) {
+            local.photoThumbs = ce.photoThumbs;
+            changed = true;
+          }
+        }
       });
-      if (merged) {
+      if (changed) {
         try { localStorage.setItem('rv_journal', JSON.stringify(_journalEntries)); } catch(ex) {}
       }
     }
   } catch(me) {}
+}
+
+/* Compress a dataUrl image to a small thumbnail (≤200px, JPEG 0.45)
+   Returns a compressed base64 string via callback. Used for cloud sync. */
+function _compressPhotoThumb(dataUrl, cb) {
+  try {
+    var img = new Image();
+    img.onload = function() {
+      var MAX = 200;
+      var ratio = Math.min(MAX / img.width, MAX / img.height, 1);
+      var c = document.createElement('canvas');
+      c.width  = Math.round(img.width  * ratio);
+      c.height = Math.round(img.height * ratio);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      cb(c.toDataURL('image/jpeg', 0.45));
+    };
+    img.onerror = function() { cb(null); };
+    img.src = dataUrl;
+  } catch(e) { cb(null); }
 }
 
 function saveJournal() {
@@ -10180,17 +10222,19 @@ function saveJournal() {
   } catch(e) {
     showToast('Storage full — try removing some photos to free space', 4000);
   }
-  // Also sync text entries (no photo data — too large) to appState so they
-  // reach other family devices via the existing Supabase cloud sync path.
+  // Sync entries to appState for Supabase cloud sync.
+  // Photos are compressed to small thumbnails (≤200px) so other devices can see them.
   try {
-    appState.journalEntries = _journalEntries.map(function(e) {
+    var toSync = _journalEntries.map(function(e) {
       return {
         id: e.id, day: e.day, author: e.author, date: e.date,
         stopId: e.stopId, location: e.location, text: e.text,
-        created: e.created
-        // photos and audio intentionally omitted — kept device-local only
+        created: e.created,
+        /* Include cached thumbnails if already generated, otherwise omit photos */
+        photoThumbs: e.photoThumbs || []
       };
     });
+    appState.journalEntries = toSync;
     saveState(appState);
   } catch(se) {}
 }
@@ -10342,23 +10386,39 @@ function renderJournalEntries() {
     }
 
     // ── Photos ──────────────────────────────────────────────────
-    if (entry.photos && entry.photos.length > 0) {
+    // Show full-res local photos if available; fall back to cloud thumbnails for entries
+    // added on another family member's device (so everyone sees each other's photos)
+    var _localPhotos = (entry.photos && entry.photos.length > 0) ? entry.photos : [];
+    var _thumbPhotos = (entry.photoThumbs && entry.photoThumbs.length > 0 && _localPhotos.length === 0) ? entry.photoThumbs : [];
+    if (_localPhotos.length > 0 || _thumbPhotos.length > 0) {
       html += '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;">';
-      for (var pi = 0; pi < entry.photos.length; pi++) {
-        var photo = entry.photos[pi];
-        // Support legacy plain string photos and new {dataUrl, exif} objects
-        var pSrc  = (photo && photo.dataUrl) ? photo.dataUrl : photo;
-        var pExif = (photo && photo.exif)    ? photo.exif    : null;
-        var pIdx  = _photoLookup.length;
-        _photoLookup.push({ dataUrl: pSrc, caption: _buildPhotoCaption(pExif) });
-        // Caption text: "📍 City, State  |  🕐 Mar 15 2:34 PM"
-        var capLine = _buildPhotoCaption(pExif);
-        html += '<div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;">'
-          + '<img src="' + pSrc + '" '
-          + 'onclick="openPhotoModal(' + pIdx + ')" '
-          + 'style="width:88px;height:88px;object-fit:cover;border-radius:var(--radius-s);cursor:zoom-in;border:2px solid var(--border);transition:border-color .15s;" />'
-          + (capLine ? '<div style="font-size:.6rem;color:var(--text-3);text-align:center;max-width:88px;line-height:1.35;">' + capLine + '</div>' : '')
-          + '</div>';
+      if (_localPhotos.length > 0) {
+        for (var pi = 0; pi < _localPhotos.length; pi++) {
+          var photo = _localPhotos[pi];
+          var pSrc  = (photo && photo.dataUrl) ? photo.dataUrl : photo;
+          var pExif = (photo && photo.exif)    ? photo.exif    : null;
+          var pIdx  = _photoLookup.length;
+          _photoLookup.push({ dataUrl: pSrc, caption: _buildPhotoCaption(pExif) });
+          var capLine = _buildPhotoCaption(pExif);
+          html += '<div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;">'
+            + '<img src="' + pSrc + '" onclick="openPhotoModal(' + pIdx + ')" '
+            + 'style="width:88px;height:88px;object-fit:cover;border-radius:var(--radius-s);cursor:zoom-in;border:2px solid var(--border);" />'
+            + (capLine ? '<div style="font-size:.6rem;color:var(--text-3);text-align:center;max-width:88px;line-height:1.35;">' + capLine + '</div>' : '')
+            + '</div>';
+        }
+      } else {
+        // Cloud thumbnails from another device — shown at 88px with a "cloud" badge
+        for (var ti = 0; ti < _thumbPhotos.length; ti++) {
+          var tSrc = _thumbPhotos[ti];
+          if (!tSrc) continue;
+          var tIdx = _photoLookup.length;
+          _photoLookup.push({ dataUrl: tSrc, caption: '' });
+          html += '<div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;position:relative;">'
+            + '<img src="' + tSrc + '" onclick="openPhotoModal(' + tIdx + ')" '
+            + 'style="width:88px;height:88px;object-fit:cover;border-radius:var(--radius-s);cursor:zoom-in;border:2px solid var(--border);filter:none;" />'
+            + '<div style="font-size:.58rem;color:var(--text-3);text-align:center;">☁️ synced</div>'
+            + '</div>';
+        }
       }
       html += '</div>';
     }
@@ -10663,8 +10723,29 @@ function submitJournalEntry() {
   _journalEntries.push(entry);
   saveJournal();
 
-  // Add photos to unified photoPool
+  // Generate compressed thumbnails in background, then re-sync to cloud
+  // so other family devices can see the photos (thumbnails ≤200px, ~10-15KB each)
   if (_pendingPhotos && _pendingPhotos.length > 0) {
+    var _photosToThumb = _pendingPhotos.filter(function(p) { return p.type !== 'video' && p.dataUrl; });
+    var _thumbResults = [];
+    var _thumbDone = 0;
+    if (_photosToThumb.length === 0) {
+      // No images to compress (videos only) — sync immediately
+      saveJournal();
+    } else {
+      _photosToThumb.forEach(function(p, idx) {
+        _compressPhotoThumb(p.dataUrl, function(thumb) {
+          _thumbResults[idx] = thumb;
+          _thumbDone++;
+          if (_thumbDone === _photosToThumb.length) {
+            // All thumbnails ready — update entry and re-sync
+            entry.photoThumbs = _thumbResults.filter(Boolean);
+            saveJournal(); // triggers cloud sync with thumbnails
+          }
+        });
+      });
+    }
+
     _pendingPhotos.forEach(function(photoObj) {
       if (photoObj && photoObj.dataUrl) {
         _addToPhotoPool(photoObj.dataUrl, { caption: '', stopId: entry.stopId, dayNum: dayNum, source: 'journal' });
@@ -22926,9 +23007,17 @@ function _tgUnlockAudio() {
      has been "unlocked" by a play() call within a real user-gesture context.
      Call this synchronously from a tap handler before any async TTS fetch. */
   if (!_tgAudioEl) { _tgAudioEl = document.createElement('audio'); document.body.appendChild(_tgAudioEl); }
+  _tgAudioEl.muted = false;
+  _tgAudioEl.volume = 1.0;
   /* Tiny silent WAV — just enough to grant autoplay permission */
   _tgAudioEl.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
-  _tgAudioEl.play().catch(function() { /* permission denied is OK — we tried */ });
+  var _unlockP = _tgAudioEl.play();
+  if (_unlockP) _unlockP.catch(function() { /* permission denied is OK — we tried */ });
+  /* Also prime WebSpeech so voices are loaded before first use */
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.getVoices();
+  }
 }
 
 function _tgToggleHandsFree() {
@@ -23028,23 +23117,34 @@ async function _tgSpeakEL(text) {
 
 /* ── Web Speech fallback TTS ── */
 function _tgSpeakWebSpeech(text) {
-  if (!window.speechSynthesis) { _tgAfterSpeak(); return; }
+  if (!window.speechSynthesis) {
+    showToast('🔇 No voice available on this device — check volume & settings', 3500);
+    _tgAfterSpeak(); return;
+  }
   var clean = text.replace(/<[^>]+>/g, ' ').replace(/[•*_#`]/g, '').replace(/\s+/g, ' ').trim();
   if (!clean) { _tgAfterSpeak(); return; }
+  /* iOS Safari fix: cancel any stuck speech before speaking — prevents silent hangs */
   window.speechSynthesis.cancel();
   var utt   = new SpeechSynthesisUtterance(clean);
   utt.lang  = 'en-US'; utt.rate = 0.92; utt.pitch = 1.05;
   utt.onend = function() { _tgAfterSpeak(); };
+  utt.onerror = function(e) {
+    /* "interrupted" is normal when cancel() is called — not a real error */
+    if (e.error !== 'interrupted') _tgAfterSpeak();
+  };
   function _doSpeak() {
     var voices = window.speechSynthesis.getVoices();
     var pref = voices.find(function(v) { return /Samantha|Karen|Siri|Ava/i.test(v.name); })
             || voices.find(function(v) { return v.lang === 'en-US' && v.localService; })
             || voices[0];
     if (pref) utt.voice = pref;
+    /* iOS Safari workaround: speechSynthesis pauses after ~15s when screen locks.
+       Resume it before speaking if it got stuck in a paused state. */
+    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
     window.speechSynthesis.speak(utt);
   }
   if (window.speechSynthesis.getVoices().length) _doSpeak();
-  else window.speechSynthesis.onvoiceschanged = function() { _doSpeak(); };
+  else { window.speechSynthesis.onvoiceschanged = function() { _doSpeak(); }; }
 }
 
 /* ── main speak entry point ── */
