@@ -55,6 +55,20 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 19 (forty-first context) — 2026-03-05
+
+**Photo upload fixes + storage hardening.**
+
+- **Gallery photo upload broken on iOS (`display:none` → proper hidden input)**: All three gallery file inputs (`gallery-upload-input` in static HTML, `gallery-tab-upload`, `gallery-tab-upload-empty` in dynamically rendered gallery tab) used `style="display:none"`, which is unreliable on iOS Safari — the photo picker opens but the `change` event sometimes silently does not fire after the user taps the checkmark. Changed all three to `style="position:absolute;opacity:0;width:1px;height:1px;overflow:hidden;"`, matching the pattern already used by the working `j-photos` journal input.
+
+- **New `_compressImage()` utility**: Added before `_galleryUpload`. Uses an off-screen canvas to resize images exceeding 1200px and re-encode as JPEG at 0.70 quality. Full-res iPhone photos (~5MB each) compress to ~100–200KB — a ~95% reduction. Videos and already-small images pass through unchanged.
+
+- **`_galleryUpload` rewrite — compress & batch save**: The old implementation called `_addToPhotoPool()` (and therefore `saveState()` → `localStorage.setItem()`) for every single photo. With 34 photos, that's 34 growing writes, each larger than the last, eventually crashing with a silent `QuotaExceededError`. New flow: all files are read and compressed concurrently; a `newEntries[]` array accumulates results; state is saved exactly once when all files are done. Also removed the per-photo `saveState` from `_addToPhotoPool` for gallery-upload paths.
+
+- **`saveState` — QuotaExceededError guard**: Wrapped `localStorage.setItem()` in try/catch. On `QuotaExceededError` (or `NS_ERROR_DOM_QUOTA_REACHED`, error code 22), shows a 5-second toast: "⚠️ Storage full — photos saved to session only. Try adding fewer photos at once or remove old ones." and returns early rather than throwing. All other errors re-throw normally.
+
+- **Mapbox 403 / SyntaxError console errors**: The 403 errors from the Mapbox Directions API are a pre-existing issue (token URL allowlist or scope). The app correctly falls back to OSRM for routing. The `Uncaught SyntaxError: Unexpected end of input (at index.html:1:40)` is likely a secondary effect of a non-JSON Mapbox 403 response body — the existing `.catch()` handler on the fetch chain should suppress this; no code change made here. User should update their Mapbox token allowlist if they want Mapbox routing.
+
 ### Session 19 (fortieth context) — 2026-03-05
 
 **Bug-fix session: 5 broken features repaired.**

@@ -3649,7 +3649,7 @@
     <div style="font-size:1rem;font-weight:900;display:flex;align-items:center;gap:8px;"><i class="fa-solid fa-images" style="color:var(--orange);"></i> Photo Gallery</div>
     <div style="display:flex;align-items:center;gap:8px;">
       <label for="gallery-upload-input" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:5px;white-space:nowrap;font-family:var(--font);">📤 Add Photos</label>
-      <input type="file" id="gallery-upload-input" accept="image/*,video/*" multiple style="display:none" onchange="_galleryUpload(this)" />
+      <input type="file" id="gallery-upload-input" accept="image/*,video/*" multiple style="position:absolute;opacity:0;width:1px;height:1px;overflow:hidden;" onchange="_galleryUpload(this)" />
       <button onclick="closePhotoGallery()" style="background:var(--bg);border:1px solid var(--border);border-radius:50%;width:32px;height:32px;font-size:1.1rem;cursor:pointer;color:var(--text-2);display:flex;align-items:center;justify-content:center;">&#215;</button>
     </div>
   </div>
@@ -5892,7 +5892,16 @@ function saveState(state) {
   if (_isViewer) return; // read-only mode — never persist
   state._savedAt = new Date().toISOString();
   if (_userName) state._savedBy = _userName;
-  localStorage.setItem('rv_state', JSON.stringify(state));
+  try {
+    localStorage.setItem('rv_state', JSON.stringify(state));
+  } catch(e) {
+    // QuotaExceededError — storage full (most likely too many/large photos)
+    if (e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22)) {
+      showToast('⚠️ Storage full — photos saved to session only. Try adding fewer photos at once or remove old ones.', 5000);
+      return; // skip cloud sync too — state wasn't persisted locally
+    }
+    throw e; // re-throw unexpected errors
+  }
   syncToCloud(state);
   if (_sbUser) _syncToSupabaseTrips(state); // also sync to per-user trips table
   /* Keep Decisions tab live if it's currently visible */
@@ -11689,9 +11698,39 @@ function _addToPhotoPool(dataUrl, opts) {
   return entry;
 }
 
+/* ── IMAGE COMPRESSION ───────────────────────────────────────────
+   Shrinks images to at most maxDim × maxDim at JPEG quality before
+   storing, so large batches of iPhone photos don't exhaust the
+   ~5 MB localStorage quota.  Videos and already-small images pass
+   through unchanged.  callback receives the (possibly compressed)
+   data URL.                                                         */
+function _compressImage(dataUrl, callback, maxDim, quality) {
+  maxDim   = maxDim   || 1200;
+  quality  = quality  || 0.70;
+  try {
+    var img = new Image();
+    img.onload = function() {
+      var w = img.width, h = img.height;
+      // Already small enough — skip re-encode
+      if (w <= maxDim && h <= maxDim) { callback(dataUrl); return; }
+      if (w >= h) { h = Math.round(h * maxDim / w); w = maxDim; }
+      else        { w = Math.round(w * maxDim / h); h = maxDim; }
+      var canvas = document.createElement('canvas');
+      canvas.width  = w;
+      canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      callback(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = function() { callback(dataUrl); }; // pass through on error
+    img.src = dataUrl;
+  } catch(e) { callback(dataUrl); }
+}
+
 /* ── DIRECT GALLERY UPLOAD ───────────────────────────────────────
    Allows uploading photos/videos straight to the gallery without
-   a journal entry.  Skips duplicates by filename (case-insensitive). */
+   a journal entry.  Skips duplicates by filename (case-insensitive).
+   Compresses images before storing, and saves state once at the end
+   (not after every single photo) to avoid localStorage quota errors. */
 function _galleryUpload(input) {
   if (!input || !input.files || !input.files.length) return;
   if (!appState.photoPool) appState.photoPool = [];
@@ -11711,26 +11750,55 @@ function _galleryUpload(input) {
   var files = Array.prototype.slice.call(input.files);
   var added = 0, dupes = 0, total = files.length;
   var processed = 0;
+  var newEntries = []; // accumulate all new entries; save once at the end
+
+  function _finish() {
+    // Prepend all new entries at once, then save a single time
+    if (newEntries.length > 0) {
+      newEntries.reverse(); // so last-processed ends up at top after unshift
+      newEntries.forEach(function(entry) { appState.photoPool.unshift(entry); });
+      saveState(appState);
+    }
+    _galleryUploadDone(added, dupes, input);
+  }
 
   files.forEach(function(file) {
     var nameLower = file.name.toLowerCase();
     if (_existingNames[nameLower]) {
       dupes++;
       processed++;
-      if (processed === total) _galleryUploadDone(added, dupes, input);
+      if (processed === total) _finish();
       return;
     }
     _existingNames[nameLower] = true; // prevent adding same file twice in one batch
     var reader = new FileReader();
-    reader.onload = function(e) {
-      _addToPhotoPool(e.target.result, { fileName: file.name, source: 'gallery-upload' });
-      added++;
-      processed++;
-      if (processed === total) _galleryUploadDone(added, dupes, input);
+    reader.onload = function(ev) {
+      var rawUrl  = ev.target.result;
+      var isVideo = file.type.startsWith('video/');
+      function _store(dataUrl) {
+        newEntries.push({
+          id:        Date.now() + '_' + Math.random().toString(36).substr(2,6),
+          dataUrl:   dataUrl,
+          fileName:  file.name,
+          timestamp: new Date().toISOString(),
+          caption:   '',
+          stopId:    null,
+          dayNum:    null,
+          source:    'gallery-upload',
+        });
+        added++;
+        processed++;
+        if (processed === total) _finish();
+      }
+      if (isVideo) {
+        _store(rawUrl);           // videos: no canvas compression
+      } else {
+        _compressImage(rawUrl, _store);  // images: compress first
+      }
     };
     reader.onerror = function() {
       processed++;
-      if (processed === total) _galleryUploadDone(added, dupes, input);
+      if (processed === total) _finish();
     };
     reader.readAsDataURL(file);
   });
@@ -12494,7 +12562,7 @@ function renderGalleryTab() {
     + '<div style="display:flex;align-items:center;gap:8px;">'
     + '<span style="font-size:.8rem;color:var(--text-3);">' + allPhotos.length + ' photo' + (allPhotos.length !== 1 ? 's' : '') + '</span>'
     + '<label for="gallery-tab-upload" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);">📤 Add Photos</label>'
-    + '<input type="file" id="gallery-tab-upload" accept="image/*,video/*" multiple style="display:none" onchange="_galleryUpload(this)">'
+    + '<input type="file" id="gallery-tab-upload" accept="image/*,video/*" multiple style="position:absolute;opacity:0;width:1px;height:1px;overflow:hidden;" onchange="_galleryUpload(this)">'
     + '</div>'
     + '</div>';
 
@@ -12504,7 +12572,7 @@ function renderGalleryTab() {
       + '<div style="font-weight:700;font-size:.95rem;margin-bottom:6px;">No photos yet</div>'
       + '<div style="font-size:.83rem;">Photos you upload or attach to a journal entry will appear here.</div>'
       + '<label for="gallery-tab-upload-empty" style="display:inline-flex;align-items:center;gap:6px;margin-top:16px;padding:10px 22px;background:var(--orange);color:#fff;border-radius:20px;font-weight:700;cursor:pointer;font-family:var(--font);">📤 Add Photos</label>'
-      + '<input type="file" id="gallery-tab-upload-empty" accept="image/*,video/*" multiple style="display:none" onchange="_galleryUpload(this)">'
+      + '<input type="file" id="gallery-tab-upload-empty" accept="image/*,video/*" multiple style="position:absolute;opacity:0;width:1px;height:1px;overflow:hidden;" onchange="_galleryUpload(this)">'
       + '</div>';
     el.innerHTML = html;
     return;
