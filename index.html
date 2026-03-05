@@ -17608,6 +17608,18 @@ function renderDayTimeBlocks(d, stop) {
     var _dispHours = _splitH;  /* hours to display in schedule (leg 1 if split, full if not) */
 
     var _depH   = _getDepartureHour();
+    /* If the user edited the drive departure time, use that override for ALL downstream
+       calculations (arrival time, breakfast, lunch, check-in) — not just the label */
+    if (_overrides.drive && _overrides.drive.time) {
+      var _dvMatch = _overrides.drive.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if (_dvMatch) {
+        var _dvH = parseInt(_dvMatch[1]), _dvM = parseInt(_dvMatch[2]);
+        var _dvA = _dvMatch[3].toUpperCase();
+        if (_dvA === 'PM' && _dvH !== 12) _dvH += 12;
+        if (_dvA === 'AM' && _dvH === 12) _dvH = 0;
+        _depH = _dvH + _dvM / 60;
+      }
+    }
     var _arrH   = _depH + _dispHours;
     var _latestH = _getLatestArrivalHour();
     var _depStr = _fmtHour(_depH);
