@@ -10082,13 +10082,32 @@ function toggleStop(stopId) {
   var chevron = document.getElementById('stop-chevron-' + stopId);
   if (!panel) return;
   var isHidden = panel.classList.contains('hidden');
-  panel.classList.toggle('hidden');
-  if (chevron) chevron.textContent = isHidden ? '▲' : '▼';
-  /* BUG FIX: when expanding, scroll the card into view so users can see the content
-     (previously the expanded section could be off-screen below the viewport). */
+  /* Explicitly set display rather than only relying on class toggle, to override any
+     lingering inline style or stale cached CSS that could keep the element hidden. */
   if (isHidden) {
-    var card = document.querySelector('[data-stop-id="' + stopId + '"]');
-    if (card) setTimeout(function() { card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 50);
+    panel.classList.remove('hidden');
+    panel.style.display = 'block';
+    if (chevron) chevron.textContent = '▲';
+    /* BUG FIX (improved): Scroll the EXPANDED PANEL into view inside #planner-body.
+       The previous fix scrolled the card wrapper to 'nearest' — but if the card header
+       was already visible, 'nearest' did nothing even though the expanded content was
+       below the fold.  We now directly measure how far the panel's bottom extends past
+       the scrollable container's visible bottom and scroll exactly that far. */
+    setTimeout(function() {
+      var body = document.getElementById('planner-body');
+      if (body && panel) {
+        var panelRect = panel.getBoundingClientRect();
+        var bodyRect  = body.getBoundingClientRect();
+        var overflow  = panelRect.bottom - bodyRect.bottom;
+        if (overflow > 0) {
+          body.scrollBy({ top: overflow + 24, behavior: 'smooth' });
+        }
+      }
+    }, 60);
+  } else {
+    panel.classList.add('hidden');
+    panel.style.removeProperty('display');
+    if (chevron) chevron.textContent = '▼';
   }
 }
 
