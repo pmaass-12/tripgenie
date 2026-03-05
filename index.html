@@ -11392,7 +11392,7 @@ function renderStops() {
       _dateShort += '–' + _rsDateStr(_rsLastEff).slice(5).replace('-', '/');
 
     // ── Grid header row ──────────────────────────────────────────
-    html += '<div class="sc-header" onclick="toggleStop(' + stop.id + ')">';
+    html += '<div class="sc-header" onclick="toggleStop(\'' + stop.id + '\')">';
 
     // Col 1: emoji strip
     html += '<div class="sc-emoji-col" style="background:' + headerBg + ';color:#fff;">'
@@ -11591,16 +11591,16 @@ function renderStops() {
     var mUrl = 'https://www.google.com/maps/search/?api=1&query=' + stop.weatherLat + ',' + stop.weatherLng;
     html += '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:14px;">';
     html += '<a href="' + mUrl + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:var(--green-l);border:1px solid #a8d5b8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:var(--green);text-decoration:none;"><i class="fa-solid fa-map-location-dot"></i> Google Maps</a>';
-    html += '<button id="stop-events-btn-' + stop.id + '" onclick="event.stopPropagation();toggleStopEvents(' + stop.id + ')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:var(--purple-l);border:1px solid #c9b8e8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:var(--purple);cursor:pointer;font-family:var(--font);"><i class="fa-solid fa-calendar-star"></i> Events Near Here</button>';
-    html += '<button id="stop-attractions-btn-' + stop.id + '" onclick="event.stopPropagation();toggleStopAttractions(' + stop.id + ')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:#e8f5f0;border:1px solid #a8d8c8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:#1a7a5a;cursor:pointer;font-family:var(--font);">🏛️ Attractions</button>';
-    html += '<button id="stop-hotels-btn-' + stop.id + '" onclick="event.stopPropagation();toggleStopHotels(' + stop.id + ')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:#e8f0f8;border:1px solid #a8c0d8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:#1a4a7a;cursor:pointer;font-family:var(--font);">🏨 Hotels &amp; RV Parks</button>';
+    html += '<button id="stop-events-btn-' + stop.id + '" onclick="event.stopPropagation();toggleStopEvents(\'' + stop.id + '\')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:var(--purple-l);border:1px solid #c9b8e8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:var(--purple);cursor:pointer;font-family:var(--font);"><i class="fa-solid fa-calendar-star"></i> Events Near Here</button>';
+    html += '<button id="stop-attractions-btn-' + stop.id + '" onclick="event.stopPropagation();toggleStopAttractions(\'' + stop.id + '\')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:#e8f5f0;border:1px solid #a8d8c8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:#1a7a5a;cursor:pointer;font-family:var(--font);">🏛️ Attractions</button>';
+    html += '<button id="stop-hotels-btn-' + stop.id + '" onclick="event.stopPropagation();toggleStopHotels(\'' + stop.id + '\')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:#e8f0f8;border:1px solid #a8c0d8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:#1a4a7a;cursor:pointer;font-family:var(--font);">🏨 Hotels &amp; RV Parks</button>';
     html += '</div>';
 
     // Events expandable panel
     html += '<div id="stop-events-panel-' + stop.id + '" class="hidden" style="margin-top:2px;border:1px solid #c9b8e8;border-radius:var(--radius-s);overflow:hidden;">'
       + '<div style="background:var(--purple);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;">'
       + '<span style="font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;"><i class="fa-solid fa-calendar-star"></i> Events Near ' + stop.name + '</span>'
-      + '<button onclick="event.stopPropagation();_stopEventsLoaded[' + stop.id + ']=false;loadStopEvents(' + stop.id + ')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
+      + '<button onclick="event.stopPropagation();_stopEventsLoaded[\'' + stop.id + '\']=false;loadStopEvents(\'' + stop.id + '\')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
       + '</div>'
       + '<div id="stop-events-body-' + stop.id + '"></div>'
       + '</div>';
@@ -11609,7 +11609,7 @@ function renderStops() {
     html += '<div id="stop-attractions-panel-' + stop.id + '" class="hidden" style="margin-top:6px;border:1px solid #a8d8c8;border-radius:var(--radius-s);overflow:hidden;">'
       + '<div style="background:#1a7a5a;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;">'
       + '<span style="font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;">🏛️ Top Attractions — ' + stop.name + '</span>'
-      + '<button onclick="event.stopPropagation();_stopAttractionsLoaded[' + stop.id + ']=false;loadStopAttractions(' + stop.id + ')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
+      + '<button onclick="event.stopPropagation();_stopAttractionsLoaded[\'' + stop.id + '\']=false;loadStopAttractions(\'' + stop.id + '\')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
       + '</div>'
       + '<div id="stop-attractions-body-' + stop.id + '"></div>'
       + '</div>';
@@ -11618,7 +11618,7 @@ function renderStops() {
     html += '<div id="stop-hotels-panel-' + stop.id + '" class="hidden" style="margin-top:6px;border:1px solid #a8c0d8;border-radius:var(--radius-s);overflow:hidden;">'
       + '<div style="background:#1a4a7a;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;">'
       + '<span style="font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;">🏨 Hotels &amp; RV Parks — ' + stop.name + '</span>'
-      + '<button onclick="event.stopPropagation();_stopHotelsLoaded[' + stop.id + ']=false;loadStopHotels(' + stop.id + ')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
+      + '<button onclick="event.stopPropagation();_stopHotelsLoaded[\'' + stop.id + '\']=false;loadStopHotels(\'' + stop.id + '\')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
       + '</div>'
       + '<div id="stop-hotels-body-' + stop.id + '"></div>'
       + '</div>';
