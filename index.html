@@ -22476,34 +22476,63 @@ function openDriveDirections(dayNum) {
   if (!destStop || !destStop.lat || !destStop.lng) {
     showToast('No map coordinates for this stop yet', 2200); return;
   }
-  _showDirectionsModal(d, originStop, destStop);
+  /* Use booking confirmation (property name + address) when available */
+  var destBooking = null;
+  var _bcs = appState.bookingConfirmations && appState.bookingConfirmations[d.stopId];
+  if (_bcs && _bcs.length) {
+    /* Prefer a booking that has an address; fall back to first with a name */
+    for (var _bi = 0; _bi < _bcs.length; _bi++) {
+      if (_bcs[_bi].address) { destBooking = _bcs[_bi]; break; }
+    }
+    if (!destBooking) {
+      for (var _bi2 = 0; _bi2 < _bcs.length; _bi2++) {
+        if (_bcs[_bi2].propertyName) { destBooking = _bcs[_bi2]; break; }
+      }
+    }
+  }
+  _showDirectionsModal(d, originStop, destStop, destBooking);
 }
 
-function _buildGoogleMapsUrl(origin, dest, rp) {
+function _buildGoogleMapsUrl(origin, dest, rp, bookingAddress) {
   var url = 'https://www.google.com/maps/dir/?api=1';
   if (origin && origin.lat && origin.lng) url += '&origin=' + origin.lat + ',' + origin.lng;
-  url += '&destination=' + dest.lat + ',' + dest.lng + '&travelmode=driving';
+  /* Use booking address for precise campground entrance routing when available */
+  if (bookingAddress) {
+    url += '&destination=' + encodeURIComponent(bookingAddress);
+  } else {
+    url += '&destination=' + dest.lat + ',' + dest.lng;
+  }
+  url += '&travelmode=driving';
   var avoids = [];
   if (rp && rp.avoidParkways) avoids.push('highways');
   if (rp && rp.avoidTolls)    avoids.push('tolls');
   if (avoids.length) url += '&avoid=' + avoids.join('%7C');
   return url;
 }
-function _buildAppleMapsUrl(origin, dest) {
+function _buildAppleMapsUrl(origin, dest, bookingAddress) {
   var url = 'https://maps.apple.com/?';
   if (origin && origin.lat && origin.lng) url += 'saddr=' + origin.lat + ',' + origin.lng + '&';
-  url += 'daddr=' + dest.lat + ',' + dest.lng + '&dirflg=d';
+  /* Use booking address for precise campground entrance routing when available */
+  if (bookingAddress) {
+    url += 'daddr=' + encodeURIComponent(bookingAddress) + '&dirflg=d';
+  } else {
+    url += 'daddr=' + dest.lat + ',' + dest.lng + '&dirflg=d';
+  }
   return url;
 }
 
-function _showDirectionsModal(day, originStop, destStop) {
+function _showDirectionsModal(day, originStop, destStop, booking) {
   var existing = document.getElementById('rv-directions-modal');
   if (existing) existing.remove();
   var rp = (appState.tripSettings && appState.tripSettings.rvProfile) || {};
-  var mapsUrl  = _buildGoogleMapsUrl(originStop, destStop, rp);
-  var appleUrl = _buildAppleMapsUrl(originStop, destStop);
+  var bookingAddr = booking && booking.address ? booking.address : null;
+  var mapsUrl  = _buildGoogleMapsUrl(originStop, destStop, rp, bookingAddr);
+  var appleUrl = _buildAppleMapsUrl(originStop, destStop, bookingAddr);
   var fromName = originStop ? (originStop.name + (originStop.state ? ', ' + originStop.state : '')) : (day.phase || 'Previous Stop');
-  var toName   = destStop.name + (destStop.state ? ', ' + destStop.state : '');
+  /* Use booking property name when available — more precise than city name */
+  var toName = (booking && booking.propertyName)
+    ? booking.propertyName
+    : (destStop.name + (destStop.state ? ', ' + destStop.state : ''));
   var heightStr = (rp.heightFt) ? (rp.heightFt + '\'' + (rp.heightIn || 0) + '"') : '';
   var avoidNote = '';
   if (rp.avoidParkways)
@@ -22534,6 +22563,24 @@ function _showDirectionsModal(day, originStop, destStop) {
     + '<div id="rv-dir-steps" style="overflow-y:auto;flex:1;padding:12px 16px;">'
     + '<div style="text-align:center;padding:20px;color:var(--text-3);font-size:.84rem;"><i class="fa-solid fa-spinner fa-spin"></i> Fetching directions…</div>'
     + '</div>'
+    // Booking confirmation strip — shown when a booking exists for this stop
+    + (booking ? (function() {
+        var bits = [];
+        if (booking.address)           bits.push('📍\u2009' + booking.address);
+        if (booking.confirmationNumber) bits.push('🔑\u2009Conf #' + booking.confirmationNumber);
+        if (booking.checkInDate)       bits.push('📅\u2009Check-in: ' + booking.checkInDate + (booking.checkInTime ? ' @ ' + booking.checkInTime : ''));
+        if (booking.checkOutDate)      bits.push('📤\u2009Check-out: ' + booking.checkOutDate + (booking.checkOutTime ? ' @ ' + booking.checkOutTime : ''));
+        if (booking.siteOrRoom)        bits.push('🏕️\u2009Site/Room: ' + booking.siteOrRoom);
+        if (booking.hookups)           bits.push('🔌\u2009' + booking.hookups);
+        if (booking.totalCost)         bits.push('💵\u2009' + booking.totalCost);
+        if (booking.phone)             bits.push('📞\u2009' + booking.phone);
+        return '<div style="padding:10px 16px;background:var(--blue-l);border-top:1px solid #b0c8e0;flex-shrink:0;">'
+          + '<div style="font-size:.72rem;font-weight:800;color:var(--blue);margin-bottom:5px;display:flex;align-items:center;gap:5px;"><span>🎫</span><span>' + (booking.propertyName || 'Booking Confirmation') + '</span>'
+          + (bookingAddr ? '' : '<span style="font-size:.65rem;font-weight:600;color:var(--text-3);margin-left:4px;">(no address — routing to city center)</span>')
+          + '</div>'
+          + (bits.length ? '<div style="display:flex;flex-direction:column;gap:3px;">' + bits.map(function(b){ return '<span style="font-size:.75rem;color:var(--text-2);line-height:1.4;">' + b + '</span>'; }).join('') + '</div>' : '')
+          + '</div>';
+      })() : '')
     // Notes
     + ((avoidNote || heightWarn) ?
         '<div style="padding:8px 16px;background:rgba(230,126,34,.08);border-top:1px solid rgba(230,126,34,.2);font-size:.79rem;color:var(--orange);flex-shrink:0;line-height:1.5;">'

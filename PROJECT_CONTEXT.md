@@ -55,6 +55,14 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 19 (forty-third context) — 2026-03-05
+
+**Booking confirmations now sync into Driving/Directions modal.**
+
+- **`openDriveDirections`**: Looks up `appState.bookingConfirmations[stopId]`, prefers booking with address, falls back to one with just property name. Passes to `_showDirectionsModal`.
+- **`_buildGoogleMapsUrl` / `_buildAppleMapsUrl`**: Accept optional `bookingAddress` — routes to actual property address instead of city lat/lng when available.
+- **`_showDirectionsModal`**: Shows booking `propertyName` as destination header. New blue booking info strip shows address, conf #, check-in/out, site, hookups, cost, phone. Note shown if no address found in booking.
+
 ### Session 19 (forty-second context) — 2026-03-05
 
 **Photo multi-select fix (iOS) + Schedule stop day editor.**
