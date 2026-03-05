@@ -55,6 +55,14 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 19 (forty-second context) — 2026-03-05
+
+**Photo multi-select fix (iOS) + Schedule stop day editor.**
+
+- **Photo upload iOS multi-select still broken**: Root cause was the gallery modal's `overflow:hidden` silently dropping the `change` event for multi-file selection on iOS Safari. Fix: replaced all three "Add Photos" label+input pairs with `_openGalleryFilePicker()`, which creates a fresh `<input type="file" multiple>` each call, appends it directly to `document.body` (outside any clipping container), `.click()`s it in the user-gesture call stack, listens for both `change` and `input` events with a `_handled` guard, then removes the input after 2 s.
+
+- **Schedule stop day editor**: Tap any blue phase header bar in Schedule to open a popover with a large number input + ±1 steppers to set nights directly. The `− X nts +` widget's count is also directly tappable. On save, computes `phaseExtraDays[stopId] = newTotal - baseDays` and calls `_refreshAll()`. Added `_editStopDays()` and `_saveStopDays()` functions. Enter saves, Escape/backdrop closes.
+
 ### Session 19 (forty-first context) — 2026-03-05
 
 **Photo upload fixes + storage hardening.**
