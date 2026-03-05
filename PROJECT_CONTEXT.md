@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-04 (Session 18, thirty-ninth context)
+2026-03-05 (Session 19, fortieth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,24 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 19 (fortieth context) — 2026-03-05
+
+**Bug-fix session: 5 broken features repaired.**
+
+- **Bug 1 — Map popup click-through (iOS ghost tap)**: Tapping the "✨ AI Area Overview" or "📅 View Plans" buttons inside a Leaflet map popup caused the modal to open and immediately close. Root cause: the same tap's touchend fired on the newly-appeared modal backdrop, triggering its `onclick="if(event.target===this)close…"` handler. Fix: wrapped `openMapStopInfo()` and `_jumpToStopPlans()` bodies in a 60 ms `setTimeout`, giving the tap event sequence time to complete before the modal renders.
+
+- **Bug 2 — Long-press datetime editor hidden behind day-detail modal**: The `time-edit-overlay` had `z-index: 3500`, but `day-detail-modal` has `z-index: 9000`, so the editor rendered invisibly behind the orange modal. Fix: raised `time-edit-overlay` to `z-index: 9500`.
+
+- **Bug 3 — Day planner stop cards appeared not to expand**: The cards did toggle their `hidden` class correctly, but expanded content fell below the visible viewport with no automatic scroll. Fix: added `card.scrollIntoView({ behavior:'smooth', block:'nearest' })` inside `toggleStop()` (50 ms delay to allow layout reflow).
+
+- **Bug 4 — Trip stats always showed 5,705 miles**: `buildTripStatsTab` used `Math.max(calculated, CONFIG.totalMiles)` where `CONFIG.totalMiles = 5705`, creating a hard floor that always overrode any calculated value. Fix: removed `CONFIG.totalMiles` from `Math.max()`; it is now only used as a last-resort fallback when calculation returns 0.
+
+- **Bug 5 — TripGenie voice mode silent on iOS**: `_tgUnlockAudio()` correctly unlocked the HTML5 `AudioContext` (for ElevenLabs), but never called `speechSynthesis.speak()`, leaving the Web Speech API locked in async contexts on iOS Safari. Fix: added a zero-volume, max-rate `speechSynthesis.speak(new SpeechSynthesisUtterance('\u200b'))` call inside `_tgUnlockAudio()` to prime the Web Speech API within the user-gesture window.
+
+- **index.html line count**: grew from ~27,963 to ~27,989 lines (26 lines of comments + fix code added).
+
+---
 
 ### Session 18 (thirty-ninth context) — 2026-03-04
 

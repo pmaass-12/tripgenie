@@ -3567,7 +3567,7 @@
   </div>
 </div>
 
-<div id="time-edit-overlay" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:3500;display:flex;align-items:center;justify-content:center;">
+<div id="time-edit-overlay" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9500;display:flex;align-items:center;justify-content:center;">
   <div style="background:var(--card);border-radius:var(--radius);padding:24px;max-width:300px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.4);">
     <div id="teo-label" style="font-weight:800;font-size:1rem;margin-bottom:6px;color:var(--text);"></div>
     <div style="font-size:.82rem;color:var(--text-2);margin-bottom:16px;">Edit exact time if you forgot to tap earlier.</div>
@@ -7395,6 +7395,9 @@ function _clearAndRebuildMapMarkers(mapObj) {
 function _jumpToStopPlans(stopId) {
   /* Close any open Leaflet popup */
   if (window.mainMap) window.mainMap.closePopup();
+  /* BUG FIX: delay 60ms so the tap that hit the popup button does NOT trigger any
+     backdrop clicks that could interfere with the tab switch. */
+  setTimeout(function() {
   /* Switch to Planner tab first */
   if (typeof switchTab === 'function') switchTab('planner');
   /* Switch to Day Planner (stops) segment — this calls renderStops() */
@@ -7416,6 +7419,7 @@ function _jumpToStopPlans(stopId) {
       el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, 350);
+  }, 60); /* end outer 60ms delay for click-through prevention */
 }
 
 function initMainMap() {
@@ -10080,6 +10084,12 @@ function toggleStop(stopId) {
   var isHidden = panel.classList.contains('hidden');
   panel.classList.toggle('hidden');
   if (chevron) chevron.textContent = isHidden ? '▲' : '▼';
+  /* BUG FIX: when expanding, scroll the card into view so users can see the content
+     (previously the expanded section could be off-screen below the viewport). */
+  if (isHidden) {
+    var card = document.querySelector('[data-stop-id="' + stopId + '"]');
+    if (card) setTimeout(function() { card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }, 50);
+  }
 }
 
 
@@ -11225,13 +11235,17 @@ function renderTripStats() {
     }
     if (!d.driveDay) _havLastIdFull = d.stopId;
   });
-  /* displayMiles = best of: explicit tracked + untracked estimate, full-route Haversine, CONFIG floor */
-  var _configMilesFloor = (typeof CONFIG !== 'undefined' && CONFIG.totalMiles) || 0;
+  /* displayMiles = best of: explicit tracked + untracked estimate, full-route Haversine.
+     BUG FIX: removed CONFIG.totalMiles as a floor — that hardcoded value (5705) was
+     overriding the actual calculated trip distance, making the stat always show 5705. */
   var displayMiles = Math.max(
     Math.round(totalMiles + estimatedExtra),
-    Math.round(_fullHavTotal),
-    _configMilesFloor
+    Math.round(_fullHavTotal)
   );
+  /* Only fall back to CONFIG.totalMiles if we have absolutely no data at all */
+  if (!displayMiles && typeof CONFIG !== 'undefined' && CONFIG.totalMiles) {
+    displayMiles = CONFIG.totalMiles;
+  }
   var milesLabel   = 'Est. Miles'; // always estimated — road choice affects actual total
 
   // ── Build HTML ──────────────────────────────────────────────────
@@ -16891,23 +16905,27 @@ function openMapStopInfo(stopId) {
   if (!stop) return;
   /* Close the Leaflet popup first */
   if (window.mainMap) mainMap.closePopup();
-  /* Open the AI area info modal */
-  openAreaInfo(_sn(stop), stopId);
-  /* Inject weather badge into modal header */
-  var wx = STOP_WEATHER[stop.id];
-  var wxRow = document.getElementById('aim-weather-row');
-  if (wx && wxRow) {
-    var stopDays = TRIP_DAYS.filter(function(d) { return d.stopId === stop.id; });
-    var firstD   = stopDays[0];
-    var visitMon = firstD ? new Date(firstD.date + 'T12:00:00').toLocaleDateString('en-US', { month:'long' }) : 'Visit';
-    document.getElementById('aim-wx-icon').textContent  = wx.icon;
-    document.getElementById('aim-wx-label').textContent = visitMon + ' Typical Weather';
-    document.getElementById('aim-wx-temps').textContent = wx.hi + '°F high · ' + wx.lo + '°F low';
-    document.getElementById('aim-wx-desc').textContent  = wx.desc;
-    wxRow.style.display = 'flex';
-  } else if (wxRow) {
-    wxRow.style.display = 'none';
-  }
+  /* BUG FIX: delay 60ms so the tap that hit the popup button does NOT click-through
+     to the modal backdrop (which would immediately close the just-opened modal). */
+  setTimeout(function() {
+    /* Open the AI area info modal */
+    openAreaInfo(_sn(stop), stopId);
+    /* Inject weather badge into modal header */
+    var wx = STOP_WEATHER[stop.id];
+    var wxRow = document.getElementById('aim-weather-row');
+    if (wx && wxRow) {
+      var stopDays = TRIP_DAYS.filter(function(d) { return d.stopId === stop.id; });
+      var firstD   = stopDays[0];
+      var visitMon = firstD ? new Date(firstD.date + 'T12:00:00').toLocaleDateString('en-US', { month:'long' }) : 'Visit';
+      document.getElementById('aim-wx-icon').textContent  = wx.icon;
+      document.getElementById('aim-wx-label').textContent = visitMon + ' Typical Weather';
+      document.getElementById('aim-wx-temps').textContent = wx.hi + '°F high · ' + wx.lo + '°F low';
+      document.getElementById('aim-wx-desc').textContent  = wx.desc;
+      wxRow.style.display = 'flex';
+    } else if (wxRow) {
+      wxRow.style.display = 'none';
+    }
+  }, 60);
 }
 
 /* ── CAMPGROUND INFO MODAL ───────────────────────────────────────── */
@@ -23052,10 +23070,19 @@ function _tgUnlockAudio() {
   _tgAudioEl.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
   var _unlockP = _tgAudioEl.play();
   if (_unlockP) _unlockP.catch(function() { /* permission denied is OK — we tried */ });
-  /* Also prime WebSpeech so voices are loaded before first use */
+  /* BUG FIX: Also prime Web Speech by calling speak() within this user-gesture context.
+     iOS Safari blocks speechSynthesis.speak() from async callbacks (like fetch .then)
+     unless it has been called at least once during a real user gesture.
+     We speak a silent zero-volume utterance just to unlock it. */
   if (window.speechSynthesis) {
     window.speechSynthesis.cancel();
     window.speechSynthesis.getVoices();
+    try {
+      var _primeUtt = new SpeechSynthesisUtterance('​'); /* zero-width space — no audible sound */
+      _primeUtt.volume = 0;
+      _primeUtt.rate   = 10; /* max rate so it finishes instantly */
+      window.speechSynthesis.speak(_primeUtt);
+    } catch(e) { /* ignore — some environments don't support this */ }
   }
 }
 
