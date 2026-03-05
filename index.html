@@ -18767,11 +18767,31 @@ function fetchCampInfo(campName, location, stopId, _typeLabel) {
   }
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:800,temperature:0.6} });
   fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
+  .then(function(r) {
+    /* Capture HTTP status alongside JSON so we can surface API errors */
+    var _status = r.status;
+    return r.json().then(function(d) { return { _status: _status, data: d }; });
+  })
+  .then(function(wrap) {
+    var data = wrap.data;
     var text = '';
     try { text = data.candidates[0].content.parts[0].text || ''; } catch(e) {}
-    if (!text) { document.getElementById('aim-body').innerHTML = '<div style="color:var(--red);padding:16px;">Could not load ' + (_typeLabel||'info') + '.</div>'; return; }
+    if (!text) {
+      /* Surface the actual Gemini error — quota, bad key, rate limit, etc. */
+      var _apiErr = '';
+      try {
+        if (data.error) _apiErr = '(HTTP ' + wrap._status + ') ' + (data.error.message || JSON.stringify(data.error));
+        else if (data.promptFeedback && data.promptFeedback.blockReason) _apiErr = 'Blocked by content filter: ' + data.promptFeedback.blockReason;
+        else if (data.candidates && data.candidates[0] && data.candidates[0].finishReason) _apiErr = 'Finish reason: ' + data.candidates[0].finishReason;
+        else _apiErr = '(HTTP ' + wrap._status + ') ' + JSON.stringify(data).substring(0, 300);
+      } catch(e2) {}
+      document.getElementById('aim-body').innerHTML =
+        '<div style="color:var(--red);padding:16px;line-height:1.7;">⚠️ Could not load ' + (_typeLabel||'info') + '.'
+        + '<br><small style="color:var(--text-3);font-size:.76rem;word-break:break-all;">' + (_apiErr || 'Empty response from Gemini') + '</small>'
+        + '<br><br><button onclick="var b=document.getElementById(\'aim-body\');if(b)b.innerHTML=\'<div style=\\\'padding:16px;text-align:center;\\\'>Retrying…</div>\';fetchCampInfo(\'' + (campName||'').replace(/'/g,"\\'") + '\',\'' + (location||'').replace(/'/g,"\\'") + '\',' + stopId + ',\'' + (_typeLabel||'info') + '\')" style="background:var(--blue-l);color:var(--blue);border:1.5px solid rgba(44,95,138,.3);border-radius:100px;padding:6px 16px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);">↺ Retry</button>'
+        + '</div>';
+      return;
+    }
     text = text.replace(/```json\s*/gi,'').replace(/```\s*/g,'');
     var addrEl = document.getElementById('aim-address-link'); var addrTxt = document.getElementById('aim-address-text');
     var phoneEl = document.getElementById('aim-phone'); var phoneTxt = document.getElementById('aim-phone-text');
@@ -18803,7 +18823,14 @@ function fetchCampInfo(campName, location, stopId, _typeLabel) {
     document.getElementById('aim-body').innerHTML = h4||'<p style="color:var(--text-2);">No info available.</p>';
     if(campFactsText) _renderAimFacts(campFactsText);
   })
-  .catch(function(){ document.getElementById('aim-body').innerHTML='<div style="color:var(--red);padding:16px;">Error loading ' + (_typeLabel||'info') + '.</div>'; });
+  .catch(function(err) {
+    var _msg = (err && err.message) ? err.message : 'Network error';
+    document.getElementById('aim-body').innerHTML =
+      '<div style="color:var(--red);padding:16px;line-height:1.7;">⚠️ Error loading ' + (_typeLabel||'info') + '.'
+      + '<br><small style="color:var(--text-3);font-size:.76rem;word-break:break-all;">' + _msg + '</small>'
+      + '<br><br><button onclick="var b=document.getElementById(\'aim-body\');if(b)b.innerHTML=\'<div style=\\\'padding:16px;text-align:center;\\\'>Retrying…</div>\';fetchCampInfo(\'' + (campName||'').replace(/'/g,"\\'") + '\',\'' + (location||'').replace(/'/g,"\\'") + '\',' + stopId + ',\'' + (_typeLabel||'info') + '\')" style="background:var(--blue-l);color:var(--blue);border:1.5px solid rgba(44,95,138,.3);border-radius:100px;padding:6px 16px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);">↺ Retry</button>'
+      + '</div>';
+  });
 }
 
 /* ── EVENTS NEAR A STOP ──────────────────────────────────────────── */

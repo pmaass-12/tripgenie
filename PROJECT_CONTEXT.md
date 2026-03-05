@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-05 (Session 19, forty-fourth context)
+2026-03-05 (Session 19, forty-fifth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,17 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 19 (forty-fifth context) — 2026-03-05
+
+**fetchCampInfo: surface real Gemini API errors in the campground info modal.**
+
+Previously `fetchCampInfo` showed only "Error loading info" with no details, hiding the actual cause (quota exceeded, invalid API key, rate limit, content block, etc.). Fixed:
+- `.then(r => r.json())` now also captures HTTP status code via a wrapper object
+- `if (!text)` block now inspects `data.error`, `data.promptFeedback.blockReason`, `data.candidates[0].finishReason`, falling back to stringifying the full response — same pattern as `fetchGeminiInfo`
+- Error display now shows `(HTTP 429) ...` or similar with the actual message
+- `.catch()` now shows the actual network error message
+- Both error states include an inline **↺ Retry** button that re-calls `fetchCampInfo` directly
 
 ### Session 19 (forty-fourth context) — 2026-03-05
 
