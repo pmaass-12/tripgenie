@@ -151,9 +151,11 @@
       background: rgba(255,255,255,.97);
       border-radius: 20px;
       padding: 48px 40px;
-      width: 420px;
+      width: min(420px, 92vw);
+      max-width: 92vw;
       box-shadow: 0 24px 60px rgba(0,0,0,.3);
       text-align: center;
+      box-sizing: border-box;
     }
     .login-rv-icon {
       font-size: 3.5rem;
@@ -330,7 +332,11 @@
       padding: 0 8px;
       flex-shrink: 0;
       overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
     }
+    #app-nav::-webkit-scrollbar { display: none; }
     .nav-tab {
       display: flex; align-items: center; gap: 0;
       padding: 14px 16px;
@@ -991,6 +997,13 @@
 
       /* ── Schedule card grid: 2-col on small phones ─────────────── */
       .day-stat-grid { grid-template-columns: 1fr 1fr !important; }
+
+      /* ── Header: hide button labels on phones to prevent overflow ─ */
+      .hdr-mode-label, .hdr-help-label, .hdr-refresh-label { display: none !important; }
+      #header-right { gap: 4px !important; }
+
+      /* ── Photo modal caption ────────────────────────────────────── */
+      #photo-modal-caption { max-width: 90vw !important; }
     }
 
     /* ── DAY DETAIL MODAL ────────────────────────────────────────── */
@@ -2749,7 +2762,7 @@
       <div id="trip-selector-wrap" onclick="toggleTripSelectorMenu()" style="position:relative;cursor:pointer;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);border-radius:12px;padding:5px 12px;display:flex;align-items:center;gap:8px;min-width:110px;max-width:200px;">
         <span style="font-size:.78rem;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;font-weight:700;" id="trip-selector-label">Maass Family RV 2026</span>
         <span style="color:rgba(255,255,255,.7);font-size:.65rem;flex-shrink:0;">▾</span>
-        <div id="trip-selector-menu" onclick="event.stopPropagation()" style="display:none;position:absolute;top:calc(100% + 8px);right:0;background:var(--card,#fff);border:1.5px solid var(--border);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.22);min-width:250px;z-index:1000;overflow:hidden;">
+        <div id="trip-selector-menu" onclick="event.stopPropagation()" style="display:none;position:absolute;top:calc(100% + 8px);right:0;background:var(--card,#fff);border:1.5px solid var(--border);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.22);min-width:min(250px,90vw);max-width:90vw;z-index:1000;overflow:hidden;">
           <div id="trip-selector-list" style="padding:6px;"></div>
         </div>
       </div>
@@ -3026,12 +3039,12 @@
     <!-- PLANNER TAB (Schedule + Stops combined) -->
     <div class="tab-panel" id="tab-planner">
       <!-- Sub-nav lives OUTSIDE the scroll body so it never lets content bleed above it -->
-      <div class="plan-nav" style="flex-shrink:0;background:var(--bg);padding:10px 24px;display:flex;gap:6px;flex-wrap:wrap;border-bottom:2px solid var(--border);">
-        <button id="plan-seg-schedule" onclick="_mainSeg('schedule')" class="plan-nav-btn active-seg" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--orange);border-radius:50px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-calendar-days"></i></span><span class="pnb-label"> Schedule</span></button>
-        <button id="plan-seg-agenda" onclick="_mainSeg('agenda')" class="plan-nav-btn" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon">📅</span><span class="pnb-label"> Agenda</span></button>
-        <button id="plan-seg-stops" onclick="_mainSeg('stops')" class="plan-nav-btn" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-map-pin"></i></span><span class="pnb-label"> Day Planner</span></button>
-        <button id="plan-seg-stats" onclick="_mainSeg('stats')" class="plan-nav-btn" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-star"></i></span><span class="pnb-label"> Trip Stats</span></button>
-        <button id="plan-seg-friends" onclick="_mainSeg('friends')" class="plan-nav-btn" style="flex:1;min-width:0;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-lightbulb"></i></span><span class="pnb-label"> Suggestions</span></button>
+      <div class="plan-nav" style="flex-shrink:0;background:var(--bg);padding:10px 24px;display:flex;gap:6px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;border-bottom:2px solid var(--border);">
+        <button id="plan-seg-schedule" onclick="_mainSeg('schedule')" class="plan-nav-btn active-seg" style="flex:1;min-width:90px;padding:8px 10px;border:1.5px solid var(--orange);border-radius:50px;background:var(--orange);color:#fff;font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-calendar-days"></i></span><span class="pnb-label"> Schedule</span></button>
+        <button id="plan-seg-agenda" onclick="_mainSeg('agenda')" class="plan-nav-btn" style="flex:1;min-width:90px;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon">📅</span><span class="pnb-label"> Agenda</span></button>
+        <button id="plan-seg-stops" onclick="_mainSeg('stops')" class="plan-nav-btn" style="flex:1;min-width:100px;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-map-pin"></i></span><span class="pnb-label"> Day Planner</span></button>
+        <button id="plan-seg-stats" onclick="_mainSeg('stats')" class="plan-nav-btn" style="flex:1;min-width:90px;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-star"></i></span><span class="pnb-label"> Trip Stats</span></button>
+        <button id="plan-seg-friends" onclick="_mainSeg('friends')" class="plan-nav-btn" style="flex:1;min-width:100px;padding:8px 10px;border:1.5px solid var(--border);border-radius:50px;background:var(--card);color:var(--text-2);font-family:var(--font);font-size:.78rem;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;"><span class="pnb-icon"><i class="fa-solid fa-lightbulb"></i></span><span class="pnb-label"> Suggestions</span></button>
       </div>
       <!-- Scrollable content area — only this div scrolls -->
       <div id="planner-body">
@@ -3097,12 +3110,12 @@
 
         <!-- Photos + Audio row -->
         <div class="journal-photos-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px;">
-          <div>
+          <div style="position:relative;">
             <label style="font-size:.72rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:7px;text-transform:uppercase;letter-spacing:.04em;"><i class="fa-solid fa-camera"></i> Photos &amp; Videos</label>
-            <label for="j-photos" style="display:flex;align-items:center;gap:7px;padding:9px 14px;background:var(--blue-l);border:1px dashed #7aaac8;border-radius:var(--radius-s);cursor:pointer;font-size:.8rem;font-weight:700;color:var(--blue);">
+            <label for="j-photos" onclick="document.getElementById('j-photos').click();event.preventDefault();" style="display:flex;align-items:center;gap:7px;padding:9px 14px;background:var(--blue-l);border:1px dashed #7aaac8;border-radius:var(--radius-s);cursor:pointer;font-size:.8rem;font-weight:700;color:var(--blue);">
               <i class="fa-solid fa-cloud-arrow-up"></i> Choose photos or videos
             </label>
-            <input type="file" id="j-photos" accept="image/*,video/*" multiple style="display:none;" onchange="handlePhotoUpload(event)">
+            <input type="file" id="j-photos" accept="image/*,video/*" multiple style="position:absolute;opacity:0;width:1px;height:1px;overflow:hidden;top:0;left:0;" onchange="handlePhotoUpload(event)">
             <div id="j-photo-previews" style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;"></div>
           </div>
           <div>
@@ -3227,8 +3240,8 @@
       <input type="file" id="tg-file-input" accept="image/*,application/pdf" style="display:none" onchange="handleTripGeniePhoto(event)" />
       <!-- Booking Confirmations file picker (used by openBookingModal) -->
       <input type="file" id="bc-file-input" accept="image/*,application/pdf" style="display:none" onchange="_bcHandleFile(event)" />
-      <button class="tg-icon-btn" id="tg-photo-btn" onclick="document.getElementById('tg-file-input').click()" title="Attach a photo or PDF"><i class="fa-solid fa-arrow-up-from-bracket"></i></button>
-      <button class="tg-icon-btn" id="tg-mic-btn" onclick="_tgStartVoice()" title="Voice input — tap to speak">
+      <button class="tg-icon-btn" id="tg-photo-btn" onclick="document.getElementById('tg-file-input').click()" title="Attach a photo or PDF" style="flex-direction:column;gap:2px;font-size:.58rem;padding:4px 6px;"><i class="fa-solid fa-arrow-up-from-bracket"></i><span style="font-size:.52rem;font-weight:700;color:var(--text-3);line-height:1;">Photo</span></button>
+      <button class="tg-icon-btn" id="tg-mic-btn" onclick="_tgStartVoice()" title="Tap to speak — TripGenie will answer aloud" style="flex-direction:column;gap:2px;padding:4px 6px;">
         <span class="tg-mic-static"><i class="fa-solid fa-microphone"></i></span>
         <span class="tg-wave-bars">
           <span class="tg-wave-b" style="height:12px;"></span>
@@ -3237,8 +3250,9 @@
           <span class="tg-wave-b" style="height:16px;"></span>
           <span class="tg-wave-b" style="height:8px;"></span>
         </span>
+        <span style="font-size:.52rem;font-weight:700;color:var(--text-3);line-height:1;" class="tg-mic-static">Speak</span>
       </button>
-      <button class="tg-icon-btn" id="tg-hf-btn" onclick="_tgToggleHandsFree()" title="Hands-free: speak → Genie replies → auto-listens"><svg id="tg-hf-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 18" width="18" height="14" fill="currentColor"><rect x="0" y="6" width="3" height="6" rx="1.5"/><rect x="4.75" y="2.5" width="3" height="13" rx="1.5"/><rect x="9.5" y="0" width="3" height="18" rx="1.5"/><rect x="14.25" y="3" width="3" height="12" rx="1.5"/><rect x="19" y="6" width="3" height="6" rx="1.5"/></svg></button>
+      <button class="tg-icon-btn" id="tg-hf-btn" onclick="_tgToggleHandsFree()" title="Hands-free loop: Genie speaks → auto-listens → you reply → repeat" style="flex-direction:column;gap:2px;padding:4px 6px;"><svg id="tg-hf-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 18" width="18" height="14" fill="currentColor"><rect x="0" y="6" width="3" height="6" rx="1.5"/><rect x="4.75" y="2.5" width="3" height="13" rx="1.5"/><rect x="9.5" y="0" width="3" height="18" rx="1.5"/><rect x="14.25" y="3" width="3" height="12" rx="1.5"/><rect x="19" y="6" width="3" height="6" rx="1.5"/></svg><span style="font-size:.52rem;font-weight:700;color:var(--text-3);line-height:1;">Auto</span></button>
       <button class="tg-icon-btn" id="tg-send-btn" onclick="askTripGenie()" title="Send">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
       </button>
@@ -4342,10 +4356,12 @@ function setDayState(day, updates) {
   saveState(appState);
 }
 function getDayDriver(day) {
-  return getDayState(day).driver || TRIP_DAYS[day-1].driver;
+  var _d = getDay(day);
+  return getDayState(day).driver || (_d ? _d.driver : '');
 }
 function getDaySleep(day) {
-  return getDayState(day).sleep || TRIP_DAYS[day-1].sleep;
+  var _d = getDay(day);
+  return getDayState(day).sleep || (_d ? _d.sleep : '');
 }
 
 /* ── CONFIG ──────────────────────────────────────────────────────── */
@@ -5526,6 +5542,10 @@ document.querySelectorAll('.nav-tab').forEach(btn => {
     if (tab === 'whatsnew')    { renderWhatsNew(); document.getElementById('whatsnew-dot') && (document.getElementById('whatsnew-dot').style.display='none'); }
     if (tab === 'ideas')       { renderIdeas(); }
     if (tab === 'planner')     { _mainSeg('schedule'); renderSchedule(); }
+    if (tab === 'dashboard')   renderDashboard();
+    if (tab === 'journal')     renderJournal();
+    if (tab === 'school')      renderSchool();
+    if (tab === 'suggestions') renderSuggestions();
   });
 });
 
@@ -6122,15 +6142,18 @@ function renderDashboard() {
   // ── Pre-compute stats (no logic inside template strings) ──────────
   var milesCompleted = 0;
   for (var mi = 0; mi < Math.min(dayNum, TRIP_DAYS.length); mi++) {
-    milesCompleted += TRIP_DAYS[mi].miles;
+    milesCompleted += (TRIP_DAYS[mi].miles || 0);
   }
   var visitedSet = {};
   var stopsVisited = 0;
   for (var vi = 0; vi < Math.min(dayNum, TRIP_DAYS.length); vi++) {
     var sid = TRIP_DAYS[vi].stopId;
-    if (sid < 15 && !visitedSet[sid]) { visitedSet[sid] = true; stopsVisited++; }
+    /* Count all unique stops visited (custom + builtin), excluding the home stop */
+    var _vsStop = getStop(sid);
+    if (_vsStop && !(_vsStop.sleepType === 'home') && !visitedSet[sid]) {
+      visitedSet[sid] = true; stopsVisited++;
+    }
   }
-  stopsVisited = Math.min(stopsVisited, 14);
   var fuelEst = appState.tripStarted
     ? ('$' + Math.round(milesCompleted / 12 * 3.5).toLocaleString())
     : '$0';
@@ -6156,7 +6179,8 @@ function renderDashboard() {
   var tripHigh = null, tripLow = null, tripHighStop = '', tripLowStop = '';
   if (appState.weather) {
     for (var ws in appState.weather) {
-      var wStop = getStop(parseInt(ws));
+      /* ws is a stopId which may be a string, number, or timestamp — try as-is then as int */
+      var wStop = getStop(ws) || getStop(parseInt(ws));
       var wStopName = wStop ? wStop.name : '';
       for (var wd in appState.weather[ws]) {
         var wx = appState.weather[ws][wd];
@@ -7049,7 +7073,7 @@ function renderStopNavigator() {
       + ' draggable="true"'
       + ' data-nav-idx="' + idx + '"'
       + ' data-nav-stopid="' + stopId + '"'
-      + ' onclick="_navFlyToStop(' + stopId + ',event)"'
+      + ' onclick="_navFlyToStop(' + JSON.stringify(stopId) + ',event)"'
       + ' ondragstart="_navDragStart(event)"'
       + ' ondragover="_navDragOver(event)"'
       + ' ondrop="_navDrop(event)"'
@@ -7059,7 +7083,7 @@ function renderStopNavigator() {
       + '<div style="flex:1;min-width:0;font-size:.8rem;font-weight:' + (isWaypoint ? '600' : '700') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:' + (isWaypoint ? 'var(--text-2)' : 'var(--text)') + ';">' + name + state + '</div>'
       + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;color:var(--text-3);font-size:.72rem;white-space:nowrap;">'
       + metaHtml
-      + '<button onclick="event.stopPropagation();_navDeleteStop(' + stopId + ',\'' + name.replace(/'/g,"\\'") + '\')" title="Remove stop" draggable="false" style="background:none;border:none;cursor:pointer;padding:2px 3px;color:var(--text-3);font-size:.75rem;line-height:1;border-radius:4px;display:flex;align-items:center;" onmouseenter="this.style.color=\'#e53e3e\'" onmouseleave="this.style.color=\'var(--text-3)\'"><i class="fa-solid fa-xmark"></i></button>'
+      + '<button onclick="event.stopPropagation();_navDeleteStop(' + JSON.stringify(stopId) + ',\'' + name.replace(/'/g,"\\'") + '\')" title="Remove stop" draggable="false" style="background:none;border:none;cursor:pointer;padding:2px 3px;color:var(--text-3);font-size:.75rem;line-height:1;border-radius:4px;display:flex;align-items:center;" onmouseenter="this.style.color=\'#e53e3e\'" onmouseleave="this.style.color=\'var(--text-3)\'"><i class="fa-solid fa-xmark"></i></button>'
       + '<i class="fa-solid fa-grip-vertical" style="font-size:.72rem;cursor:grab;"></i>'
       + '</div>'
       + '</div>';
@@ -7937,6 +7961,9 @@ function saveSleep(dayNum) {
 
 /* ── PHASE HEADER HTML ───────────────────────────────────────────── */
 function phaseHeaderHtml(phase, firstDay) {
+  /* Safe JSON-encoded stopId for inline onclick handlers — works for both
+     numeric IDs (e.g. 2) and string IDs (e.g. 'winchester') */
+  var _sid = JSON.stringify(firstDay.stopId);
   /* ── Waypoint: lightweight header, no nights/days controls ── */
   if (firstDay.waypoint) {
     var _wpStop = getStop(firstDay.stopId);
@@ -7949,7 +7976,7 @@ function phaseHeaderHtml(phase, firstDay) {
       + '<div style="font-weight:800;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _wpName + _wpState + '</div>'
       + '<div style="font-size:.7rem;opacity:.7;font-weight:600;">Waypoint — drive-through, no overnight stay</div>'
       + '</div>'
-      + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + _wpSafe + '\')" style="background:rgba(220,60,50,.12);border:1px solid rgba(220,60,50,.2);color:#c53030;border-radius:6px;padding:3px 8px;font-size:.68rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Remove waypoint">&#128465;&#65039;</button>'
+      + '<button onclick="event.stopPropagation();removeStopFromTrip(' + _sid + ',\'' + _wpSafe + '\')" style="background:rgba(220,60,50,.12);border:1px solid rgba(220,60,50,.2);color:#c53030;border-radius:6px;padding:3px 8px;font-size:.68rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Remove waypoint">&#128465;&#65039;</button>'
       + '</div>';
   }
 
@@ -8008,16 +8035,16 @@ function phaseHeaderHtml(phase, firstDay) {
       var _topCode = _codes.length ? parseInt(Object.keys(_codeCount).sort(function(a,b){return _codeCount[b]-_codeCount[a];})[0]) : null;
       var _wxIcon = _topCode === null ? '🌡️' : (_topCode <= 1 ? '☀️' : _topCode <= 3 ? '⛅' : _topCode <= 49 ? '🌫️' : _topCode <= 67 ? '🌧️' : _topCode <= 77 ? '❄️' : '🌩️');
       var _wxType = (_wxData[phaseDays[0].date] && _wxData[phaseDays[0].date].type === 'forecast') ? 'Forecast' : 'Typical';
-      _wxHtml = '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.15);border-radius:20px;padding:3px 9px;flex-shrink:0;cursor:pointer;" onclick="event.stopPropagation();showStopForecastModal(' + firstDay.stopId + ')" title="' + _wxType + ' weather — tap for full forecast">'
+      _wxHtml = '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.15);border-radius:20px;padding:3px 9px;flex-shrink:0;cursor:pointer;" onclick="event.stopPropagation();showStopForecastModal(' + _sid + ')" title="' + _wxType + ' weather — tap for full forecast">'
         + '<span style="font-size:.85rem;">' + _wxIcon + '</span>'
         + '<span style="font-size:.76rem;font-weight:800;color:#fff;white-space:nowrap;">' + _avgHigh + '° / ' + _avgLow + '°</span>'
         + '</div>';
     } else {
       /* No data yet — show load button */
-      _wxHtml = '<button onclick="event.stopPropagation();loadStopWeather(' + firstDay.stopId + ')" style="background:rgba(255,255,255,.12);border:1px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.7);border-radius:20px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Load weather">🌡️ Weather</button>';
+      _wxHtml = '<button onclick="event.stopPropagation();loadStopWeather(' + _sid + ')" style="background:rgba(255,255,255,.12);border:1px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.7);border-radius:20px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Load weather">🌡️ Weather</button>';
     }
   } else if (pStop && pStop.lat) {
-    _wxHtml = '<button onclick="event.stopPropagation();loadStopWeather(' + firstDay.stopId + ')" style="background:rgba(255,255,255,.12);border:1px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.7);border-radius:20px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Load weather">🌡️ Weather</button>';
+    _wxHtml = '<button onclick="event.stopPropagation();loadStopWeather(' + _sid + ')" style="background:rgba(255,255,255,.12);border:1px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.7);border-radius:20px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Load weather">🌡️ Weather</button>';
   }
 
   // Determine if this phase is first / last among visible (non-removed) phases
@@ -8043,15 +8070,15 @@ function phaseHeaderHtml(phase, firstDay) {
     + '<div style="flex:1;min-width:160px;">'
     + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
     + '<div style="font-weight:900;font-size:1.08rem;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;">' + _displayPhase + '</div>'
-    + '<button onclick="event.stopPropagation();editStopCityName(' + (pStop ? pStop.id : firstDay.stopId) + ')" title="Edit city/town name shown in day cards" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;padding:1px 6px;font-size:.65rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" >' + (_hasOverride ? '📍' : '✏️') + '</button>'
+    + '<button onclick="event.stopPropagation();editStopCityName(' + (pStop ? JSON.stringify(pStop.id) : _sid) + ')" title="Edit city/town name shown in day cards" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;padding:1px 6px;font-size:.65rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" >' + (_hasOverride ? '📍' : '✏️') + '</button>'
     + _wxHtml
     + '</div>'
     + (_hasOverride ? '<div style="font-size:.72rem;opacity:.75;font-weight:600;margin-top:1px;">📍 ' + _cityDisp + '</div>' : '')
     + '<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
-    + (phaseDays.length > 0 ? '<span style="font-size:.75rem;opacity:.85;font-weight:700;">' + formatDate(phaseDays[0].date) + (phaseDays.length > 1 ? ' – ' + formatDate(phaseDays[phaseDays.length-1].date) : '') + '</span>' + '<span style="opacity:.35;font-size:.7rem;">·</span>' : '')
+    + (phaseDays.length > 0 && phaseDays[0].date ? '<span style="font-size:.75rem;opacity:.85;font-weight:700;">' + formatDate(phaseDays[0].date) + (phaseDays.length > 1 && phaseDays[phaseDays.length-1].date ? ' – ' + formatDate(phaseDays[phaseDays.length-1].date) : '') + '</span>' + '<span style="opacity:.35;font-size:.7rem;">·</span>' : '')
     + '<span style="font-size:.75rem;opacity:.7;font-weight:600;">' + (totalNights === 0 ? 'transit stop' : totalNights + ' night' + (totalNights !== 1 ? 's' : '')) + (extras > 0 ? ' <span style="opacity:.7">(+' + extras + ')</span>' : '') + '</span>'
     + '<span style="opacity:.35;font-size:.7rem;">·</span>'
-    + '<button onclick="event.stopPropagation();_cycleStayType(' + firstDay.stopId + ')" title="Change accommodation type" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">'
+    + '<button onclick="event.stopPropagation();_cycleStayType(' + _sid + ')" title="Change accommodation type" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">'
     + _getStayMeta(firstDay.stopId).icon + '&thinsp;' + _getStayMeta(firstDay.stopId).label
     + '</button>'
     + (function() {
@@ -8076,13 +8103,13 @@ function phaseHeaderHtml(phase, firstDay) {
     + '<div class="ph-ctrls" style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:12px;flex-wrap:wrap;justify-content:flex-end;">'
 
     /* Music — hidden on mobile via .ph-music-btn CSS */
-    + '<button class="ph-music-btn" onclick="event.stopPropagation();_openMusicForStop(' + firstDay.stopId + ')" title="Local Music" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;width:30px;height:30px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;"><i class="fa-solid fa-music"></i></button>'
+    + '<button class="ph-music-btn" onclick="event.stopPropagation();_openMusicForStop(' + _sid + ')" title="Local Music" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;width:30px;height:30px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;"><i class="fa-solid fa-music"></i></button>'
 
     /* Divider — hidden on mobile via .ph-sep-div CSS */
     + '<div class="ph-sep-div" style="width:1px;height:22px;background:rgba(255,255,255,.2);flex-shrink:0;"></div>'
 
     /* Area Info — label text hidden on mobile (.ph-area-lbl) to save space */
-    + '<button onclick="event.stopPropagation();openAreaInfo(\'' + _safePhase + '\',' + firstDay.stopId + ')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:5px 11px;font-size:.73rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">&#128269;<span class="ph-area-lbl">&nbsp;Area Info</span></button>'
+    + '<button onclick="event.stopPropagation();openAreaInfo(\'' + _safePhase + '\',' + _sid + ')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:5px 11px;font-size:.73rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">&#128269;<span class="ph-area-lbl">&nbsp;Area Info</span></button>'
 
     /* Booking Confirmation — shows count badge when confirmations saved */
     + (function() {
@@ -8090,18 +8117,18 @@ function phaseHeaderHtml(phase, firstDay) {
         var _bcBg    = _bcCount ? 'rgba(255,215,0,.3)' : 'rgba(255,255,255,.12)';
         var _bcBord  = _bcCount ? '1px solid rgba(255,215,0,.6)' : '1px solid rgba(255,255,255,.2)';
         var _bcLabel = _bcCount ? '🎫\u00a0' + _bcCount : '🎫';
-        return '<button onclick="event.stopPropagation();openBookingModal(' + firstDay.stopId + ')" title="Booking confirmations" style="background:' + _bcBg + ';border:' + _bcBord + ';color:#fff;border-radius:8px;padding:5px 10px;font-size:.73rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">' + _bcLabel + '</button>';
+        return '<button onclick="event.stopPropagation();openBookingModal(' + _sid + ')" title="Booking confirmations" style="background:' + _bcBg + ';border:' + _bcBord + ';color:#fff;border-radius:8px;padding:5px 10px;font-size:.73rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">' + _bcLabel + '</button>';
       })()
 
     /* − Days + */
     + '<div style="display:inline-flex;align-items:center;gap:0;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;overflow:hidden;flex-shrink:0;">'
-    + '<button onclick="event.stopPropagation();removePhaseDay(' + firstDay.stopId + ')" style="background:none;border:none;color:#fff;width:28px;height:28px;font-size:1rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s;" title="Remove a day">&#8722;</button>'
+    + '<button onclick="event.stopPropagation();removePhaseDay(' + _sid + ')" style="background:none;border:none;color:#fff;width:28px;height:28px;font-size:1rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s;" title="Remove a day">&#8722;</button>'
     + '<span style="font-size:.65rem;font-weight:700;opacity:.6;letter-spacing:.04em;padding:0 2px;">DAYS</span>'
-    + '<button onclick="event.stopPropagation();addPhaseDay(' + firstDay.stopId + ')" style="background:none;border:none;color:#fff;width:28px;height:28px;font-size:1rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s;" title="Add a day">&#43;</button>'
+    + '<button onclick="event.stopPropagation();addPhaseDay(' + _sid + ')" style="background:none;border:none;color:#fff;width:28px;height:28px;font-size:1rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s;" title="Add a day">&#43;</button>'
     + '</div>'
 
     /* Remove (destructive — pill style matching white-row trash) */
-    + '<button onclick="event.stopPropagation();removeStopFromTrip(' + firstDay.stopId + ',\'' + _safePhase + '\')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;width:30px;height:30px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;" title="Remove this stop"><i class="fa-solid fa-trash-can"></i></button>'
+    + '<button onclick="event.stopPropagation();removeStopFromTrip(' + _sid + ',\'' + _safePhase + '\')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;width:30px;height:30px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;" title="Remove this stop"><i class="fa-solid fa-trash-can"></i></button>'
 
     + '</div>'
     + '</div>';
@@ -8160,7 +8187,7 @@ function _cycleToStayType(stopId, targetType) {
   showToast(meta.icon + ' Switched to ' + meta.label + ' for this stop', 2000);
   /* Re-render the day detail blocks so the buttons update immediately */
   if (typeof _ddmDayNum !== 'undefined' && _ddmDayNum) {
-    var _d = TRIP_DAYS[_ddmDayNum - 1];
+    var _d = getDay(_ddmDayNum);
     var _s = _d ? getStop(_d.stopId) : null;
     var blocksEl = document.getElementById('ddm-blocks');
     if (blocksEl && _d) blocksEl.innerHTML = renderDayTimeBlocks(_d, _s);
@@ -9022,7 +9049,11 @@ function renderSchedule() {
 
     /* Effective date = original date shifted by cumulative pause nights + phaseExtraDays cascade */
     var _schPhOff = _schPhaseOffset[d.stopId] || 0;
-    var _effectiveDate = new Date(new Date(d.date + 'T00:00:00').getTime() + (_schCumulativeNights + _schPhOff) * 86400000);
+    /* Guard: if a day has no .date field, compute it from startDate + (day# - 1) as fallback */
+    var _rawDateMs = d.date
+      ? new Date(d.date + 'T00:00:00').getTime()
+      : new Date(CONFIG.startDate + 'T00:00:00').getTime() + (d.day - 1) * 86400000;
+    var _effectiveDate = new Date(_rawDateMs + (_schCumulativeNights + _schPhOff) * 86400000);
     var _isOverflow = _effectiveDate > _plannedEndDate;
     if (_isOverflow) _overflowDayCount++;
 
@@ -10148,21 +10179,51 @@ function loadJournal() {
     var raw = localStorage.getItem('rv_journal');
     _journalEntries = raw ? JSON.parse(raw) : [];
   } catch(e) { _journalEntries = []; }
-  // Merge any cloud-synced journal entries (text only — photos stay device-local)
+  // Merge cloud-synced journal entries (text + photo thumbnails) from other family devices
   try {
     var cloudEntries = appState.journalEntries;
     if (cloudEntries && cloudEntries.length) {
-      var localIds = {};
-      _journalEntries.forEach(function(e) { localIds[e.id] = true; });
-      var merged = false;
-      cloudEntries.forEach(function(e) {
-        if (!localIds[e.id]) { _journalEntries.push(e); merged = true; }
+      var localMap = {};
+      _journalEntries.forEach(function(e) { localMap[e.id] = e; });
+      var changed = false;
+      cloudEntries.forEach(function(ce) {
+        if (!localMap[ce.id]) {
+          // New entry from another device — add it with any thumbnails they synced
+          _journalEntries.push(ce);
+          changed = true;
+        } else {
+          // Entry exists locally — merge in photoThumbs from cloud if local has none
+          var local = localMap[ce.id];
+          if (ce.photoThumbs && ce.photoThumbs.length && (!local.photoThumbs || !local.photoThumbs.length)) {
+            local.photoThumbs = ce.photoThumbs;
+            changed = true;
+          }
+        }
       });
-      if (merged) {
+      if (changed) {
         try { localStorage.setItem('rv_journal', JSON.stringify(_journalEntries)); } catch(ex) {}
       }
     }
   } catch(me) {}
+}
+
+/* Compress a dataUrl image to a small thumbnail (≤200px, JPEG 0.45)
+   Returns a compressed base64 string via callback. Used for cloud sync. */
+function _compressPhotoThumb(dataUrl, cb) {
+  try {
+    var img = new Image();
+    img.onload = function() {
+      var MAX = 200;
+      var ratio = Math.min(MAX / img.width, MAX / img.height, 1);
+      var c = document.createElement('canvas');
+      c.width  = Math.round(img.width  * ratio);
+      c.height = Math.round(img.height * ratio);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      cb(c.toDataURL('image/jpeg', 0.45));
+    };
+    img.onerror = function() { cb(null); };
+    img.src = dataUrl;
+  } catch(e) { cb(null); }
 }
 
 function saveJournal() {
@@ -10171,17 +10232,19 @@ function saveJournal() {
   } catch(e) {
     showToast('Storage full — try removing some photos to free space', 4000);
   }
-  // Also sync text entries (no photo data — too large) to appState so they
-  // reach other family devices via the existing Supabase cloud sync path.
+  // Sync entries to appState for Supabase cloud sync.
+  // Photos are compressed to small thumbnails (≤200px) so other devices can see them.
   try {
-    appState.journalEntries = _journalEntries.map(function(e) {
+    var toSync = _journalEntries.map(function(e) {
       return {
         id: e.id, day: e.day, author: e.author, date: e.date,
         stopId: e.stopId, location: e.location, text: e.text,
-        created: e.created
-        // photos and audio intentionally omitted — kept device-local only
+        created: e.created,
+        /* Include cached thumbnails if already generated, otherwise omit photos */
+        photoThumbs: e.photoThumbs || []
       };
     });
+    appState.journalEntries = toSync;
     saveState(appState);
   } catch(se) {}
 }
@@ -10333,23 +10396,39 @@ function renderJournalEntries() {
     }
 
     // ── Photos ──────────────────────────────────────────────────
-    if (entry.photos && entry.photos.length > 0) {
+    // Show full-res local photos if available; fall back to cloud thumbnails for entries
+    // added on another family member's device (so everyone sees each other's photos)
+    var _localPhotos = (entry.photos && entry.photos.length > 0) ? entry.photos : [];
+    var _thumbPhotos = (entry.photoThumbs && entry.photoThumbs.length > 0 && _localPhotos.length === 0) ? entry.photoThumbs : [];
+    if (_localPhotos.length > 0 || _thumbPhotos.length > 0) {
       html += '<div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;">';
-      for (var pi = 0; pi < entry.photos.length; pi++) {
-        var photo = entry.photos[pi];
-        // Support legacy plain string photos and new {dataUrl, exif} objects
-        var pSrc  = (photo && photo.dataUrl) ? photo.dataUrl : photo;
-        var pExif = (photo && photo.exif)    ? photo.exif    : null;
-        var pIdx  = _photoLookup.length;
-        _photoLookup.push({ dataUrl: pSrc, caption: _buildPhotoCaption(pExif) });
-        // Caption text: "📍 City, State  |  🕐 Mar 15 2:34 PM"
-        var capLine = _buildPhotoCaption(pExif);
-        html += '<div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;">'
-          + '<img src="' + pSrc + '" '
-          + 'onclick="openPhotoModal(' + pIdx + ')" '
-          + 'style="width:88px;height:88px;object-fit:cover;border-radius:var(--radius-s);cursor:zoom-in;border:2px solid var(--border);transition:border-color .15s;" />'
-          + (capLine ? '<div style="font-size:.6rem;color:var(--text-3);text-align:center;max-width:88px;line-height:1.35;">' + capLine + '</div>' : '')
-          + '</div>';
+      if (_localPhotos.length > 0) {
+        for (var pi = 0; pi < _localPhotos.length; pi++) {
+          var photo = _localPhotos[pi];
+          var pSrc  = (photo && photo.dataUrl) ? photo.dataUrl : photo;
+          var pExif = (photo && photo.exif)    ? photo.exif    : null;
+          var pIdx  = _photoLookup.length;
+          _photoLookup.push({ dataUrl: pSrc, caption: _buildPhotoCaption(pExif) });
+          var capLine = _buildPhotoCaption(pExif);
+          html += '<div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;">'
+            + '<img src="' + pSrc + '" onclick="openPhotoModal(' + pIdx + ')" '
+            + 'style="width:88px;height:88px;object-fit:cover;border-radius:var(--radius-s);cursor:zoom-in;border:2px solid var(--border);" />'
+            + (capLine ? '<div style="font-size:.6rem;color:var(--text-3);text-align:center;max-width:88px;line-height:1.35;">' + capLine + '</div>' : '')
+            + '</div>';
+        }
+      } else {
+        // Cloud thumbnails from another device — shown at 88px with a "cloud" badge
+        for (var ti = 0; ti < _thumbPhotos.length; ti++) {
+          var tSrc = _thumbPhotos[ti];
+          if (!tSrc) continue;
+          var tIdx = _photoLookup.length;
+          _photoLookup.push({ dataUrl: tSrc, caption: '' });
+          html += '<div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px;position:relative;">'
+            + '<img src="' + tSrc + '" onclick="openPhotoModal(' + tIdx + ')" '
+            + 'style="width:88px;height:88px;object-fit:cover;border-radius:var(--radius-s);cursor:zoom-in;border:2px solid var(--border);filter:none;" />'
+            + '<div style="font-size:.58rem;color:var(--text-3);text-align:center;">☁️ synced</div>'
+            + '</div>';
+        }
       }
       html += '</div>';
     }
@@ -10590,7 +10669,7 @@ function aiCleanupJournal() {
   var author = authorEl ? authorEl.value : 'family member';
   var dayEl = document.getElementById('j-day');
   var dayNum = dayEl ? parseInt(dayEl.value) : 1;
-  var d = TRIP_DAYS[dayNum - 1];
+  var d = getDay(dayNum);
   var context = d ? 'Day ' + dayNum + ' of the trip (' + d.phase + ')' : 'a day on the trip';
   var prompt = 'You are helping ' + author + ' write a family travel journal entry for an RV trip. '
     + 'Here are their rough notes from ' + context + ':\n\n'
@@ -10654,8 +10733,29 @@ function submitJournalEntry() {
   _journalEntries.push(entry);
   saveJournal();
 
-  // Add photos to unified photoPool
+  // Generate compressed thumbnails in background, then re-sync to cloud
+  // so other family devices can see the photos (thumbnails ≤200px, ~10-15KB each)
   if (_pendingPhotos && _pendingPhotos.length > 0) {
+    var _photosToThumb = _pendingPhotos.filter(function(p) { return p.type !== 'video' && p.dataUrl; });
+    var _thumbResults = [];
+    var _thumbDone = 0;
+    if (_photosToThumb.length === 0) {
+      // No images to compress (videos only) — sync immediately
+      saveJournal();
+    } else {
+      _photosToThumb.forEach(function(p, idx) {
+        _compressPhotoThumb(p.dataUrl, function(thumb) {
+          _thumbResults[idx] = thumb;
+          _thumbDone++;
+          if (_thumbDone === _photosToThumb.length) {
+            // All thumbnails ready — update entry and re-sync
+            entry.photoThumbs = _thumbResults.filter(Boolean);
+            saveJournal(); // triggers cloud sync with thumbnails
+          }
+        });
+      });
+    }
+
     _pendingPhotos.forEach(function(photoObj) {
       if (photoObj && photoObj.dataUrl) {
         _addToPhotoPool(photoObj.dataUrl, { caption: '', stopId: entry.stopId, dayNum: dayNum, source: 'journal' });
@@ -10757,18 +10857,36 @@ function renderGalleryTab() {
   // Collect all photos and videos from journal entries and photoPool
   var allPhotos = [];
   _journalEntries.forEach(function(entry) {
-    (entry.photos || []).forEach(function(p) {
-      var src = (p && p.dataUrl) ? p.dataUrl : p;
-      allPhotos.push({
-        src: src,
-        type: (p && p.type) ? p.type : (src && src.startsWith('data:video') ? 'video' : 'image'),
-        caption: (p && p.caption) || '',
-        location: entry.location || entry.stopName || '',
-        date: entry.date || '',
-        day: entry.day,
-        entryId: entry.id
+    var localPhotos = entry.photos || [];
+    if (localPhotos.length > 0) {
+      localPhotos.forEach(function(p) {
+        var src = (p && p.dataUrl) ? p.dataUrl : p;
+        allPhotos.push({
+          src: src,
+          type: (p && p.type) ? p.type : (src && src.startsWith('data:video') ? 'video' : 'image'),
+          caption: (p && p.caption) || '',
+          location: entry.location || entry.stopName || '',
+          date: entry.date || '',
+          day: entry.day,
+          entryId: entry.id
+        });
       });
-    });
+    } else if (entry.photoThumbs && entry.photoThumbs.length > 0) {
+      /* No local photos — show cloud-synced thumbnails from other family devices */
+      entry.photoThumbs.forEach(function(thumb) {
+        if (!thumb) return;
+        allPhotos.push({
+          src: thumb,
+          type: 'image',
+          caption: '☁️ ' + (entry.author || 'Family'),
+          location: entry.location || '',
+          date: entry.date || '',
+          day: entry.day,
+          entryId: entry.id,
+          isCloudThumb: true
+        });
+      });
+    }
   });
 
   // Also include photos from unified photoPool (direct gallery uploads only — journal photos
@@ -10813,11 +10931,12 @@ function renderGalleryTab() {
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">';
   allPhotos.forEach(function(p) {
     var isVid = p.type === 'video' || (p.src && p.src.startsWith('data:video'));
-    html += '<div style="cursor:zoom-in;position:relative;aspect-ratio:1;overflow:hidden;border-radius:6px;" data-media-src="' + (p.src||'') + '" data-media-type="' + (isVid?'video':'image') + '" data-media-cap="' + ((p.caption||p.location||'').replace(/"/g,'&quot;')) + '">'
+    html += '<div style="cursor:zoom-in;position:relative;aspect-ratio:1;overflow:hidden;border-radius:6px;' + (p.isCloudThumb ? 'opacity:.85;' : '') + '" data-media-src="' + (p.src||'') + '" data-media-type="' + (isVid?'video':'image') + '" data-media-cap="' + ((p.caption||p.location||'').replace(/"/g,'&quot;')) + '">'
       + (isVid
         ? '<video src="' + p.src + '" style="width:100%;height:100%;object-fit:cover;" muted preload="metadata"></video>'
           + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);"><span style="font-size:1.8rem;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6));">▶️</span></div>'
         : '<img src="' + p.src + '" style="width:100%;height:100%;object-fit:cover;" loading="lazy" />')
+      + (p.isCloudThumb ? '<div style="position:absolute;top:3px;right:3px;background:rgba(0,0,0,.5);border-radius:6px;padding:2px 4px;font-size:.55rem;color:#fff;line-height:1;">☁️</div>' : '')
       + (p.caption || p.location ? '<div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.65));padding:4px 6px 4px;font-size:.56rem;color:#fff;line-height:1.3;">' + (p.caption || p.location) + '</div>' : '')
       + '</div>';
   });
@@ -15153,7 +15272,7 @@ function pickMealRest(rests, meal, usedIdxs, skipIdxs) {
 var _musicCache = {}; // keyed by stopId
 
 function openLocalMusic() {
-  var d    = _ddmDayNum ? TRIP_DAYS[_ddmDayNum - 1] : null;
+  var d    = _ddmDayNum ? getDay(_ddmDayNum) : null;
   var stop = d ? getStop(d.stopId) : null;
   if (!stop) { showToast('No location info for this day', 2000); return; }
 
@@ -15317,31 +15436,41 @@ function _openMusicForStop(stopId) {
 var _ddmDayNum = null;
 
 function openDayDetail(dayNum) {
-  var d = TRIP_DAYS[dayNum - 1];
+  var d = getDay(dayNum);
   if (!d) return;
   var stop = getStop(d.stopId);
   _ddmDayNum = dayNum;
   window._ddmCurrentStop = stop;
-  document.getElementById('ddm-phase').textContent = d.phase || '';
-  document.getElementById('ddm-title').textContent = d.driveDay ? _getDriveDayTitle(d) : d.title;
-  var metaParts = [];
-  if (d.driveDay && d.miles > 0) metaParts.push('&#128665; ' + d.miles + ' mi &middot; ~' + d.driveHours + 'h drive');
-  else {
-    var _sleepMeta = _getStayMeta(d.stopId);
-    metaParts.push(_sleepMeta.icon + ' ' + _sleepMeta.label);
+  try {
+    document.getElementById('ddm-phase').textContent = d.phase || '';
+    document.getElementById('ddm-title').textContent = d.driveDay ? _getDriveDayTitle(d) : d.title;
+    var metaParts = [];
+    if (d.driveDay && d.miles > 0) metaParts.push('&#128665; ' + d.miles + ' mi &middot; ~' + d.driveHours + 'h drive');
+    else {
+      var _sleepMeta = _getStayMeta(d.stopId);
+      metaParts.push(_sleepMeta.icon + ' ' + _sleepMeta.label);
+    }
+    document.getElementById('ddm-meta').innerHTML = metaParts.join('&nbsp;&nbsp;&middot;&nbsp;&nbsp;');
+    try {
+      document.getElementById('ddm-blocks').innerHTML = renderDayTimeBlocks(d, stop);
+    } catch(blockErr) {
+      document.getElementById('ddm-blocks').innerHTML = '<div style="padding:16px;color:var(--text-3);">Day ' + d.day + ' — ' + (d.title || 'Schedule') + '</div>';
+      console.warn('renderDayTimeBlocks error:', blockErr);
+    }
+    var arrBtn = document.getElementById('ddm-arrive-btn');
+    var depBtn = document.getElementById('ddm-leave-btn');
+    if (arrBtn) {
+      var arr = appState.arrivals && appState.arrivals[d.stopId];
+      arrBtn.innerHTML = arr ? '&#10003; Arrived ' + new Date(arr.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '&#129001; We Arrived!';
+    }
+    if (depBtn) {
+      var dep = appState.departures && appState.departures[d.stopId];
+      depBtn.innerHTML = dep ? '&#10003; Left ' + new Date(dep.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '&#128666; We Left';
+    }
+  } catch(e) {
+    console.error('openDayDetail error:', e);
   }
-  document.getElementById('ddm-meta').innerHTML = metaParts.join('&nbsp;&nbsp;&middot;&nbsp;&nbsp;');
-  document.getElementById('ddm-blocks').innerHTML = renderDayTimeBlocks(d, stop);
-  var arrBtn = document.getElementById('ddm-arrive-btn');
-  var depBtn = document.getElementById('ddm-leave-btn');
-  if (arrBtn) {
-    var arr = appState.arrivals && appState.arrivals[d.stopId];
-    arrBtn.innerHTML = arr ? '&#10003; Arrived ' + new Date(arr.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '&#129001; We Arrived!';
-  }
-  if (depBtn) {
-    var dep = appState.departures && appState.departures[d.stopId];
-    depBtn.innerHTML = dep ? '&#10003; Left ' + new Date(dep.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '&#128666; We Left';
-  }
+  /* Always show the modal — even if content failed to render */
   document.getElementById('day-detail-modal').classList.remove('hidden');
   document.body.style.overflow = 'hidden';
 }
@@ -15484,10 +15613,10 @@ function renderDayTimeBlocks(d, stop) {
     var _maxH = (appState.drivingPrefs && appState.drivingPrefs.maxHours) || 4;
     var _splitAlreadyResolved = appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].splitResolved;
     if (d.driveHours > _maxH && !_splitAlreadyResolved) {
-      /* Figure out origin stop */
+      /* Figure out origin stop — walk back by day number (gap-safe) */
       var _originName = 'previous stop';
-      for (var _pi = d.day - 2; _pi >= 0; _pi--) {
-        var _prev = TRIP_DAYS[_pi];
+      for (var _pn = d.day - 1; _pn >= 1; _pn--) {
+        var _prev = getDay(_pn);
         if (_prev && _prev.stopId !== d.stopId) {
           var _ps = getStop(_prev.stopId);
           if (_ps) _originName = _ps.name;
@@ -16783,7 +16912,7 @@ function openMapStopInfo(stopId) {
 
 /* ── CAMPGROUND INFO MODAL ───────────────────────────────────────── */
 function openCampInfo(dayNum) {
-  var d = TRIP_DAYS[dayNum - 1];
+  var d = getDay(dayNum);
   if (!d || !d.sleep) return;
   var stop = getStop(d.stopId);
   var campName = d.sleep;
@@ -20593,7 +20722,7 @@ function _rvSelectType(val) {
    Also provides deep links to Google Maps and Apple Maps.
    ──────────────────────────────────────────────────────────────────────────── */
 function openDriveDirections(dayNum) {
-  var d = TRIP_DAYS[dayNum - 1];
+  var d = getDay(dayNum);
   if (!d || !d.driveDay) return;
   var removedIds = appState.removedStops || {};
   var myPhase = d.phase || '';
@@ -22917,9 +23046,17 @@ function _tgUnlockAudio() {
      has been "unlocked" by a play() call within a real user-gesture context.
      Call this synchronously from a tap handler before any async TTS fetch. */
   if (!_tgAudioEl) { _tgAudioEl = document.createElement('audio'); document.body.appendChild(_tgAudioEl); }
+  _tgAudioEl.muted = false;
+  _tgAudioEl.volume = 1.0;
   /* Tiny silent WAV — just enough to grant autoplay permission */
   _tgAudioEl.src = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
-  _tgAudioEl.play().catch(function() { /* permission denied is OK — we tried */ });
+  var _unlockP = _tgAudioEl.play();
+  if (_unlockP) _unlockP.catch(function() { /* permission denied is OK — we tried */ });
+  /* Also prime WebSpeech so voices are loaded before first use */
+  if (window.speechSynthesis) {
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.getVoices();
+  }
 }
 
 function _tgToggleHandsFree() {
@@ -23019,23 +23156,39 @@ async function _tgSpeakEL(text) {
 
 /* ── Web Speech fallback TTS ── */
 function _tgSpeakWebSpeech(text) {
-  if (!window.speechSynthesis) { _tgAfterSpeak(); return; }
+  if (!window.speechSynthesis) {
+    showToast('🔇 No voice available on this device — check volume & settings', 3500);
+    _tgAfterSpeak(); return;
+  }
   var clean = text.replace(/<[^>]+>/g, ' ').replace(/[•*_#`]/g, '').replace(/\s+/g, ' ').trim();
   if (!clean) { _tgAfterSpeak(); return; }
+  /* iOS Safari fix: cancel any stuck speech before speaking — prevents silent hangs */
   window.speechSynthesis.cancel();
   var utt   = new SpeechSynthesisUtterance(clean);
   utt.lang  = 'en-US'; utt.rate = 0.92; utt.pitch = 1.05;
   utt.onend = function() { _tgAfterSpeak(); };
+  utt.onerror = function(e) {
+    /* "interrupted" is normal when cancel() is called — not a real error */
+    if (e.error !== 'interrupted') _tgAfterSpeak();
+  };
   function _doSpeak() {
     var voices = window.speechSynthesis.getVoices();
     var pref = voices.find(function(v) { return /Samantha|Karen|Siri|Ava/i.test(v.name); })
             || voices.find(function(v) { return v.lang === 'en-US' && v.localService; })
             || voices[0];
     if (pref) utt.voice = pref;
-    window.speechSynthesis.speak(utt);
+    /* iOS Safari workaround: speechSynthesis pauses after ~15s when screen locks.
+       Resume it before speaking if it got stuck in a paused state. */
+    if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+    /* iOS requires a small delay after cancel() before speak() works reliably */
+    setTimeout(function() {
+      window.speechSynthesis.speak(utt);
+    }, 100);
   }
-  if (window.speechSynthesis.getVoices().length) _doSpeak();
-  else window.speechSynthesis.onvoiceschanged = function() { _doSpeak(); };
+  /* Give voices time to load on first call */
+  var _voices = window.speechSynthesis.getVoices();
+  if (_voices.length) { _doSpeak(); }
+  else { window.speechSynthesis.onvoiceschanged = function() { _doSpeak(); }; }
 }
 
 /* ── main speak entry point ── */
@@ -23058,6 +23211,10 @@ function _tgStartVoice() {
     _tgSetMicState(false);
     return;
   }
+
+  /* CRITICAL: Unlock iOS audio HERE (user-gesture context) so TTS plays when AI responds */
+  _tgUnlockAudio();
+  _tgVoiceMode = true; /* ensure voice is on when mic is tapped */
 
   /* Interrupt any ongoing speech so user can speak immediately */
   _tgInterruptSpeak();
@@ -23499,17 +23656,14 @@ function askTripGenie() {
     var _tgRawText = (data.candidates && data.candidates[0] && data.candidates[0].content
               && data.candidates[0].content.parts && data.candidates[0].content.parts[0]
               && data.candidates[0].content.parts[0].text) || 'Sorry, I couldn\'t get a response. Try again!';
-    /* In voice mode: speak the response but keep the chat uncluttered.
-       Show a compact pill with a "See text" toggle for review if needed. */
+    /* In voice mode: speak the response AND show text so family can read along.
+       The 🔊 badge makes it clear it's also speaking. */
     if (_tgIsVoice) {
-      /* Voice response: compact 🔊 pill with collapsed text toggle */
-      var _vId = 'tgv' + Date.now();
-      var _voicePill = '<div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#f0e8ff;border-radius:14px;font-size:.78rem;font-weight:700;color:#7B2FBE;">'
-        + '<span style="font-size:1rem;">🔊</span>'
-        + '<span style="flex:1;">TripGenie is speaking\u2026</span>'
-        + '<button onclick="(function(b){var d=document.getElementById(\'' + _vId + '\');d.style.display=d.style.display===\'none\'?\'block\':\'none\';b.textContent=d.style.display===\'none\'?\'See text\':\'Hide\';})(this)" '
-        + 'style="background:rgba(123,94,167,.15);border:none;border-radius:100px;padding:2px 8px;font-size:.65rem;color:#7B2FBE;cursor:pointer;font-weight:800;font-family:var(--font);">See text</button></div>'
-        + '<div id="' + _vId + '" style="display:none;font-size:.82rem;color:var(--text);line-height:1.5;padding:6px 4px 2px;">' + _tgFormatResponse(_tgRawText) + '</div>';
+      /* Voice response: always show text + speaking badge */
+      var _voicePill = '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;padding:5px 10px;background:#f0e8ff;border-radius:10px;font-size:.72rem;font-weight:700;color:#7B2FBE;display:inline-flex;">'
+        + '<span style="font-size:.9rem;">🔊</span>'
+        + '<span>Speaking aloud\u2026</span></div>'
+        + '<div style="font-size:.82rem;color:var(--text);line-height:1.5;">' + _tgFormatResponse(_tgRawText) + '</div>';
       _tgAppendBubble('genie', _voicePill, _tgRawText);
       _tgSpeak(_tgRawText); /* only speak when triggered by mic or hands-free */
     } else {
@@ -23617,7 +23771,7 @@ function cancelLongPress() {
 }
 function openTimeEdit(type) {
   if (!_ddmDayNum) return;
-  var d = TRIP_DAYS[_ddmDayNum - 1]; if (!d) return;
+  var d = getDay(_ddmDayNum); if (!d) return;
   var ex = type === 'arrive'
     ? (appState.arrivals && appState.arrivals[d.stopId] ? new Date(appState.arrivals[d.stopId].time) : null)
     : (appState.departures && appState.departures[d.stopId] ? new Date(appState.departures[d.stopId].time) : null);
@@ -23631,7 +23785,7 @@ function confirmTimeEdit() {
   var type = document.getElementById('teo-time').dataset.editType;
   var val  = document.getElementById('teo-time').value;
   if (!val || !_ddmDayNum) return;
-  var d = TRIP_DAYS[_ddmDayNum - 1]; if (!d) return;
+  var d = getDay(_ddmDayNum); if (!d) return;
   var stop = getStop(d.stopId);
   var pts = val.split(':');
   var edited = new Date(d.date + 'T12:00:00');
@@ -23660,7 +23814,7 @@ function confirmTimeEdit() {
 function recordArrival() {
   if (_longPressTimer) return;
   if (!_ddmDayNum) return;
-  var d = TRIP_DAYS[_ddmDayNum - 1]; if (!d) return;
+  var d = getDay(_ddmDayNum); if (!d) return;
   var stop = getStop(d.stopId);
   var btn  = document.getElementById('ddm-arrive-btn');
   if (!appState.arrivals) appState.arrivals = {};
@@ -23680,7 +23834,7 @@ function recordArrival() {
 function recordDeparture() {
   if (_longPressTimer) return;
   if (!_ddmDayNum) return;
-  var d = TRIP_DAYS[_ddmDayNum - 1]; if (!d) return;
+  var d = getDay(_ddmDayNum); if (!d) return;
   var stop = getStop(d.stopId);
   var btn  = document.getElementById('ddm-leave-btn');
   if (!appState.departures) appState.departures = {};

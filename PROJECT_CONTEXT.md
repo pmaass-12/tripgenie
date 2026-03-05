@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-03 (Session 18, thirtieth context)
+2026-03-04 (Session 18, thirty-ninth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -16,7 +16,7 @@ A personal RV trip planner web app for the Maass Family RV Adventure 2026. Stati
 
 ```
 tripgenie/
-├── index.html                    # Main app (primary working file, ~17,500 lines)
+├── index.html                    # Main app (primary working file, ~27,400 lines)
 ├── index2.html                   # Alternate version / experiment
 ├── simple-mode.html              # Simplified mode variant
 ├── mockup_desktop_v2.html        # Desktop layout mockup v2
@@ -54,6 +54,58 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 18 (thirty-ninth context) — 2026-03-04
+
+- **`openDayDetail` defensive try/catch**: Wrapped the modal body in nested try/catch blocks so the modal ALWAYS opens even if `renderDayTimeBlocks` throws. The day detail panel was failing silently after a prior session's commit, most likely due to browser cache serving stale JS.
+
+- **`renderDayTimeBlocks` gap-safe origin stop lookup**: The previous-stop loop used `TRIP_DAYS[d.day - 2]` (index-based), which returns the wrong entry for Paul's trip (day 33 gap means array index ≠ day number). Changed to a day-number scan using `getDay(_pn)`.
+
+- **Login card responsive width**: Changed fixed `width:420px` to `width: min(420px, 92vw); max-width: 92vw; box-sizing: border-box` so the card fits on 375px iPhone SE screens without horizontal scroll.
+
+- **Plan-nav no-wrap scrollable**: Changed `flex-wrap:wrap` to `flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none`. Added `min-width:90px/100px` to each nav button to prevent label truncation. Fixes "Suggestions" and other buttons falling to second line on phones.
+
+- **Trip selector dropdown responsive**: Changed `min-width:250px` to `min-width:min(250px,90vw); max-width:90vw` so the dropdown can't overflow on small phones.
+
+- **Mobile CSS — header label hiding**: Added `display:none !important` for `.hdr-mode-label`, `.hdr-help-label`, `.hdr-refresh-label` on `max-width:640px` to prevent header text from overflowing on phones. Also tightened `#header-right { gap: 4px }`.
+
+- **Photo modal caption fix**: Added `#photo-modal-caption { max-width: 90vw !important }` in the 640px media query.
+
+- **`_tgStartVoice` — iOS audio unlock**: Added `_tgUnlockAudio()` call synchronously inside `_tgStartVoice()` (the mic button tap handler). iOS Safari requires the AudioContext unlock to happen within the user-gesture call stack. Previously, `_tgUnlockAudio` was only called from the hands-free toggle, so tapping mic → AI speaks → nothing played on iOS. Also added `_tgVoiceMode = true` so voice is automatically on when mic is tapped.
+
+- **`_tgSpeakWebSpeech` — 100ms delay after cancel()**: iOS Safari silently fails when `speechSynthesis.speak()` is called immediately after `cancel()`. Added `setTimeout(function(){ speak(utt); }, 100)` inside `_doSpeak`. This fixes the "it says Speaking but I hear nothing" bug on iPhones.
+
+- **TripGenie voice response — always show text**: Replaced the hidden "See text" toggle button with always-visible formatted response text + a "🔊 Speaking aloud…" badge. Users can now read along and the UI is never blank after a voice reply.
+
+- **TripGenie button micro-labels**: Added tiny text labels ("Photo", "Speak", "Auto") below the three TripGenie icon buttons using `flex-direction:column`. Removes confusion about what the wave/mic/camera buttons do.
+
+- **Gallery cloud thumbnails**: `renderGalleryTab()` now shows `photoThumbs` (compressed 200px thumbnails synced via Supabase) from journal entries that have no local full-size photos. This lets other family members see photos uploaded by Paul (or vice versa). Cloud tiles show a ☁️ badge in the top-right corner and `opacity:.85` to visually distinguish them from local full-res photos.
+
+- **j-photos file input scoped positioning**: Added `position:relative` to the parent `<div>` and `top:0;left:0` to the `position:absolute` file input, preventing the invisible input from leaking outside its container on some layouts.
+
+### Session 18 (thirty-eighth context) — 2026-03-04
+
+- **Full TRIP_DAYS index-based crash sweep**: Found 10 more places using `TRIP_DAYS[dayNum-1]` / `TRIP_DAYS[_ddmDayNum-1]` which all crash for day 48 (Paul's array has 47 entries, last day number is 48 due to day 33 gap). Fixed all to use `getDay(n)`:
+  - `openDayDetail` — day planner cards now actually open
+  - `openCampInfo` — campground info modal
+  - `openDriveDirections` — drive directions modal
+  - `openLocalMusic` — music picker
+  - `openTimeEdit` — arrive/depart time editor
+  - `confirmTimeEdit` — save edited time
+  - `recordArrival` — We Arrived button
+  - `recordDeparture` — We Left button
+  - `_cycleToStayType` DDM refresh
+  - `aiCleanupJournal` day context lookup
+
+- **phaseHeaderHtml date guard**: Added `&& phaseDays[0].date` check before calling `formatDate()` to prevent "Invalid Date" text showing in blue bars when a day has no `.date` field. Dates will simply be omitted rather than showing garbage.
+
+### Session 18 (thirty-seventh context) — 2026-03-04
+
+- **getDaySleep/getDayDriver crash fix**: Both used index-based `TRIP_DAYS[day-1]` which crashes when Paul's custom days have a gap (day 33 missing, so array length 47 but last day number is 48). Fixed to use `getDay(day)` which searches by day number.
+
+- **String stopId unquoted in onclick handlers**: Paul's trip uses string IDs like 'winchester'. These were injected directly into HTML onclick attributes without quoting, generating invalid JS like `_navFlyToStop(winchester,event)` → `ReferenceError`. Fixed by adding `var _sid = JSON.stringify(firstDay.stopId)` in `phaseHeaderHtml` and using it for all onclick injections. Also fixed `renderStopNavigator` nav item onclicks.
+
+- **Missing tab render calls**: `switchTab` handler was not calling render functions for journal, school, dashboard, and suggestions tabs. Added missing calls so these tabs re-render fresh on every visit.
 
 ### Session 18 (thirty-sixth context) — 2026-03-04
 
