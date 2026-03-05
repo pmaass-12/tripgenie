@@ -8825,6 +8825,12 @@ function buildMapMarkers(mapObj) {
   /* Waypoints are stops whose only day has waypoint:true — they get a separate icon */
   var _waypointIds = {};
   _activeDays.forEach(function(d) { if (d.waypoint) _waypointIds[d.stopId] = true; });
+  /* Also honour user-toggled waypoint overrides */
+  if (appState.waypointOverrides) {
+    Object.keys(appState.waypointOverrides).forEach(function(sid) {
+      if (appState.waypointOverrides[sid]) _waypointIds[sid] = true;
+    });
+  }
   var _stopNumMap = {}, _numSeenIds = {}, _numCtr = 1;
   _activeDays.forEach(function(d) {
     if (!d.stopId || _removedIds[d.stopId] || d.stopId === _homeStopId || _waypointIds[d.stopId]) return;
@@ -9530,7 +9536,8 @@ function phaseHeaderHtml(phase, firstDay) {
      numeric IDs (e.g. 2) and string IDs (e.g. 'winchester') */
   var _sid = JSON.stringify(firstDay.stopId);
   /* ── Waypoint: lightweight header, no nights/days controls ── */
-  if (firstDay.waypoint) {
+  var _isWpOverride = appState.waypointOverrides && appState.waypointOverrides[firstDay.stopId];
+  if (firstDay.waypoint || _isWpOverride) {
     var _wpStop = getStop(firstDay.stopId);
     var _wpName = _wpStop ? (_wpStop.name || phase) : phase;
     var _wpState = _wpStop && _wpStop.state ? ', ' + _wpStop.state : '';
@@ -9541,7 +9548,9 @@ function phaseHeaderHtml(phase, firstDay) {
       + '<div style="font-weight:800;font-size:.9rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + _wpName + _wpState + '</div>'
       + '<div style="font-size:.7rem;opacity:.7;font-weight:600;">Waypoint — drive-through, no overnight stay</div>'
       + '</div>'
-      + '<button onclick="event.stopPropagation();removeStopFromTrip(' + _sid + ',\'' + _wpSafe + '\')" style="background:rgba(220,60,50,.12);border:1px solid rgba(220,60,50,.2);color:#c53030;border-radius:6px;padding:3px 8px;font-size:.68rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Remove waypoint">&#128465;&#65039;</button>'
+      + (_isWpOverride
+        ? '<button onclick="event.stopPropagation();toggleWaypointOverride(' + _sid + ')" style="background:rgba(44,95,138,.18);border:1px solid rgba(44,95,138,.3);color:var(--blue);border-radius:6px;padding:3px 8px;font-size:.68rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Make this a regular stop again">↩ Stop</button>'
+        : '<button onclick="event.stopPropagation();removeStopFromTrip(' + _sid + ',\'' + _wpSafe + '\')" style="background:rgba(220,60,50,.12);border:1px solid rgba(220,60,50,.2);color:#c53030;border-radius:6px;padding:3px 8px;font-size:.68rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Remove waypoint">&#128465;&#65039;</button>')
       + '</div>';
   }
 
@@ -9834,6 +9843,21 @@ function _saveStopDays(stopId, baseDays) {
   var stop = getStop(stopId);
   var name = stop ? _sn(stop) : String(stopId);
   showToast('📅 ' + newTotal + ' night' + (newTotal !== 1 ? 's' : '') + ' set for ' + name, 2000);
+}
+
+/* ── toggleWaypointOverride ─────────────────────────────────────────────────
+   Lets the user mark any regular stop as a "drive-through waypoint" (pin icon
+   on the map, no nights shown in Schedule) without removing it from the trip.
+   Toggling back restores the full stop view.                                */
+function toggleWaypointOverride(stopId) {
+  if (!appState.waypointOverrides) appState.waypointOverrides = {};
+  var nowWaypoint = !appState.waypointOverrides[stopId];
+  appState.waypointOverrides[stopId] = nowWaypoint;
+  saveState(appState);
+  _refreshAll(true);
+  var stop = getStop(stopId);
+  var name = stop ? _sn(stop) : String(stopId);
+  showToast(nowWaypoint ? ('📍 ' + name + ' set as waypoint') : ('🏕️ ' + name + ' restored as stop'), 2200);
 }
 
 /* ── _refreshAll ────────────────────────────────────────────────────────────
@@ -11655,7 +11679,10 @@ function renderStops() {
     html += '<a href="' + mUrl + '" target="_blank" rel="noopener" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:var(--green-l);border:1px solid #a8d5b8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:var(--green);text-decoration:none;"><i class="fa-solid fa-map-location-dot"></i> Google Maps</a>';
     html += '<button id="stop-events-btn-' + stop.id + '" onclick="event.stopPropagation();toggleStopEvents(\'' + stop.id + '\')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:var(--purple-l);border:1px solid #c9b8e8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:var(--purple);cursor:pointer;font-family:var(--font);"><i class="fa-solid fa-calendar-star"></i> Events Near Here</button>';
     html += '<button id="stop-attractions-btn-' + stop.id + '" onclick="event.stopPropagation();toggleStopAttractions(\'' + stop.id + '\')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:#e8f5f0;border:1px solid #a8d8c8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:#1a7a5a;cursor:pointer;font-family:var(--font);">🏛️ Attractions</button>';
+    html += '<button id="stop-restaurants-btn-' + stop.id + '" onclick="event.stopPropagation();toggleStopRestaurants(\'' + stop.id + '\')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:#fff8f0;border:1px solid #f5c08a;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:#c05800;cursor:pointer;font-family:var(--font);">🍽️ Restaurants</button>';
     html += '<button id="stop-hotels-btn-' + stop.id + '" onclick="event.stopPropagation();toggleStopHotels(\'' + stop.id + '\')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:#e8f0f8;border:1px solid #a8c0d8;border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:#1a4a7a;cursor:pointer;font-family:var(--font);">🏨 Hotels &amp; RV Parks</button>';
+    var _isWpOvr = appState.waypointOverrides && appState.waypointOverrides[stop.id];
+    html += '<button onclick="event.stopPropagation();toggleWaypointOverride(\'' + stop.id + '\')" style="display:flex;align-items:center;gap:7px;padding:9px 16px;background:' + (_isWpOvr ? 'rgba(44,95,138,.15)' : 'var(--bg-2)') + ';border:1px solid ' + (_isWpOvr ? 'rgba(44,95,138,.4)' : 'var(--border)') + ';border-radius:var(--radius-s);font-size:.82rem;font-weight:700;color:' + (_isWpOvr ? 'var(--blue)' : 'var(--text-2)') + ';cursor:pointer;font-family:var(--font);">' + (_isWpOvr ? '📍 Waypoint ✓' : '📍 Make Waypoint') + '</button>';
     html += '</div>';
 
     // Events expandable panel
@@ -11669,11 +11696,23 @@ function renderStops() {
 
     // Attractions expandable panel
     html += '<div id="stop-attractions-panel-' + stop.id + '" class="hidden" style="margin-top:6px;border:1px solid #a8d8c8;border-radius:var(--radius-s);overflow:hidden;">'
-      + '<div style="background:#1a7a5a;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;">'
-      + '<span style="font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;">🏛️ Top Attractions — ' + stop.name + '</span>'
-      + '<button onclick="event.stopPropagation();_stopAttractionsLoaded[\'' + stop.id + '\']=false;loadStopAttractions(\'' + stop.id + '\')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
+      + '<div style="background:#1a7a5a;color:#fff;display:flex;align-items:center;gap:8px;padding:8px 14px;flex-wrap:wrap;">'
+      + '<span style="font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;flex:1;min-width:0;">🏛️ Top Attractions — ' + stop.name + '</span>'
+      + '<button onclick="event.stopPropagation();_stopAttractionsLoaded[\'' + stop.id + '\']=false;delete _attractionsCache[\'' + stop.id + '\'];loadStopAttractions(\'' + stop.id + '\')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;">&#8635; Refresh</button>'
+      + '</div>'
+      + '<div style="padding:8px 12px;background:#f0faf5;border-bottom:1px solid #c8e8d8;display:flex;gap:8px;align-items:center;">'
+      + '<input id="attr-search-' + stop.id + '" type="text" placeholder="🔍 Search: hikes, animals, history…" oninput="_filterAttractions(\'' + stop.id + '\')" style="flex:1;padding:7px 11px;border:1.5px solid #a8d8c8;border-radius:20px;font-size:.82rem;font-family:var(--font);background:#fff;color:var(--text);outline:none;" />'
       + '</div>'
       + '<div id="stop-attractions-body-' + stop.id + '"></div>'
+      + '</div>';
+
+    // Restaurants expandable panel
+    html += '<div id="stop-restaurants-panel-' + stop.id + '" class="hidden" style="margin-top:6px;border:1px solid #f5c08a;border-radius:var(--radius-s);overflow:hidden;">'
+      + '<div style="background:#c05800;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;">'
+      + '<span style="font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;">🍽️ Restaurants Near ' + stop.name + '</span>'
+      + '<button onclick="event.stopPropagation();_stopRestaurantsLoaded[\'' + stop.id + '\']=false;loadStopRestaurants(\'' + stop.id + '\')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
+      + '</div>'
+      + '<div id="stop-restaurants-body-' + stop.id + '"></div>'
       + '</div>';
 
     // Hotels & RV Parks expandable panel
@@ -19005,11 +19044,128 @@ function toggleStopAttractions(stopId) {
   }
 }
 
+/* Attractions raw-text cache (survives filter/load-more without re-fetching) */
+var _attractionsCache = {};
+var _attractionsShown = {}; /* how many are currently visible per stop */
+var _ATTR_PAGE = 6;         /* how many to show per page */
+
+function _buildAttractionCard(item, count, stopId) {
+  var typeEmojis = { 'national park':'🏔️', 'state park':'🌲', 'historic':'🏛️', 'museum':'🏛️', 'waterfall':'💧', 'scenic':'🚗', 'beach':'🏖️', 'lake':'🏞️', 'cave':'🦇', 'zoo':'🦁', 'aquarium':'🐠', 'hike':'🥾', 'trail':'🥾', 'wildlife':'🦌', 'animal':'🦌', 'bird':'🦅' };
+  var em = '🎯';
+  var typeLower = (item.type || '').toLowerCase();
+  for (var k in typeEmojis) { if (typeLower.indexOf(k) >= 0) { em = typeEmojis[k]; break; } }
+  var planKey = 'attr_' + stopId + '_' + count;
+  var isPlanned = appState.plannedEvents && appState.plannedEvents[planKey];
+  return '<div class="attr-card" data-name="' + item.name.toLowerCase().replace(/"/g,'') + '" data-type="' + (item.type||'').toLowerCase() + '" style="display:flex;gap:11px;padding:12px 14px;'
+    + (count > 0 ? 'border-top:1px solid var(--border);' : '')
+    + 'align-items:flex-start;">'
+    + '<span style="font-size:1.4rem;flex-shrink:0;line-height:1.2;">' + em + '</span>'
+    + '<div style="min-width:0;flex:1;">'
+    + '<div style="font-weight:700;font-size:.87rem;color:var(--text);line-height:1.3;margin-bottom:2px;">' + item.name + '</div>'
+    + (item.type ? '<div style="font-size:.74rem;color:#1a7a5a;font-weight:700;margin-bottom:1px;">📍 ' + item.type + '</div>' : '')
+    + (item.duration ? '<div style="font-size:.74rem;color:var(--orange);font-weight:600;margin-bottom:3px;">⏱️ ' + item.duration + '</div>' : '')
+    + (item.desc ? '<div style="font-size:.79rem;color:var(--text-2);line-height:1.45;margin-bottom:6px;">' + item.desc + '</div>' : '')
+    + '<button id="attr-plan-btn-' + planKey + '" onclick="event.stopPropagation();planStopEvent(\'' + planKey + '\',\'' + item.name.replace(/'/g, "\\'") + '\',' + stopId + ')" '
+    + 'style="background:' + (isPlanned ? 'var(--green)' : '#e8f5f0') + ';color:' + (isPlanned ? '#fff' : '#1a7a5a') + ';border:1px solid ' + (isPlanned ? 'var(--green)' : '#a8d8c8') + ';border-radius:100px;padding:4px 12px;font-size:.73rem;font-weight:800;cursor:pointer;font-family:var(--font);">'
+    + (isPlanned ? '✅ Planned' : '+ Plan') + '</button>'
+    + '</div></div>';
+}
+
+function _parseAttractionBlocks(text, stopId) {
+  var blocks = text.split('---');
+  var items = [];
+  if (!appState.aiAttractions) appState.aiAttractions = {};
+  if (!appState.aiAttractions[stopId]) appState.aiAttractions[stopId] = [];
+  blocks.forEach(function(block) {
+    var atName = (block.match(/ATTRACTION:\s*(.+)/i) || [])[1];
+    if (!atName) return;
+    var item = {
+      name: atName.trim(),
+      type: ((block.match(/TYPE:\s*(.+)/i) || [])[1] || '').trim(),
+      duration: ((block.match(/DURATION:\s*(.+)/i) || [])[1] || '').trim(),
+      desc: ((block.match(/INFO:\s*(.+)/i) || [])[1] || '').trim()
+    };
+    items.push(item);
+    /* Also keep in aiAttractions for Plan persistence */
+    var existIdx = appState.aiAttractions[stopId].findIndex(function(a){ return a.name === item.name; });
+    if (existIdx === -1) appState.aiAttractions[stopId].push(item);
+  });
+  return items;
+}
+
+function _renderAttractionsBody(stopId) {
+  var body = document.getElementById('stop-attractions-body-' + stopId);
+  if (!body) return;
+  var all   = _attractionsCache[stopId] || [];
+  var query = (document.getElementById('attr-search-' + stopId) || {}).value || '';
+  var qLow  = query.trim().toLowerCase();
+
+  var filtered = qLow
+    ? all.filter(function(it) {
+        return it.name.toLowerCase().indexOf(qLow) >= 0
+            || (it.type||'').toLowerCase().indexOf(qLow) >= 0
+            || (it.desc||'').toLowerCase().indexOf(qLow) >= 0;
+      })
+    : all;
+
+  var shown = _attractionsShown[stopId] || _ATTR_PAGE;
+  var visible = filtered.slice(0, shown);
+
+  if (filtered.length === 0) {
+    body.innerHTML = '<div style="padding:14px 16px;color:var(--text-2);font-size:.84rem;">No attractions match "<strong>' + query + '</strong>" — try a different keyword.</div>';
+    return;
+  }
+
+  var html = '';
+  visible.forEach(function(item, i) { html += _buildAttractionCard(item, i, stopId); });
+
+  /* Load More button */
+  if (filtered.length > shown) {
+    var remaining = filtered.length - shown;
+    html += '<div style="padding:10px 14px;text-align:center;border-top:1px solid var(--border);">'
+      + '<button onclick="event.stopPropagation();_loadMoreAttractions(\'' + stopId + '\')" style="background:var(--blue-l);color:var(--blue);border:1.5px solid rgba(44,95,138,.3);border-radius:100px;padding:7px 20px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);">Load ' + Math.min(remaining, _ATTR_PAGE) + ' more ↓</button>'
+      + '</div>';
+  } else if (all.length >= 12 && filtered.length <= shown) {
+    /* All loaded from cache — offer to fetch a fresh batch */
+    html += '<div style="padding:10px 14px;text-align:center;border-top:1px solid var(--border);">'
+      + '<button onclick="event.stopPropagation();_fetchMoreAttractions(\'' + stopId + '\')" style="background:#f0faf5;color:#1a7a5a;border:1.5px solid #a8d8c8;border-radius:100px;padding:7px 20px;font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);">✨ Load different attractions</button>'
+      + '</div>';
+  }
+
+  body.innerHTML = html;
+
+  var btn = document.getElementById('stop-attractions-btn-' + stopId);
+  if (btn) btn.innerHTML = '🏛️ Attractions (' + all.length + ')';
+}
+
+function _filterAttractions(stopId) {
+  _attractionsShown[stopId] = _ATTR_PAGE; /* reset to first page on new search */
+  _renderAttractionsBody(stopId);
+}
+
+function _loadMoreAttractions(stopId) {
+  _attractionsShown[stopId] = (_attractionsShown[stopId] || _ATTR_PAGE) + _ATTR_PAGE;
+  _renderAttractionsBody(stopId);
+}
+
+function _fetchMoreAttractions(stopId) {
+  /* Clear cache and reload a fresh set of attractions */
+  delete _attractionsCache[stopId];
+  _attractionsShown[stopId] = _ATTR_PAGE;
+  loadStopAttractions(stopId);
+}
+
 function loadStopAttractions(stopId) {
   var body = document.getElementById('stop-attractions-body-' + stopId);
   if (!body) return;
   var stop = getStop(stopId);
   if (!stop) return;
+
+  /* If we already have cached data, just re-render (handles Refresh-less reopen) */
+  if (_attractionsCache[stopId] && _attractionsCache[stopId].length > 0) {
+    _renderAttractionsBody(stopId);
+    return;
+  }
 
   body.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text-2);font-size:.84rem;">'
     + '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i>Finding top attractions near ' + stop.name + '…</div>';
@@ -19021,20 +19177,90 @@ function loadStopAttractions(stopId) {
     ? ' We\'ll be there ' + formatDate(arrivalDate) + (departDate && departDate !== arrivalDate ? ' through ' + formatDate(departDate) : '') + '.'
     : '';
 
-  var prompt = 'You are a family travel expert. List 6 must-see attractions near ' + _sn(stop) + '.'
-    + visitRange + ' We have kids ages 2, 4, and 9 and travel by RV. Prioritize outdoor adventures, '
-    + 'scenic spots, historic sites, state/national parks, and unique local landmarks that are great for families.\n\n'
+  var prompt = 'You are a family travel expert. List 12 must-see attractions near ' + _sn(stop) + '.'
+    + visitRange + ' We have kids ages 2, 4, and 9 and travel by RV. Include a variety: outdoor adventures, '
+    + 'hikes/trails, wildlife/animal experiences, scenic spots, historic sites, state/national parks, '
+    + 'and unique local landmarks. Aim for a good mix of types.\n\n'
     + 'OUTPUT FORMAT — respond with ONLY these lines, no intro, no explanation:\n'
     + 'ATTRACTION: [Full attraction name]\n'
-    + 'TYPE: [e.g. National Park, Historic Site, Waterfall, Museum, Scenic Drive, State Park]\n'
+    + 'TYPE: [e.g. National Park, Hike, Wildlife, Historic Site, Waterfall, Museum, Scenic Drive, State Park]\n'
     + 'DURATION: [Typical visit time, e.g. "2-3 hours" or "Half day"]\n'
     + 'INFO: [One sentence describing it and why families love it]\n'
     + '---\n'
-    + 'Repeat the ATTRACTION/TYPE/DURATION/INFO/--- block for each of the 6 attractions. No extra text.';
+    + 'Repeat the ATTRACTION/TYPE/DURATION/INFO/--- block for each of the 12 attractions. No extra text.';
 
   var reqBody = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 800, temperature: 0.4 }
+    generationConfig: { maxOutputTokens: 1600, temperature: 0.5 }
+  });
+
+  _attractionsShown[stopId] = _ATTR_PAGE;
+
+  fetch(GEMINI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: reqBody })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    var text = '';
+    try { text = data.candidates[0].content.parts[0].text || ''; } catch(e) {}
+    if (!text) {
+      body.innerHTML = '<div style="padding:14px 16px;color:var(--text-2);font-size:.84rem;">'
+        + 'Could not load attractions — Gemini returned no data.'
+        + ' <button onclick="event.stopPropagation();loadStopAttractions(\'' + stopId + '\')" style="color:var(--blue);background:none;border:none;cursor:pointer;font-weight:700;font-family:var(--font);">Try again</button></div>';
+      return;
+    }
+    var items = _parseAttractionBlocks(text, stopId);
+    if (items.length === 0) {
+      body.innerHTML = '<div style="padding:12px 16px;font-size:.83rem;color:var(--text-2);line-height:1.6;">'
+        + text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>') + '</div>';
+      return;
+    }
+    _attractionsCache[stopId] = items;
+    _renderAttractionsBody(stopId);
+  })
+  .catch(function(err) {
+    body.innerHTML = '<div style="padding:14px 16px;color:var(--red);font-size:.84rem;">'
+      + '⚠️ Couldn\'t load attractions — check your connection.'
+      + ' <button onclick="event.stopPropagation();loadStopAttractions(\'' + stopId + '\')" style="color:var(--blue);background:none;border:none;cursor:pointer;font-weight:700;font-family:var(--font);">Retry</button></div>';
+  });
+}
+
+/* ── RESTAURANTS NEAR A STOP ─────────────────────────────────────── */
+var _stopRestaurantsLoaded = {};
+
+function toggleStopRestaurants(stopId) {
+  var panel = document.getElementById('stop-restaurants-panel-' + stopId);
+  if (!panel) return;
+  var isHidden = panel.classList.contains('hidden');
+  panel.classList.toggle('hidden');
+  if (isHidden && !_stopRestaurantsLoaded[stopId]) {
+    _stopRestaurantsLoaded[stopId] = true;
+    loadStopRestaurants(stopId);
+  }
+}
+
+function loadStopRestaurants(stopId) {
+  var body = document.getElementById('stop-restaurants-body-' + stopId);
+  if (!body) return;
+  var stop = getStop(stopId);
+  if (!stop) return;
+
+  body.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text-2);font-size:.84rem;">'
+    + '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i>Finding great restaurants near ' + stop.name + '…</div>';
+
+  var prompt = 'You are a family dining expert. List 8 top-rated restaurants near ' + _sn(stop) + '.'
+    + ' We have kids ages 2, 4, and 9 and travel by RV. Include a variety of types:'
+    + ' local diners, BBQ, seafood, family-friendly chains, breakfast spots, and unique local favorites.'
+    + ' Prioritize places that are kid-friendly, reasonably priced, and beloved by locals.\n\n'
+    + 'OUTPUT FORMAT — respond with ONLY these lines, no intro, no explanation:\n'
+    + 'RESTAURANT: [Full restaurant name]\n'
+    + 'TYPE: [e.g. BBQ, Breakfast, Seafood, Diner, Mexican, Pizza, Steakhouse]\n'
+    + 'PRICE: [$ / $$ / $$$]\n'
+    + 'INFO: [One sentence describing it and why families love it]\n'
+    + '---\n'
+    + 'Repeat the RESTAURANT/TYPE/PRICE/INFO/--- block for each of the 8 restaurants. No extra text.';
+
+  var reqBody = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: 1200, temperature: 0.5 }
   });
 
   fetch(GEMINI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: reqBody })
@@ -19043,67 +19269,48 @@ function loadStopAttractions(stopId) {
     var text = '';
     try { text = data.candidates[0].content.parts[0].text || ''; } catch(e) {}
     if (!text) {
-      body.innerHTML = '<div style="padding:14px 16px;color:var(--text-2);font-size:.84rem;">Could not load attractions — try again later.</div>';
+      body.innerHTML = '<div style="padding:14px 16px;color:var(--text-2);font-size:.84rem;">Could not load restaurants — <button onclick="event.stopPropagation();_stopRestaurantsLoaded[\'' + stopId + '\']=false;loadStopRestaurants(\'' + stopId + '\')" style="color:var(--blue);background:none;border:none;cursor:pointer;font-weight:700;font-family:var(--font);">Try again</button></div>';
       return;
     }
-
     var blocks = text.split('---');
     var html = '';
     var count = 0;
-    var typeEmojis = { 'national park':'🏔️', 'state park':'🌲', 'historic':'🏛️', 'museum':'🏛️', 'waterfall':'💧', 'scenic':'🚗', 'beach':'🏖️', 'lake':'🏞️', 'cave':'🦇', 'zoo':'🦁', 'aquarium':'🐠' };
-
-    /* Cache parsed attractions so planStopEvent can persist them */
-    if (!appState.aiAttractions) appState.aiAttractions = {};
-    appState.aiAttractions[stopId] = [];
-
+    var typeEmojis = { 'bbq':'🔥', 'breakfast':'🍳', 'seafood':'🦞', 'pizza':'🍕', 'mexican':'🌮', 'steakhouse':'🥩', 'diner':'☕', 'burger':'🍔', 'italian':'🍝', 'sushi':'🍣', 'sandwich':'🥪', 'ice cream':'🍦', 'bakery':'🥐' };
     blocks.forEach(function(block) {
-      var atName = (block.match(/ATTRACTION:\s*(.+)/i) || [])[1];
-      var atType = (block.match(/TYPE:\s*(.+)/i) || [])[1];
-      var atDur  = (block.match(/DURATION:\s*(.+)/i) || [])[1];
-      var atInfo = (block.match(/INFO:\s*(.+)/i) || [])[1];
-      if (!atName) return;
-      atName = atName.trim();
-      atType = (atType || '').trim();
-      atDur  = (atDur  || '').trim();
-      atInfo = (atInfo || '').trim();
-      /* Cache this attraction for later persistence when "Plan" is tapped */
-      appState.aiAttractions[stopId].push({ name: atName, type: atType, duration: atDur, desc: atInfo });
-
-      var em = '🎯';
-      var typeLower = atType.toLowerCase();
-      for (var k in typeEmojis) { if (typeLower.indexOf(k) >= 0) { em = typeEmojis[k]; break; } }
-
-      var planKey = 'attr_' + stopId + '_' + count;
-      var isPlanned = appState.plannedEvents && appState.plannedEvents[planKey];
-
-      html += '<div style="display:flex;gap:11px;padding:12px 14px;'
-        + (count > 0 ? 'border-top:1px solid var(--border);' : '')
-        + 'align-items:flex-start;">'
+      var rName  = (block.match(/RESTAURANT:\s*(.+)/i) || [])[1];
+      var rType  = (block.match(/TYPE:\s*(.+)/i) || [])[1];
+      var rPrice = (block.match(/PRICE:\s*(.+)/i) || [])[1];
+      var rInfo  = (block.match(/INFO:\s*(.+)/i) || [])[1];
+      if (!rName) return;
+      rName  = rName.trim();
+      rType  = (rType  || '').trim();
+      rPrice = (rPrice || '').trim();
+      rInfo  = (rInfo  || '').trim();
+      var em = '🍽️';
+      var tl = rType.toLowerCase();
+      for (var k in typeEmojis) { if (tl.indexOf(k) >= 0) { em = typeEmojis[k]; break; } }
+      html += '<div style="display:flex;gap:11px;padding:12px 14px;' + (count > 0 ? 'border-top:1px solid var(--border);' : '') + 'align-items:flex-start;">'
         + '<span style="font-size:1.4rem;flex-shrink:0;line-height:1.2;">' + em + '</span>'
         + '<div style="min-width:0;flex:1;">'
-        + '<div style="font-weight:700;font-size:.87rem;color:var(--text);line-height:1.3;margin-bottom:2px;">' + atName + '</div>'
-        + (atType ? '<div style="font-size:.74rem;color:#1a7a5a;font-weight:700;margin-bottom:1px;">📍 ' + atType + '</div>' : '')
-        + (atDur  ? '<div style="font-size:.74rem;color:var(--orange);font-weight:600;margin-bottom:3px;">⏱️ ' + atDur + '</div>' : '')
-        + (atInfo ? '<div style="font-size:.79rem;color:var(--text-2);line-height:1.45;margin-bottom:6px;">' + atInfo + '</div>' : '')
-        + '<button id="attr-plan-btn-' + planKey + '" onclick="event.stopPropagation();planStopEvent(\'' + planKey + '\',\'' + atName.replace(/'/g, "\\'") + '\',' + stopId + ')" '
-        + 'style="background:' + (isPlanned ? 'var(--green)' : '#e8f5f0') + ';color:' + (isPlanned ? '#fff' : '#1a7a5a') + ';border:1px solid ' + (isPlanned ? 'var(--green)' : '#a8d8c8') + ';border-radius:100px;padding:4px 12px;font-size:.73rem;font-weight:800;cursor:pointer;font-family:var(--font);">'
-        + (isPlanned ? '✅ Planned' : '+ Plan') + '</button>'
+        + '<div style="font-weight:700;font-size:.87rem;color:var(--text);line-height:1.3;margin-bottom:2px;">' + rName + '</div>'
+        + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:3px;">'
+        + (rType  ? '<span style="font-size:.74rem;color:#c05800;font-weight:700;">🍴 ' + rType + '</span>' : '')
+        + (rPrice ? '<span style="font-size:.74rem;color:#5a7a2a;font-weight:800;background:#f0f8e8;padding:1px 7px;border-radius:10px;">' + rPrice + '</span>' : '')
+        + '</div>'
+        + (rInfo  ? '<div style="font-size:.79rem;color:var(--text-2);line-height:1.45;">' + rInfo + '</div>' : '')
         + '</div></div>';
       count++;
     });
-
     if (count === 0) {
-      body.innerHTML = '<div style="padding:12px 16px;font-size:.83rem;color:var(--text-2);line-height:1.6;">'
-        + text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>') + '</div>';
+      body.innerHTML = '<div style="padding:12px 16px;font-size:.83rem;color:var(--text-2);line-height:1.6;">' + text.replace(/\n/g,'<br>') + '</div>';
     } else {
       body.innerHTML = html;
+      var btn = document.getElementById('stop-restaurants-btn-' + stopId);
+      if (btn) btn.innerHTML = '🍽️ Restaurants (' + count + ')';
     }
-
-    var btn = document.getElementById('stop-attractions-btn-' + stopId);
-    if (btn && count > 0) btn.innerHTML = '🏛️ Attractions (' + count + ')';
   })
   .catch(function() {
-    body.innerHTML = '<div style="padding:14px 16px;color:var(--red);font-size:.84rem;">Couldn\'t load attractions — check your connection.</div>';
+    body.innerHTML = '<div style="padding:14px 16px;color:var(--red);font-size:.84rem;">⚠️ Couldn\'t load restaurants — <button onclick="event.stopPropagation();_stopRestaurantsLoaded[\'' + stopId + '\']=false;loadStopRestaurants(\'' + stopId + '\')" style="color:var(--blue);background:none;border:none;cursor:pointer;font-weight:700;font-family:var(--font);">Retry</button></div>';
   });
 }
 
@@ -24963,8 +25170,10 @@ function _tgSpeakWebSpeech(text) {
   utt.lang  = 'en-US'; utt.rate = 0.92; utt.pitch = 1.05;
   utt.onend = function() { _tgAfterSpeak(); };
   utt.onerror = function(e) {
-    /* "interrupted" is normal when cancel() is called — not a real error */
-    if (e.error !== 'interrupted') _tgAfterSpeak();
+    /* Always restart the hands-free loop regardless of error type.
+       iOS fires 'interrupted' when speech is blocked from an async context,
+       which would kill the loop if we skipped _tgAfterSpeak here. */
+    _tgAfterSpeak();
   };
   function _doSpeak() {
     var voices = window.speechSynthesis.getVoices();
@@ -24987,11 +25196,20 @@ function _tgSpeakWebSpeech(text) {
 }
 
 /* ── main speak entry point ── */
+var _tgElWarnedOnce = false;
 function _tgSpeak(text) {
   /* Called only when response should be spoken (mic input or hands-free loop).
      Explicit voice-mode toggle is now opt-in — callers check _tgIsVoice first. */
-  if (_elKey()) _tgSpeakEL(text);
-  else _tgSpeakWebSpeech(text);
+  if (_elKey()) {
+    _tgElWarnedOnce = false; /* key exists — clear warning flag */
+    _tgSpeakEL(text);
+  } else {
+    if (!_tgElWarnedOnce) {
+      _tgElWarnedOnce = true;
+      showToast('💬 Using device voice — add ElevenLabs key in Trip Settings for the TripGenie voice', 4500);
+    }
+    _tgSpeakWebSpeech(text);
+  }
 }
 
 /* ── mic button / voice input ── */
@@ -25497,6 +25715,8 @@ function askTripGenie() {
     if (thinking) thinking.parentElement.remove();
     _tgAppendBubble('genie', '⚠️ Couldn\'t reach TripGenie right now. Check your connection and try again!');
     _tgBusy = false;
+    /* Restart hands-free loop even after API failure — otherwise full-duplex dies */
+    if (_tgIsVoice) _tgAfterSpeak();
   });
 }
 

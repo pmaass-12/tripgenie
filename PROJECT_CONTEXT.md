@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-05 (Session 19, fortieth context)
+2026-03-05 (Session 19, forty-fourth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,18 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 19 (forty-fourth context) — 2026-03-05
+
+**Voice fixes, waypoint toggle, attractions overhaul + restaurants.**
+
+- **Voice hands-free loop**: Fixed two silent killers: (1) `utt.onerror` no longer skips `_tgAfterSpeak()` on 'interrupted' — iOS fires this when speech is blocked from async context, which was permanently killing the full-duplex loop. (2) `askTripGenie` catch handler now calls `_tgAfterSpeak()` when in voice mode so API errors don't drop the loop.
+- **ElevenLabs not being used**: Added one-time toast in `_tgSpeak` when no EL key is configured — "Using device voice — add ElevenLabs key in Trip Settings". Clears once key is set.
+- **Waypoint override toggle**: Added `toggleWaypointOverride(stopId)` + `appState.waypointOverrides` object. Any regular stop can now be toggled to "drive-through waypoint" (pin on map, dashed header in Schedule) without removing it from trip. "📍 Make Waypoint" button added to each stop card expanded details row. "↩ Stop" button in waypoint header reverts it. Map marker builder and `phaseHeaderHtml` both check `appState.waypointOverrides`.
+- **Attractions: Search box**: Added `<input id="attr-search-{stopId}">` in the green panel header. `_filterAttractions(stopId)` filters `_attractionsCache[stopId]` client-side — instant, no re-fetch.
+- **Attractions: Load More**: Now fetches 12 attractions (was 6), shows first 6, shows "Load N more ↓" button. `_loadMoreAttractions` increments `_attractionsShown[stopId]` by 6. When all shown, offers "Load different attractions" to re-fetch a fresh batch.
+- **Attractions: Fix reload**: Added `_attractionsCache` object. Refresh button clears cache + reloads. Opening panel re-uses cache if present (no extra API call). Error states now show inline "Retry" button.
+- **Restaurants button**: Added "🍽️ Restaurants" button to stop card button row. Separate panel + `loadStopRestaurants(stopId)` asks Gemini for 8 family-friendly restaurants with type, price ($/$$/$$$), and one-line description.
 
 ### Session 19 (forty-third context) — 2026-03-05
 
