@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-05 (Session 19, forty-fifth context)
+2026-03-05 (Session 19, forty-sixth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -54,6 +54,13 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 19 (forty-sixth context) — 2026-03-05
+
+**Fix attractions button regression + missing days date display in phase headers.**
+- `toggleStopAttractions`: removed `_stopAttractionsLoaded` guard — always calls `loadStopAttractions` when panel opens. `loadStopAttractions` already checks `_attractionsCache` first so no extra API calls. Fixes regression where `renderStops()` rebuilt DOM but flag stayed `true`, leaving panel empty on re-open.
+- `_renderAttractionsBody`: fixed "No attractions match ''" shown on empty cache with no search. Now only shows no-match error when there's an active search term; otherwise shows spinner and triggers load.
+- `phaseHeaderHtml`: fixed date range display (e.g. "Jun 15 – Jun 18") not reflecting +/- days changes. Added cumulative `phaseExtraDays` offset computation (same algorithm as `renderSchedule`'s `_schPhaseOffset`) so effective dates match what the schedule actually shows.
 
 ### Session 19 (forty-fifth context) — 2026-03-05
 

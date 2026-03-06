@@ -9638,6 +9638,32 @@ function phaseHeaderHtml(phase, firstDay) {
 
   var _cityDisp = pStop ? _stopCityDisplay(pStop) : '';
   var _hasOverride = pStop && appState.stopCityNames && appState.stopCityNames[pStop.id];
+
+  /* Compute cumulative phaseExtraDays offset from stops BEFORE this one so the
+     phase header shows dates that match what renderSchedule actually displays.
+     (renderSchedule calls this same function but its _schPhaseOffset is local.) */
+  var _phCumOffset = 0;
+  var _phSeenStops = [];
+  TRIP_DAYS.forEach(function(td) {
+    if (_phSeenStops.indexOf(td.stopId) === -1) {
+      _phSeenStops.push(td.stopId);
+      if (td.stopId === firstDay.stopId) return; /* stop before adding this stop's own extras */
+      var _e = (appState.phaseExtraDays && appState.phaseExtraDays[td.stopId]) || 0;
+      _phCumOffset += _e;
+    }
+  });
+  /* Shift a YYYY-MM-DD string by N days */
+  var _phOffDate = function(ds, off) {
+    if (!ds || !off) return ds;
+    var _d = new Date(ds + 'T12:00:00');
+    _d.setDate(_d.getDate() + off);
+    return _d.toISOString().substring(0, 10);
+  };
+  /* Effective start date = raw first date + cumulative prior-stop offsets */
+  var _phFirstDate = _phOffDate(phaseDays.length > 0 ? phaseDays[0].date : '', _phCumOffset) || (phaseDays.length > 0 ? phaseDays[0].date : '');
+  /* Effective last date = first date + (totalNights - 1) to account for added/removed days */
+  var _phLastDate  = totalNights > 1 ? (_phOffDate(phaseDays.length > 0 ? phaseDays[0].date : '', _phCumOffset + totalNights - 1) || _phFirstDate) : _phFirstDate;
+
   return '<div onclick="_editStopDays(' + _sid + ',' + nights + ')" style="display:flex;align-items:center;gap:0;padding:11px 16px;background:var(--blue);color:#fff;border-radius:10px;margin:18px 0 6px;flex-wrap:wrap;row-gap:8px;cursor:pointer;" title="Tap to edit days at this stop">'
 
     /* ── Center: name + meta ── */
@@ -9649,7 +9675,7 @@ function phaseHeaderHtml(phase, firstDay) {
     + '</div>'
     + (_hasOverride ? '<div style="font-size:.72rem;opacity:.75;font-weight:600;margin-top:1px;">📍 ' + _cityDisp + '</div>' : '')
     + '<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
-    + (phaseDays.length > 0 && phaseDays[0].date ? '<span style="font-size:.75rem;opacity:.85;font-weight:700;">' + formatDate(phaseDays[0].date) + (phaseDays.length > 1 && phaseDays[phaseDays.length-1].date ? ' – ' + formatDate(phaseDays[phaseDays.length-1].date) : '') + '</span>' + '<span style="opacity:.35;font-size:.7rem;">·</span>' : '')
+    + (_phFirstDate ? '<span style="font-size:.75rem;opacity:.85;font-weight:700;">' + formatDate(_phFirstDate) + (totalNights > 1 ? ' – ' + formatDate(_phLastDate) : '') + '</span>' + '<span style="opacity:.35;font-size:.7rem;">·</span>' : '')
     + '<span style="font-size:.75rem;opacity:.7;font-weight:600;">' + (totalNights === 0 ? 'transit stop' : totalNights + ' night' + (totalNights !== 1 ? 's' : '')) + (extras > 0 ? ' <span style="opacity:.7">(+' + extras + ')</span>' : '') + '</span>'
     + '<span style="opacity:.35;font-size:.7rem;">·</span>'
     + '<button onclick="event.stopPropagation();_cycleStayType(' + _sid + ')" title="Change accommodation type" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">'
@@ -19077,8 +19103,11 @@ function toggleStopAttractions(stopId) {
   if (!panel) return;
   var isHidden = panel.classList.contains('hidden');
   panel.classList.toggle('hidden');
-  if (isHidden && !_stopAttractionsLoaded[stopId]) {
-    _stopAttractionsLoaded[stopId] = true;
+  if (isHidden) {
+    /* Always call loadStopAttractions when opening — it checks cache internally
+       so there's no extra API cost. This fixes a regression where renderStops()
+       rebuilds the DOM (clearing the body) but _stopAttractionsLoaded stayed true,
+       causing re-opens to show an empty panel. */
     loadStopAttractions(stopId);
   }
 }
@@ -19151,7 +19180,14 @@ function _renderAttractionsBody(stopId) {
   var visible = filtered.slice(0, shown);
 
   if (filtered.length === 0) {
-    body.innerHTML = '<div style="padding:14px 16px;color:var(--text-2);font-size:.84rem;">No attractions match "<strong>' + query + '</strong>" — try a different keyword.</div>';
+    if (qLow) {
+      /* Active search term but no matching results */
+      body.innerHTML = '<div style="padding:14px 16px;color:var(--text-2);font-size:.84rem;">No attractions match "<strong>' + query + '</strong>" — try a different keyword.</div>';
+    } else {
+      /* Cache is empty and no search — show spinner and trigger load */
+      body.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text-2);font-size:.84rem;"><i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i>Loading attractions…</div>';
+      loadStopAttractions(stopId);
+    }
     return;
   }
 
