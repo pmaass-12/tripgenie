@@ -9830,44 +9830,118 @@ function removePhaseDay(stopId) {
 }
 
 /* ── EDIT STOP DAYS — tap the blue phase bar to set exact nights ────────
-   Shows a compact overlay with a big number stepper.  Computes the extra-
-   days delta from the user's target so addPhaseDay / removePhaseDay aren't
-   needed for large adjustments.                                            */
+   Shows arrival date, live-updating departure, and a nights stepper.
+   "Edit all stops" opens showFullScheduleEditor() for batch edits.       */
+
+/* Compute cumulative phaseExtraDays offset for a stopId (from prior stops only) */
+function _getStopEffectiveDates(stopId) {
+  var cumOffset = 0, seenStops = [];
+  TRIP_DAYS.forEach(function(d) {
+    if (seenStops.indexOf(d.stopId) === -1) {
+      seenStops.push(d.stopId);
+      if (d.stopId === stopId) return; /* don't include this stop's own extras */
+      cumOffset += (appState.phaseExtraDays && appState.phaseExtraDays[d.stopId]) || 0;
+    }
+  });
+  var phaseDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
+  if (!phaseDays.length || !phaseDays[0].date) return { arrival:null, departure:null, totalNights:0 };
+  var arrMs = new Date(phaseDays[0].date + 'T12:00:00').getTime() + cumOffset * 86400000;
+  var extras = (appState.phaseExtraDays && appState.phaseExtraDays[stopId]) || 0;
+  var totalNights = Math.max(0, phaseDays.length + extras);
+  var depMs = arrMs + totalNights * 86400000;
+  return {
+    arrival:     new Date(arrMs).toISOString().substring(0, 10),
+    departure:   new Date(depMs).toISOString().substring(0, 10),
+    totalNights: totalNights,
+    arrMs:       arrMs
+  };
+}
+
 function _editStopDays(stopId, baseDays) {
   var existing = document.getElementById('stop-days-overlay');
-  if (existing) { existing.remove(); return; } // toggle off on second tap
-  var stop = getStop(stopId);
-  var name = stop ? _sn(stop) : String(stopId);
+  if (existing) { existing.remove(); return; }
+
+  var stop    = getStop(stopId);
+  var name    = stop ? _sn(stop) : String(stopId);
   var extras  = (appState.phaseExtraDays && appState.phaseExtraDays[stopId]) || 0;
   var current = Math.max(0, baseDays + extras);
+
+  /* Effective dates for this stop */
+  var _ed = _getStopEffectiveDates(stopId);
+  var _arrFmt = _ed.arrival   ? formatDate(_ed.arrival)   : '—';
+  var _depFmt = _ed.departure ? formatDate(_ed.departure) : '—';
+  window._sdeArrMs = _ed.arrMs || null;
+
   var ov = document.createElement('div');
   ov.id = 'stop-days-overlay';
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:9800;display:flex;align-items:center;justify-content:center;';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:9800;display:flex;align-items:center;justify-content:center;padding:16px;';
   ov.onclick = function(e) { if (e.target === ov) ov.remove(); };
+
+  var _rowS = 'display:flex;align-items:center;gap:12px;padding:10px 14px;';
+  var _lblS = 'font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);';
+  var _valS = 'font-size:.96rem;font-weight:800;color:var(--text);';
+
   ov.innerHTML =
-    '<div style="background:var(--card);border-radius:18px;padding:26px 28px 22px;max-width:320px;width:88vw;box-shadow:0 8px 40px rgba(0,0,0,.28);">'
-    + '<div style="font-weight:900;font-size:1.05rem;color:var(--text);margin-bottom:2px;">' + (stop && stop.emoji ? stop.emoji + '\u2009' : '') + name + '</div>'
-    + '<div style="font-size:.78rem;color:var(--text-3);margin-bottom:22px;">Set total nights at this stop</div>'
-    + '<div style="display:flex;align-items:center;justify-content:center;gap:18px;margin-bottom:10px;">'
-    + '<button onclick="var i=document.getElementById(\'sde-inp\');var v=Math.max(0,parseInt(i.value||0)-1);i.value=v;" style="background:var(--blue-l);border:1.5px solid #b0c8e0;color:var(--blue);border-radius:50%;width:46px;height:46px;font-size:1.5rem;font-weight:700;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;flex-shrink:0;">&#8722;</button>'
-    + '<input id="sde-inp" type="number" min="0" max="60" value="' + current + '" style="width:80px;text-align:center;font-size:2.2rem;font-weight:900;border:2px solid var(--border);border-radius:12px;padding:8px 4px;font-family:var(--font);color:var(--text);background:var(--bg);" />'
-    + '<button onclick="var i=document.getElementById(\'sde-inp\');i.value=parseInt(i.value||0)+1;" style="background:var(--blue-l);border:1.5px solid #b0c8e0;color:var(--blue);border-radius:50%;width:46px;height:46px;font-size:1.5rem;font-weight:700;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;flex-shrink:0;">&#43;</button>'
+    '<div style="background:var(--card);border-radius:18px;max-width:340px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.28);overflow:hidden;">'
+    /* Header */
+    + '<div style="background:var(--blue);color:#fff;padding:14px 18px;display:flex;align-items:center;gap:10px;">'
+    + '<span style="font-size:1.3rem;">' + (stop && stop.emoji ? stop.emoji : '📍') + '</span>'
+    + '<div><div style="font-weight:900;font-size:1rem;">' + name + '</div>'
+    + '<div style="font-size:.72rem;opacity:.8;margin-top:1px;">Edit nights at this stop</div></div>'
+    + '<button onclick="document.getElementById(\'stop-days-overlay\').remove()" style="margin-left:auto;background:rgba(255,255,255,.18);border:none;color:#fff;border-radius:50%;width:28px;height:28px;font-size:1.1rem;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>'
     + '</div>'
-    + '<div style="font-size:.72rem;color:var(--text-3);text-align:center;margin-bottom:22px;">Base schedule: ' + baseDays + ' night' + (baseDays !== 1 ? 's' : '') + (extras !== 0 ? ' · Adjusted: ' + (extras > 0 ? '+' : '') + extras : '') + '</div>'
-    + '<div style="display:flex;gap:10px;">'
-    + '<button onclick="document.getElementById(\'stop-days-overlay\').remove();" style="flex:1;padding:12px;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;font-weight:700;font-size:.88rem;cursor:pointer;font-family:var(--font);color:var(--text);">Cancel</button>'
-    + '<button onclick="_saveStopDays(' + JSON.stringify(stopId) + ',' + baseDays + ')" style="flex:2;padding:12px;background:var(--blue);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;font-family:var(--font);">Set Days</button>'
+    /* Arrive row */
+    + '<div style="' + _rowS + 'border-bottom:1px solid var(--border);">'
+    + '<span style="font-size:1.1rem;width:28px;text-align:center;flex-shrink:0;">🛬</span>'
+    + '<div><div style="' + _lblS + '">Arrive</div><div style="' + _valS + '">' + _arrFmt + '</div></div>'
+    + '</div>'
+    /* Nights stepper */
+    + '<div style="display:flex;align-items:center;padding:16px 18px;gap:0;border-bottom:1px solid var(--border);">'
+    + '<span style="font-size:1.1rem;width:28px;text-align:center;flex-shrink:0;margin-right:12px;">🌙</span>'
+    + '<div style="flex:1;display:flex;align-items:center;gap:0;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;overflow:hidden;">'
+    + '<button onclick="var i=document.getElementById(\'sde-inp\');var v=Math.max(0,parseInt(i.value||0)-1);i.value=v;_sdeUpdateDep();" style="background:none;border:none;color:var(--blue);width:50px;height:52px;font-size:1.5rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;">−</button>'
+    + '<div style="flex:1;text-align:center;border-left:1px solid var(--border);border-right:1px solid var(--border);">'
+    + '<input id="sde-inp" type="number" min="0" max="60" value="' + current + '" oninput="_sdeUpdateDep()" '
+    + 'style="width:100%;text-align:center;font-size:1.9rem;font-weight:900;border:none;background:transparent;padding:6px 0 0;font-family:var(--font);color:var(--text);outline:none;" />'
+    + '<div style="font-size:.65rem;font-weight:600;color:var(--text-3);padding-bottom:6px;">nights</div>'
+    + '</div>'
+    + '<button onclick="var i=document.getElementById(\'sde-inp\');i.value=parseInt(i.value||0)+1;_sdeUpdateDep();" style="background:none;border:none;color:var(--blue);width:50px;height:52px;font-size:1.5rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;">+</button>'
+    + '</div></div>'
+    /* Depart row — live-updates */
+    + '<div style="' + _rowS + 'border-bottom:1px solid var(--border);">'
+    + '<span style="font-size:1.1rem;width:28px;text-align:center;flex-shrink:0;">🛫</span>'
+    + '<div><div style="' + _lblS + '">Depart</div><div id="sde-dep" style="' + _valS + '">' + _depFmt + '</div></div>'
+    + '</div>'
+    /* Action buttons */
+    + '<div style="display:flex;gap:10px;padding:14px 16px;">'
+    + '<button onclick="document.getElementById(\'stop-days-overlay\').remove();" style="flex:1;padding:12px;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;font-weight:700;font-size:.87rem;cursor:pointer;font-family:var(--font);color:var(--text);">Cancel</button>'
+    + '<button onclick="_saveStopDays(' + JSON.stringify(stopId) + ',' + baseDays + ')" style="flex:2;padding:12px;background:var(--blue);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.9rem;cursor:pointer;font-family:var(--font);">✓ Set Nights</button>'
+    + '</div>'
+    /* Edit all stops link */
+    + '<div style="text-align:center;padding:0 16px 16px;">'
+    + '<button onclick="document.getElementById(\'stop-days-overlay\').remove();showFullScheduleEditor();" style="background:none;border:none;color:var(--blue);font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);text-decoration:underline;">✏️ Edit all stops at once</button>'
     + '</div>'
     + '</div>';
+
   document.body.appendChild(ov);
   var inp = document.getElementById('sde-inp');
   if (inp) { inp.focus(); inp.select(); }
-  /* Allow Enter key to save */
   ov.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') _saveStopDays(stopId, baseDays);
     if (e.key === 'Escape') ov.remove();
   });
 }
+
+/* Live-update the departure date label as nights changes */
+function _sdeUpdateDep() {
+  var inp = document.getElementById('sde-inp');
+  var dep = document.getElementById('sde-dep');
+  if (!inp || !dep || !window._sdeArrMs) return;
+  var nights = Math.max(0, parseInt(inp.value) || 0);
+  var depMs  = window._sdeArrMs + nights * 86400000;
+  dep.textContent = formatDate(new Date(depMs).toISOString().substring(0, 10));
+}
+
 function _saveStopDays(stopId, baseDays) {
   var inp = document.getElementById('sde-inp');
   if (!inp) return;
@@ -9881,6 +9955,121 @@ function _saveStopDays(stopId, baseDays) {
   var stop = getStop(stopId);
   var name = stop ? _sn(stop) : String(stopId);
   showToast('📅 ' + newTotal + ' night' + (newTotal !== 1 ? 's' : '') + ' set for ' + name, 2000);
+}
+
+/* ── FULL SCHEDULE EDITOR ────────────────────────────────────────────────
+   Bottom sheet listing every visible stop with its effective arrival date
+   and a nights input — edit them all and save in one tap.                */
+function showFullScheduleEditor() {
+  var ex = document.getElementById('full-sched-editor');
+  if (ex) { ex.remove(); return; }
+
+  /* Build ordered list of visible, non-removed stops */
+  var _fseRemoved = appState.removedStops || {};
+  var _fseStops = [], _fseSeen = {};
+  TRIP_DAYS.forEach(function(d) {
+    if (_fseSeen[d.stopId] || _fseRemoved[d.stopId]) return;
+    if (d.waypoint || (appState.waypointOverrides && appState.waypointOverrides[d.stopId])) return;
+    if (d.sleepType === 'home') return;
+    _fseSeen[d.stopId] = true;
+    var st = getStop(d.stopId);
+    var extras = (appState.phaseExtraDays && appState.phaseExtraDays[d.stopId]) || 0;
+    var phaseDays = TRIP_DAYS.filter(function(dd) { return dd.stopId === d.stopId; });
+    _fseStops.push({
+      stopId:    d.stopId,
+      name:      st ? _sn(st) : String(d.stopId),
+      emoji:     st && st.emoji ? st.emoji : '📍',
+      baseDays:  phaseDays.length,
+      extras:    extras,
+      current:   Math.max(0, phaseDays.length + extras)
+    });
+  });
+
+  /* Compute running arrival dates for display */
+  var _fseRows = '';
+  var _fseCumOffset = 0, _fseSeenIds = [];
+  _fseStops.forEach(function(s, idx) {
+    /* Cumulative offset from prior stops */
+    var cumOff = 0, seenTmp = [];
+    TRIP_DAYS.forEach(function(d) {
+      if (seenTmp.indexOf(d.stopId) === -1) {
+        seenTmp.push(d.stopId);
+        if (d.stopId === s.stopId) return;
+        cumOff += (appState.phaseExtraDays && appState.phaseExtraDays[d.stopId]) || 0;
+      }
+    });
+    var phaseDays = TRIP_DAYS.filter(function(d) { return d.stopId === s.stopId; });
+    var rawFirst  = phaseDays.length ? phaseDays[0].date : '';
+    var arrFmt = '—';
+    if (rawFirst) {
+      var arrMs = new Date(rawFirst + 'T12:00:00').getTime() + cumOff * 86400000;
+      arrFmt = formatDate(new Date(arrMs).toISOString().substring(0, 10));
+    }
+    var _isLast = idx === _fseStops.length - 1;
+    _fseRows += '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;' + (!_isLast ? 'border-bottom:1px solid var(--border);' : '') + '">'
+      + '<span style="font-size:1.1rem;flex-shrink:0;width:26px;text-align:center;">' + s.emoji + '</span>'
+      + '<div style="flex:1;min-width:0;">'
+      + '<div style="font-weight:800;font-size:.87rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + s.name + '</div>'
+      + '<div style="font-size:.7rem;color:var(--text-3);margin-top:1px;">Arrive ' + arrFmt + '</div>'
+      + '</div>'
+      + '<div style="display:flex;align-items:center;gap:0;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;overflow:hidden;flex-shrink:0;">'
+      + '<button onclick="var i=document.getElementById(\'fse-n-' + s.stopId + '\');i.value=Math.max(0,parseInt(i.value||0)-1);" style="background:none;border:none;color:var(--blue);width:34px;height:36px;font-size:1.2rem;font-weight:700;cursor:pointer;font-family:var(--font);">−</button>'
+      + '<input id="fse-n-' + s.stopId + '" type="number" min="0" max="60" value="' + s.current + '" '
+      + 'style="width:44px;text-align:center;font-size:.95rem;font-weight:900;border:none;border-left:1px solid var(--border);border-right:1px solid var(--border);background:transparent;padding:4px 0;font-family:var(--font);color:var(--text);outline:none;" />'
+      + '<button onclick="var i=document.getElementById(\'fse-n-' + s.stopId + '\');i.value=parseInt(i.value||0)+1;" style="background:none;border:none;color:var(--blue);width:34px;height:36px;font-size:1.2rem;font-weight:700;cursor:pointer;font-family:var(--font);">+</button>'
+      + '</div>'
+      + '<span style="font-size:.68rem;color:var(--text-3);font-weight:600;margin-left:4px;flex-shrink:0;">nts</span>'
+      + '</div>';
+  });
+
+  /* Store base days map for save */
+  window._fseBaseDays = {};
+  _fseStops.forEach(function(s) { window._fseBaseDays[s.stopId] = s.baseDays; });
+
+  var sheet = document.createElement('div');
+  sheet.id = 'full-sched-editor';
+  sheet.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9800;display:flex;align-items:flex-end;justify-content:center;';
+  sheet.onclick = function(e) { if (e.target === sheet) sheet.remove(); };
+  sheet.innerHTML =
+    '<div style="background:var(--card);width:100%;max-width:480px;border-radius:18px 18px 0 0;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 -4px 30px rgba(0,0,0,.22);" onclick="event.stopPropagation()">'
+    /* Handle */
+    + '<div style="width:38px;height:4px;background:var(--border);border-radius:4px;margin:12px auto 0;flex-shrink:0;"></div>'
+    /* Header */
+    + '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px 10px;flex-shrink:0;">'
+    + '<div style="font-weight:900;font-size:1rem;color:var(--text);">✏️ Edit Schedule Nights</div>'
+    + '<button onclick="document.getElementById(\'full-sched-editor\').remove()" style="background:var(--bg);border:1px solid var(--border);border-radius:50%;width:30px;height:30px;font-size:1.1rem;cursor:pointer;color:var(--text-3);font-family:var(--font);">×</button>'
+    + '</div>'
+    + '<div style="font-size:.75rem;color:var(--text-3);padding:0 18px 12px;flex-shrink:0;border-bottom:1px solid var(--border);">Changing a stop\'s nights shifts all subsequent stops.</div>'
+    /* Scrollable stop list */
+    + '<div style="overflow-y:auto;flex:1;">' + _fseRows + '</div>'
+    /* Save button */
+    + '<div style="padding:14px 16px;border-top:1px solid var(--border);flex-shrink:0;">'
+    + '<button onclick="_saveFullSchedule()" style="width:100%;padding:13px;background:var(--blue);color:#fff;border:none;border-radius:12px;font-weight:900;font-size:.92rem;cursor:pointer;font-family:var(--font);">✓ Save All Changes</button>'
+    + '</div>'
+    + '</div>';
+
+  document.body.appendChild(sheet);
+}
+
+function _saveFullSchedule() {
+  if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
+  var baseDays = window._fseBaseDays || {};
+  var changed = 0;
+  Object.keys(baseDays).forEach(function(sid) {
+    var inp = document.getElementById('fse-n-' + sid);
+    if (!inp) return;
+    var newTotal = Math.max(0, parseInt(inp.value) || 0);
+    var newExtra = newTotal - baseDays[sid];
+    if (newExtra !== (appState.phaseExtraDays[sid] || 0)) {
+      appState.phaseExtraDays[sid] = newExtra;
+      changed++;
+    }
+  });
+  saveState(appState);
+  var sheet = document.getElementById('full-sched-editor');
+  if (sheet) sheet.remove();
+  _refreshAll(true);
+  showToast('📅 Schedule updated — ' + changed + ' stop' + (changed !== 1 ? 's' : '') + ' changed', 2500);
 }
 
 /* ── toggleWaypointOverride ─────────────────────────────────────────────────
