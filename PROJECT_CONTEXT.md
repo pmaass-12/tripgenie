@@ -55,6 +55,14 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 19 (forty-eighth context) — 2026-03-05
+
+**Auto-resolve sync conflicts by timestamp instead of showing banner.**
+- `_showConflictBanner` replaced: no longer shows the red "Keep Mine / Load Saved" banner. Instead, auto-resolves silently — compares `_savedAt` timestamps and picks the newest version.
+- Before resolving, snapshots of both sides are written to `rv_conflict_mine` and `rv_conflict_theirs` in localStorage as emergency backups (accessible in the Backup Restore panel if ever needed).
+- Shows a brief toast instead of the blocking banner.
+- `_resolveConflict` (the old manual path) also updated to re-render Stops, Navigator, and Agenda — which were previously missing from its render list.
+
 ### Session 19 (forty-seventh context) — 2026-03-05
 
 **Add manual events to Agenda (Add Event modal with Gemini lookup).**
