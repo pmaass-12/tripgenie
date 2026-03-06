@@ -55,6 +55,16 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 19 (forty-seventh context) — 2026-03-05
+
+**Add manual events to Agenda (Add Event modal with Gemini lookup).**
+- `showAddAgendaEventModal(prefillDate, editId)` — bottom-sheet modal with place name, date selector, start/end time, URL, notes, and AI lookup button. Also handles edit mode.
+- `_agendaLookupInfo()` — fires Gemini prompt to extract address, phone, hours from the place name + URL. Stores results in hidden fields and displays them in the modal before saving.
+- `_saveAgendaEvent(editId)` — writes to `appState.agendaEvents[]`; each event: `{id, date, name, startTime, endTime, url, address, phone, hours, notes}`.
+- `_deleteAgendaEvent(id)` — removes from `appState.agendaEvents` with confirm dialog.
+- `renderPlannerAgenda`: now injects manual events per day (sorted by startTime, shown in purple) + a "📌 + Add event this day" button in each day footer.
+- Agenda header: added "📅 + Add Event" orange button.
+
 ### Session 19 (forty-sixth context) — 2026-03-05
 
 **Fix attractions button regression + missing days date display in phase headers.**

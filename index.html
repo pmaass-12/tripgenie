@@ -13189,7 +13189,8 @@ function renderPlannerAgenda() {
   var _sub  = 'font-size:.68rem;color:var(--text-3);margin-top:1px;';
 
   var html = '<div style="padding:0 0 80px 0;">'
-    + '<div style="display:flex;justify-content:flex-end;margin-bottom:10px;">'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">'
+    + '<button onclick="showAddAgendaEventModal()" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:7px 16px;font-size:.78rem;font-weight:800;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:5px;box-shadow:0 2px 8px rgba(232,129,58,.3);">📅 + Add Event</button>'
     + '<button onclick="printAgenda()" style="background:var(--card);border:1px solid var(--border);color:var(--text-2);border-radius:100px;padding:6px 14px;font-size:.75rem;font-weight:700;cursor:pointer;font-family:var(--font);display:flex;align-items:center;gap:5px;">🖨️ Print Agenda</button>'
     + '</div>';
 
@@ -13411,12 +13412,261 @@ function renderPlannerAgenda() {
         + '<div style="' + _sub  + '">' + (d.dinner || 'Camp cooking or local restaurant') + '</div></div></div>';
     }
 
+    /* ── Manual events for this date (from appState.agendaEvents) ── */
+    var _manualEvs = (appState.agendaEvents || [])
+      .filter(function(ev) { return ev.date === _eStr; })
+      .sort(function(a, b) { return (a.startTime || '') < (b.startTime || '') ? -1 : 1; });
+    if (_manualEvs.length > 0) {
+      html += '<div style="height:1px;background:linear-gradient(90deg,transparent,rgba(123,94,167,.3),transparent);margin:4px 0 2px;"></div>';
+      _manualEvs.forEach(function(ev) {
+        var _evStart = _agEvFmt(ev.startTime);
+        var _evEnd   = _agEvFmt(ev.endTime);
+        var _evTimeLabel = _evStart + (_evEnd ? '–' + _evEnd : '');
+        html += '<div style="display:flex;align-items:flex-start;gap:0;padding:7px 0;border-bottom:1px solid rgba(123,94,167,.1);background:rgba(123,94,167,.04);margin:0 -12px;padding:7px 12px;">'
+          + '<div style="min-width:54px;font-size:.68rem;font-weight:700;color:#7B5EA7;padding-top:2px;flex-shrink:0;line-height:1.2;">' + _evTimeLabel + '</div>'
+          + '<div style="width:24px;font-size:.9rem;flex-shrink:0;text-align:center;line-height:1.6;">📌</div>'
+          + '<div style="flex:1;font-size:.8rem;color:var(--text);line-height:1.35;min-width:0;">'
+          + '<strong>' + ev.name + '</strong>'
+          + (ev.address ? '<div style="font-size:.68rem;color:var(--text-3);margin-top:1px;">📍 ' + ev.address + '</div>' : '')
+          + (ev.phone   ? '<div style="font-size:.68rem;color:var(--text-3);">📞 ' + ev.phone + '</div>' : '')
+          + (ev.hours   ? '<div style="font-size:.68rem;color:var(--text-3);">🕐 ' + ev.hours + '</div>' : '')
+          + (ev.notes   ? '<div style="font-size:.68rem;color:var(--text-3);font-style:italic;">' + ev.notes + '</div>' : '')
+          + (ev.url     ? '<a href="' + ev.url + '" target="_blank" rel="noopener" style="font-size:.7rem;color:var(--blue);font-weight:600;text-decoration:none;" onclick="event.stopPropagation()">🔗 Website</a>' : '')
+          + '</div>'
+          + '<button onclick="event.stopPropagation();showAddAgendaEventModal(null,\'' + ev.id + '\')" style="background:rgba(123,94,167,.12);border:none;color:#7B5EA7;border-radius:6px;padding:3px 8px;font-size:.66rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;align-self:flex-start;margin-left:4px;white-space:nowrap;">✏️ Edit</button>'
+          + '</div>';
+      });
+    }
+
+    /* ── Per-day quick add button ── */
+    html += '<div style="padding:6px 0 2px;text-align:center;">'
+      + '<button onclick="event.stopPropagation();showAddAgendaEventModal(\'' + _eStr + '\')" '
+      + 'style="background:none;border:1.5px dashed rgba(123,94,167,.35);color:#9b7ebd;border-radius:8px;padding:5px 14px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);width:100%;transition:background .15s;" '
+      + 'onmouseover="this.style.background=\'rgba(123,94,167,.07)\'" onmouseout="this.style.background=\'none\'">📌 + Add event this day</button>'
+      + '</div>';
+
     html += '</div>'; /* end body */
     html += '</div>'; /* end day card */
   }
 
   html += '</div>';
   el.innerHTML = html;
+}
+
+/* ── Helper: format "HH:MM" time string to "9:00 AM" ── */
+function _agEvFmt(t) {
+  if (!t) return '';
+  var p = t.split(':');
+  return _calFmtTime(parseInt(p[0], 10), parseInt(p[1] || '0', 10));
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   MANUAL AGENDA EVENTS — add/edit/delete custom events per day
+   Stored in appState.agendaEvents = [{id, date, name, startTime,
+     endTime, url, address, phone, hours, notes}]
+   ══════════════════════════════════════════════════════════════════ */
+
+function showAddAgendaEventModal(prefillDate, editId) {
+  /* Close any existing modal */
+  var existing = document.getElementById('add-agenda-event-modal');
+  if (existing) existing.remove();
+
+  var ev = null;
+  if (editId) {
+    ev = (appState.agendaEvents || []).filter(function(e) { return e.id === editId; })[0] || null;
+  }
+
+  /* Build date options from visible trip days */
+  var dateOptions = '';
+  var seenDates = {};
+  var _ag2Sorted = TRIP_DAYS.slice().sort(function(a,b) {
+    return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+  });
+  _ag2Sorted.forEach(function(d) {
+    if (d.sleepType === 'home' && !d.driveDay) return;
+    if ((appState.removedStops||{})[d.stopId]) return;
+    if (!d.date || seenDates[d.date]) return;
+    seenDates[d.date] = true;
+    var dObj   = new Date(d.date + 'T12:00:00');
+    var label  = dObj.toLocaleDateString('en-US', { weekday:'short', month:'short', day:'numeric' });
+    var stop   = getStop(d.stopId);
+    if (stop) label += ' — ' + stop.name;
+    var sel = ((ev ? ev.date : prefillDate) === d.date) ? ' selected' : '';
+    dateOptions += '<option value="' + d.date + '"' + sel + '>' + label + '</option>';
+  });
+
+  var _hasEnrich = ev && (ev.address || ev.phone || ev.hours);
+  var _fld = 'width:100%;box-sizing:border-box;border:1.5px solid var(--border);border-radius:9px;padding:9px 12px;font-size:.85rem;font-family:var(--font);color:var(--text);background:var(--bg);outline:none;';
+
+  var html = '<div id="add-agenda-event-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)this.remove()">'
+    + '<div style="background:var(--card);width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:20px 20px 36px;box-shadow:0 -4px 30px rgba(0,0,0,.22);max-height:92vh;overflow-y:auto;" onclick="event.stopPropagation()">'
+    /* Handle bar */
+    + '<div style="width:38px;height:4px;background:var(--border);border-radius:4px;margin:0 auto 16px;"></div>'
+    /* Title row */
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">'
+    + '<div style="font-weight:900;font-size:1.05rem;color:var(--text);">' + (editId ? '✏️ Edit Event' : '📅 Add Event') + '</div>'
+    + '<button onclick="document.getElementById(\'add-agenda-event-modal\').remove()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-3);line-height:1;padding:0 4px;">×</button>'
+    + '</div>'
+    /* Place name */
+    + '<div style="margin-bottom:12px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Place Name *</label>'
+    + '<input id="aae-name" type="text" placeholder="e.g. Dollywood, Zipline Adventures…" value="' + (ev ? ev.name.replace(/"/g,'&quot;') : '') + '" style="' + _fld + '">'
+    + '</div>'
+    /* Date */
+    + '<div style="margin-bottom:12px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Date *</label>'
+    + '<select id="aae-date" style="' + _fld + '">' + dateOptions + '</select>'
+    + '</div>'
+    /* Start + End time */
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'
+    + '<div><label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Start Time</label>'
+    + '<input id="aae-start" type="time" value="' + (ev ? (ev.startTime||'09:00') : '09:00') + '" style="' + _fld + '"></div>'
+    + '<div><label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">End Time</label>'
+    + '<input id="aae-end" type="time" value="' + (ev ? (ev.endTime||'12:00') : '12:00') + '" style="' + _fld + '"></div>'
+    + '</div>'
+    /* URL */
+    + '<div style="margin-bottom:12px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Website URL <span style="opacity:.6;font-weight:500;">(optional — helps Gemini find address &amp; hours)</span></label>'
+    + '<input id="aae-url" type="url" placeholder="https://www.dollywood.com" value="' + (ev ? (ev.url||'').replace(/"/g,'&quot;') : '') + '" style="' + _fld + '">'
+    + '</div>'
+    /* Lookup button */
+    + '<button id="aae-lookup-btn" onclick="_agendaLookupInfo()" style="display:flex;align-items:center;justify-content:center;gap:7px;background:var(--blue);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);width:100%;margin-bottom:12px;box-sizing:border-box;">🔍 Look Up Address &amp; Hours with Gemini</button>'
+    /* AI result display */
+    + '<div id="aae-ai-result" style="display:' + (_hasEnrich ? 'block' : 'none') + ';background:#f0faf5;border:1.5px solid #a8d8c8;border-radius:9px;padding:12px;margin-bottom:12px;font-size:.81rem;color:var(--text);line-height:1.6;">'
+    + (_hasEnrich ? _agendaFormatEnrich(ev.address, ev.phone, ev.hours) : '') + '</div>'
+    /* Hidden enrichment storage */
+    + '<input id="aae-address" type="hidden" value="' + (ev ? (ev.address||'').replace(/"/g,'&quot;') : '') + '">'
+    + '<input id="aae-phone"   type="hidden" value="' + (ev ? (ev.phone||'').replace(/"/g,'&quot;')   : '') + '">'
+    + '<input id="aae-hours"   type="hidden" value="' + (ev ? (ev.hours||'').replace(/"/g,'&quot;')   : '') + '">'
+    /* Notes */
+    + '<div style="margin-bottom:18px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Notes <span style="opacity:.6;font-weight:500;">(optional)</span></label>'
+    + '<textarea id="aae-notes" rows="2" placeholder="Tip: bring bug spray · reserve tickets in advance…" style="' + _fld + 'resize:vertical;">' + (ev ? (ev.notes||'') : '') + '</textarea>'
+    + '</div>'
+    /* Save */
+    + '<button onclick="_saveAgendaEvent(\'' + (editId||'') + '\')" style="width:100%;background:var(--orange);color:#fff;border:none;border-radius:12px;padding:13px;font-size:.9rem;font-weight:900;cursor:pointer;font-family:var(--font);box-sizing:border-box;">'
+    + (editId ? '💾 Save Changes' : '📅 Add to Agenda') + '</button>'
+    + (editId
+        ? '<button onclick="_deleteAgendaEvent(\'' + editId + '\')" style="width:100%;background:none;border:none;color:var(--red);font-size:.8rem;font-weight:700;cursor:pointer;font-family:var(--font);padding:10px 0 0;display:block;">🗑 Delete Event</button>'
+        : '')
+    + '</div></div>';
+
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function _agendaFormatEnrich(address, phone, hours) {
+  var out = '';
+  if (address) out += '<div>📍 <strong>Address:</strong> ' + address + '</div>';
+  if (phone)   out += '<div>📞 <strong>Phone:</strong> ' + phone + '</div>';
+  if (hours)   out += '<div>🕐 <strong>Hours:</strong> ' + hours + '</div>';
+  return out;
+}
+
+function _agendaLookupInfo() {
+  var name = (document.getElementById('aae-name') || {}).value || '';
+  var url  = (document.getElementById('aae-url')  || {}).value || '';
+  var btn  = document.getElementById('aae-lookup-btn');
+  var res  = document.getElementById('aae-ai-result');
+  if (!name.trim()) { showToast('⚠️ Enter a place name first', 2200); return; }
+
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Looking up…'; }
+  if (res) { res.style.display = 'none'; }
+
+  var prompt = 'For the place: "' + name.trim() + '"'
+    + (url.trim() ? ' (website: ' + url.trim() + ')' : '')
+    + ' — provide ONLY these 3 lines, no extra text:\n'
+    + 'ADDRESS: [full street address with city, state, zip — or "Not found"]\n'
+    + 'PHONE: [phone number — or "Not found"]\n'
+    + 'HOURS: [typical hours, e.g. "Open daily 9 AM – 9 PM" — or "Check website"]\n';
+
+  var body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: 200, temperature: 0.1 }
+  });
+
+  fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: body })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    var text = '';
+    try { text = data.candidates[0].content.parts[0].text || ''; } catch(e) {}
+    if (btn) { btn.disabled = false; btn.innerHTML = '🔍 Look Up Address & Hours with Gemini'; }
+
+    var address = ((text.match(/ADDRESS:\s*(.+)/i)||[])[1]||'').trim();
+    var phone   = ((text.match(/PHONE:\s*(.+)/i)  ||[])[1]||'').trim();
+    var hours   = ((text.match(/HOURS:\s*(.+)/i)  ||[])[1]||'').trim();
+
+    /* Discard placeholder values */
+    if (/not found|not available/i.test(address)) address = '';
+    if (/not found|not available/i.test(phone))   phone   = '';
+    if (/check website/i.test(hours))             hours   = '';
+
+    var fA = document.getElementById('aae-address');
+    var fP = document.getElementById('aae-phone');
+    var fH = document.getElementById('aae-hours');
+    if (fA) fA.value = address;
+    if (fP) fP.value = phone;
+    if (fH) fH.value = hours;
+
+    if (res) {
+      res.style.display = 'block';
+      if (address || phone || hours) {
+        res.innerHTML = _agendaFormatEnrich(address, phone, hours);
+      } else {
+        res.innerHTML = '<span style="color:var(--text-3);">⚠️ Couldn\'t find details. Try adding the website URL above and look up again.</span>';
+      }
+    }
+  })
+  .catch(function() {
+    if (btn) { btn.disabled = false; btn.innerHTML = '🔍 Look Up Address & Hours with Gemini'; }
+    showToast('⚠️ Lookup failed — check your connection', 2500);
+  });
+}
+
+function _saveAgendaEvent(editId) {
+  var name  = ((document.getElementById('aae-name')   || {}).value || '').trim();
+  var date  = (document.getElementById('aae-date')    || {}).value || '';
+  var start = (document.getElementById('aae-start')   || {}).value || '';
+  var end   = (document.getElementById('aae-end')     || {}).value || '';
+  var url   = ((document.getElementById('aae-url')    || {}).value || '').trim();
+  var notes = ((document.getElementById('aae-notes')  || {}).value || '').trim();
+  var address = ((document.getElementById('aae-address') || {}).value || '').trim();
+  var phone   = ((document.getElementById('aae-phone')   || {}).value || '').trim();
+  var hours   = ((document.getElementById('aae-hours')   || {}).value || '').trim();
+
+  if (!name) { showToast('⚠️ Enter a place name', 2000); return; }
+  if (!date) { showToast('⚠️ Select a date', 2000); return; }
+
+  if (!appState.agendaEvents) appState.agendaEvents = [];
+
+  var record = { id: editId || ('ag_' + Date.now()), date: date, name: name,
+    startTime: start, endTime: end, url: url,
+    address: address, phone: phone, hours: hours, notes: notes };
+
+  if (editId) {
+    var idx = -1;
+    appState.agendaEvents.forEach(function(e, i) { if (e.id === editId) idx = i; });
+    if (idx >= 0) appState.agendaEvents[idx] = record;
+    else          appState.agendaEvents.push(record);
+  } else {
+    appState.agendaEvents.push(record);
+  }
+
+  saveState(appState);
+  var modal = document.getElementById('add-agenda-event-modal');
+  if (modal) modal.remove();
+  renderPlannerAgenda();
+  showToast('📅 Event saved!', 2000);
+}
+
+function _deleteAgendaEvent(id) {
+  if (!appState.agendaEvents) return;
+  if (!confirm('Delete this event?')) return;
+  appState.agendaEvents = appState.agendaEvents.filter(function(e) { return e.id !== id; });
+  saveState(appState);
+  var modal = document.getElementById('add-agenda-event-modal');
+  if (modal) modal.remove();
+  renderPlannerAgenda();
+  showToast('🗑 Event removed', 2000);
 }
 
 /* ── PRINT AGENDA ──────────────────────────────────────────────────
