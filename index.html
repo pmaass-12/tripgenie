@@ -9686,9 +9686,33 @@ function phaseHeaderHtml(phase, firstDay) {
     + _wxHtml
     + '</div>'
     + (_hasOverride ? '<div style="font-size:.72rem;opacity:.75;font-weight:600;margin-top:1px;">📍 ' + _cityDisp + '</div>' : '')
-    + '<div style="margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
-    + (_phFirstDate ? '<span style="font-size:.75rem;opacity:.85;font-weight:700;">' + formatDate(_phFirstDate) + (totalNights > 1 ? ' – ' + formatDate(_phLastDate) : '') + '</span>' + '<span style="opacity:.35;font-size:.7rem;">·</span>' : '')
-    + '<span style="font-size:.75rem;opacity:.7;font-weight:600;">' + (totalNights === 0 ? 'transit stop' : totalNights + ' night' + (totalNights !== 1 ? 's' : '')) + (extras > 0 ? ' <span style="opacity:.7">(+' + extras + ')</span>' : '') + '</span>'
+    + '<div style="margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+    + (function() {
+        if (!_phFirstDate) return '';
+        /* Hotel-booking check-in / check-out widget */
+        var _fmtShort = function(ds) {
+          var _d = new Date(ds + 'T12:00:00');
+          return _d.toLocaleDateString('en-US',{weekday:'short'}) + ' ' + _d.toLocaleDateString('en-US',{month:'short',day:'numeric'});
+        };
+        var _inLabel  = _fmtShort(_phFirstDate);
+        var _outLabel = totalNights > 0 ? _fmtShort(_phLastDate) : '';
+        var _nLabel   = totalNights === 0 ? 'transit' : totalNights + 'nt' + (extras !== 0 ? (extras > 0 ? ' <span style="opacity:.75">(+' + extras + ')</span>' : ' <span style="opacity:.75">(' + extras + ')</span>') : '');
+        return '<div style="display:flex;align-items:stretch;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.22);border-radius:8px;overflow:hidden;font-size:.7rem;">'
+          + '<div style="padding:3px 8px 3px;">'
+          + '<div style="font-size:.52rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;opacity:.7;line-height:1.3;">Arrive</div>'
+          + '<div style="font-weight:800;white-space:nowrap;line-height:1.3;">' + _inLabel + '</div>'
+          + '</div>'
+          + (_outLabel
+            ? '<div style="background:rgba(255,255,255,.12);padding:3px 8px 3px;border-left:1px solid rgba(255,255,255,.2);">'
+              + '<div style="font-size:.52rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;opacity:.7;line-height:1.3;">Depart</div>'
+              + '<div style="font-weight:800;white-space:nowrap;line-height:1.3;">' + _outLabel + '</div>'
+              + '</div>'
+            : '')
+          + '<div style="background:rgba(0,0,0,.15);padding:3px 8px 3px;border-left:1px solid rgba(255,255,255,.15);display:flex;align-items:center;">'
+          + '<span style="font-weight:800;white-space:nowrap;">' + _nLabel + '</span>'
+          + '</div>'
+          + '</div>';
+      })()
     + '<span style="opacity:.35;font-size:.7rem;">·</span>'
     + '<button onclick="event.stopPropagation();_cycleStayType(' + _sid + ')" title="Change accommodation type" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">'
     + _getStayMeta(firstDay.stopId).icon + '&thinsp;' + _getStayMeta(firstDay.stopId).label
