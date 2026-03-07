@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-07 (Session 19, fifty-first context)
+2026-03-07 (Session 19, fifty-second context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -55,6 +55,18 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 19 (fifty-second context) — 2026-03-07
+
+**Restaurant interactivity, openPlaceInfo/openPlanPicker aiRestaurants fallback, confirmPlan encoding fix, Agenda "Add to Day Schedule" default checked.**
+
+- **`loadStopRestaurants` refactor**: Now stores each parsed restaurant into `appState.aiRestaurants[stopId][]` so other functions can access them. Each card now has `onclick="openPlaceInfo('r', stopId, ri)"` and a green `+ Plan` button with `onclick="openPlanPicker(stopId, 'r', ri)"`. All stopId values HTML-escaped via `.replace(/"/g,'&quot;')`.
+- **`openPlaceInfo` fallback**: Now falls back to `appState.aiRestaurants[stopId][idx]` when `stop.restaurants[idx]` is undefined. This makes Gemini-fetched restaurants clickable and openable in the place info modal.
+- **`openPlanPicker` fallback**: Same aiRestaurants fallback added for the restaurant path. Item name shown in modal title correctly even for Gemini-fetched restaurants.
+- **`confirmPlan` onclick encoding**: Raw `stopId` in `openPlanPicker`'s generated HTML was unescaped (another instance of the master double-quote bug). Fixed with `JSON.stringify(stopId).replace(/"/g,'&quot;')`.
+- **Stop detail "undefined" guard**: `stop.description` directly concatenated without null check (line ~11806). Added `if (stop.description)` guard.
+- **Attraction search broadened**: Filter previously only checked `name`, `type`, `desc`. Changed to search all string fields via `Object.keys(it).some(k => typeof v === 'string' && v.includes(q))`. Fixes "honky tonk" and similar searches returning no results.
+- **Agenda "Add to Day Schedule" default checked**: The `📋 Add to Day Schedule (reorderable)` checkbox now defaults to `checked`. Previously it was unchecked, causing users to miss it and have events land only in the pinned `agendaEvents` section (bottom of day) instead of the reorderable main schedule.
 
 ### Session 19 (fifty-first context) — 2026-03-07
 
