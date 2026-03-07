@@ -55,6 +55,23 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 19 (fiftieth context) — 2026-03-07
+
+**Bug fixes + Day Planner agenda auto-collapse and full item editing.**
+
+- **UTC date bug** (4 locations): `toISOString().slice(0,10)` returns UTC date, wrong for US timezones at night. Fixed in `renderDashboard`, `renderPlannerAgenda`, `renderCalendar`, and history log label — all now use `getFullYear()/getMonth()/getDate()`.
+- **"undefined Nashville, TN" on dashboard**: `curStop.emoji` was undefined for stops without emoji field. Fixed with null guard.
+- **"nts" → "nights"** in hotel booking widget on blue phase bar: `totalNights + 'nt'` → `totalNights + ' night' + (totalNights !== 1 ? 's' : '')`.
+- **Phase bar buttons not working**: Outer div had `onclick="_editStopDays(...)"` which competed with inner button clicks. Fixed by removing onclick from outer div + removing all `event.stopPropagation()` calls from inner buttons.
+- **"ideal: 1 day" badge moved** from blue phase header to Area Info modal. Added `aim-ideal-badge` span in modal; `openAreaInfo()` and `loadStopMinVisit` now populate it. Removed IIFE from `phaseHeaderHtml`.
+- **Bookings: "nashville is not defined"** — `stop.id` used unquoted as JS identifier. Fixed with `JSON.stringify(stop.id)`.
+- **Duplicate `renderBookings()` function**: Tools tab version overwrote Lists tab version. Renamed to `renderBookingsTools()`.
+- **Day Planner not updating dates**: `_refreshAll()` only called `renderPlannerAgenda()` when `agenda-content` was visible. Fixed to always call it, plus calendar refresh.
+- **Agenda auto-collapse past days**: New `_agCollapsed` module-level object. `_agInitCollapsed(todayStr, allDates)` sets all past days to collapsed on first render. State persists across re-renders.
+- **Agenda day editing**: `showEditDayAgenda(dateStr)` bottom sheet with icon/time/title fields for each item; ▲▼ reorder, ✕ delete, + Add Item, Reset to default. Saves to `appState.agendaItemOverrides[dateStr]`.
+- **renderPlannerAgenda changes**: Day card headers now collapsible with onclick toggle + ▾ arrow + ✏️ Edit button. Body div has `id="ag-day-body-{date}"`. Checks `agendaItemOverrides[date]` and renders from custom items when present.
+- **New functions**: `_agCollapsed`, `_agInitCollapsed`, `_agToggleDay`, `_fmtTime24`, `_buildDayItems`, `showEditDayAgenda`, `_refreshEditDayItemsList`, `_moveEditDayItem`, `_removeEditDayItem`, `_addEditDayItem`, `_saveEditDayAgenda`, `_resetEditDayAgenda`.
+
 ### Session 19 (forty-eighth context) — 2026-03-05
 
 **Auto-resolve sync conflicts by timestamp instead of showing banner.**

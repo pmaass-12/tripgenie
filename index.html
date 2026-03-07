@@ -3587,6 +3587,7 @@
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <div style="font-size:.7rem;opacity:.75;font-weight:700;text-transform:uppercase;letter-spacing:.06em;" id="aim-sub"></div>
             <span id="aim-price-badge" style="display:none;background:rgba(255,255,255,.18);color:#fff;font-size:.7rem;font-weight:800;padding:2px 7px;border-radius:100px;border:1px solid rgba(255,255,255,.25);letter-spacing:.02em;"></span>
+            <span id="aim-ideal-badge" style="display:none;background:rgba(255,215,0,.22);color:#ffe082;font-size:.7rem;font-weight:800;padding:2px 9px;border-radius:100px;border:1px solid rgba(255,215,0,.4);white-space:nowrap;">⭐ ideal: —</span>
           </div>
           <div id="aim-weather-row" style="display:none;margin-top:5px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:6px 11px;display:none;align-items:center;gap:9px;">
             <span id="aim-wx-icon" style="font-size:1.3rem;line-height:1;"></span>
@@ -7783,7 +7784,7 @@ function renderDashboard() {
 
   // ── Weather warnings banner ───────────────────────────────────────
   // Fix: use today's date string as dismiss key so pre-trip dayNum=1 bug can't permanently hide it
-  var _todayStr      = today.toISOString().slice(0, 10);
+  var _todayStr      = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
   var _warnDismissed = appState._warnDismissedDate || '';
   var _warnings      = [];
 
@@ -7934,7 +7935,7 @@ function renderDashboard() {
     ? _destWxIcon + ' ' + Math.round(_destWxLo) + '°–' + Math.round(_destWxHi) + '°F'
     : '';
   var _destIsHome  = !curStop || (today < start);
-  var _destLabel   = _destIsHome ? '<i class="fa-solid fa-house"></i> Home' : (curStop.emoji + ' ' + curStop.name + ', ' + curStop.state);
+  var _destLabel   = _destIsHome ? '<i class="fa-solid fa-house"></i> Home' : ((curStop.emoji ? curStop.emoji + ' ' : '') + curStop.name + (curStop.state ? ', ' + curStop.state : ''));
   var _destSub     = _destIsHome ? 'Before the adventure begins!' : (sleep || '');
   var _destFcstBtn = (!_destIsHome && curStop)
     ? ' <span style="font-size:.68rem;color:var(--green);font-weight:700;white-space:nowrap;">☁️ tap for forecast</span>'
@@ -9621,16 +9622,16 @@ function phaseHeaderHtml(phase, firstDay) {
       var _topCode = _codes.length ? parseInt(Object.keys(_codeCount).sort(function(a,b){return _codeCount[b]-_codeCount[a];})[0]) : null;
       var _wxIcon = _topCode === null ? '🌡️' : (_topCode <= 1 ? '☀️' : _topCode <= 3 ? '⛅' : _topCode <= 49 ? '🌫️' : _topCode <= 67 ? '🌧️' : _topCode <= 77 ? '❄️' : '🌩️');
       var _wxType = (_wxData[phaseDays[0].date] && _wxData[phaseDays[0].date].type === 'forecast') ? 'Forecast' : 'Typical';
-      _wxHtml = '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.15);border-radius:20px;padding:3px 9px;flex-shrink:0;cursor:pointer;" onclick="event.stopPropagation();showStopForecastModal(' + _sid + ')" title="' + _wxType + ' weather — tap for full forecast">'
+      _wxHtml = '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.15);border-radius:20px;padding:3px 9px;flex-shrink:0;cursor:pointer;" onclick="showStopForecastModal(' + _sid + ')" title="' + _wxType + ' weather — tap for full forecast">'
         + '<span style="font-size:.85rem;">' + _wxIcon + '</span>'
         + '<span style="font-size:.76rem;font-weight:800;color:#fff;white-space:nowrap;">' + _avgHigh + '° / ' + _avgLow + '°</span>'
         + '</div>';
     } else {
       /* No data yet — show load button */
-      _wxHtml = '<button onclick="event.stopPropagation();loadStopWeather(' + _sid + ')" style="background:rgba(255,255,255,.12);border:1px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.7);border-radius:20px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Load weather">🌡️ Weather</button>';
+      _wxHtml = '<button onclick="loadStopWeather(' + _sid + ')" style="background:rgba(255,255,255,.12);border:1px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.7);border-radius:20px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Load weather">🌡️ Weather</button>';
     }
   } else if (pStop && pStop.lat) {
-    _wxHtml = '<button onclick="event.stopPropagation();loadStopWeather(' + _sid + ')" style="background:rgba(255,255,255,.12);border:1px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.7);border-radius:20px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Load weather">🌡️ Weather</button>';
+    _wxHtml = '<button onclick="loadStopWeather(' + _sid + ')" style="background:rgba(255,255,255,.12);border:1px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.7);border-radius:20px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Load weather">🌡️ Weather</button>';
   }
 
   // Determine if this phase is first / last among visible (non-removed) phases
@@ -9676,13 +9677,13 @@ function phaseHeaderHtml(phase, firstDay) {
   /* Effective last date = first date + (totalNights - 1) to account for added/removed days */
   var _phLastDate  = totalNights > 1 ? (_phOffDate(phaseDays.length > 0 ? phaseDays[0].date : '', _phCumOffset + totalNights - 1) || _phFirstDate) : _phFirstDate;
 
-  return '<div onclick="_editStopDays(' + _sid + ',' + nights + ')" style="display:flex;align-items:center;gap:0;padding:11px 16px;background:var(--blue);color:#fff;border-radius:10px;margin:18px 0 6px;flex-wrap:wrap;row-gap:8px;cursor:pointer;" title="Tap to edit days at this stop">'
+  return '<div style="display:flex;align-items:center;gap:0;padding:11px 16px;background:var(--blue);color:#fff;border-radius:10px;margin:18px 0 6px;flex-wrap:wrap;row-gap:8px;">'
 
     /* ── Center: name + meta ── */
     + '<div style="flex:1;min-width:160px;">'
     + '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
     + '<div style="font-weight:900;font-size:1.08rem;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;">' + _displayPhase + '</div>'
-    + '<button onclick="event.stopPropagation();editStopCityName(' + (pStop ? JSON.stringify(pStop.id) : _sid) + ')" title="Edit city/town name shown in day cards" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;padding:1px 6px;font-size:.65rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" >' + (_hasOverride ? '📍' : '✏️') + '</button>'
+    + '<button onclick="editStopCityName(' + (pStop ? JSON.stringify(pStop.id) : _sid) + ')" title="Edit city/town name shown in day cards" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;padding:1px 6px;font-size:.65rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" >' + (_hasOverride ? '📍' : '✏️') + '</button>'
     + _wxHtml
     + '</div>'
     + (_hasOverride ? '<div style="font-size:.72rem;opacity:.75;font-weight:600;margin-top:1px;">📍 ' + _cityDisp + '</div>' : '')
@@ -9696,7 +9697,7 @@ function phaseHeaderHtml(phase, firstDay) {
         };
         var _inLabel  = _fmtShort(_phFirstDate);
         var _outLabel = totalNights > 0 ? _fmtShort(_phLastDate) : '';
-        var _nLabel   = totalNights === 0 ? 'transit' : totalNights + 'nt' + (extras !== 0 ? (extras > 0 ? ' <span style="opacity:.75">(+' + extras + ')</span>' : ' <span style="opacity:.75">(' + extras + ')</span>') : '');
+        var _nLabel   = totalNights === 0 ? 'transit' : totalNights + ' night' + (totalNights !== 1 ? 's' : '') + (extras !== 0 ? (extras > 0 ? ' <span style="opacity:.75">(+' + extras + ')</span>' : ' <span style="opacity:.75">(' + extras + ')</span>') : '');
         return '<div style="display:flex;align-items:stretch;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.22);border-radius:8px;overflow:hidden;font-size:.7rem;">'
           + '<div style="padding:3px 8px 3px;">'
           + '<div style="font-size:.52rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;opacity:.7;line-height:1.3;">Arrive</div>'
@@ -9714,23 +9715,10 @@ function phaseHeaderHtml(phase, firstDay) {
           + '</div>';
       })()
     + '<span style="opacity:.35;font-size:.7rem;">·</span>'
-    + '<button onclick="event.stopPropagation();_cycleStayType(' + _sid + ')" title="Change accommodation type" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">'
+    + '<button onclick="_cycleStayType(' + _sid + ')" title="Change accommodation type" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">'
     + _getStayMeta(firstDay.stopId).icon + '&thinsp;' + _getStayMeta(firstDay.stopId).label
     + '</button>'
-    + (function() {
-        if (!appState.stopMinVisit) appState.stopMinVisit = {};
-        var mv = appState.stopMinVisit[firstDay.stopId];
-        if (!mv || mv === 'loading') {
-          // Load lazily if not cached; show load button first time
-          if (!mv) setTimeout(function() { loadStopMinVisit(firstDay.stopId); }, 300);
-          return mv === 'loading'
-            ? '<span class="ph-ideal-badge" style="background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.15);color:rgba(255,255,255,.5);border-radius:6px;padding:2px 7px;font-size:.68rem;font-weight:600;">⏳ Ideal stay…</span>'
-            : '';
-        }
-        var _ideal = mv.ideal || '';
-        var _note  = mv.note  || '';
-        return '<span class="ph-ideal-badge" title="' + _note + '" style="background:rgba(255,215,0,.18);border:1px solid rgba(255,215,0,.35);color:rgba(255,230,120,.95);border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:700;cursor:default;white-space:nowrap;">⭐ ideal: ' + _ideal + '</span>';
-      })()
+    + '' /* ideal stay badge moved to Area Info modal */
     + ''
     + '</div>'
     + '</div>'
@@ -9739,13 +9727,13 @@ function phaseHeaderHtml(phase, firstDay) {
     + '<div class="ph-ctrls" style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:12px;flex-wrap:wrap;justify-content:flex-end;">'
 
     /* Music — hidden on mobile via .ph-music-btn CSS */
-    + '<button class="ph-music-btn" onclick="event.stopPropagation();_openMusicForStop(' + _sid + ')" title="Local Music" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;width:30px;height:30px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;"><i class="fa-solid fa-music"></i></button>'
+    + '<button class="ph-music-btn" onclick="_openMusicForStop(' + _sid + ')" title="Local Music" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;width:30px;height:30px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;"><i class="fa-solid fa-music"></i></button>'
 
     /* Divider — hidden on mobile via .ph-sep-div CSS */
     + '<div class="ph-sep-div" style="width:1px;height:22px;background:rgba(255,255,255,.2);flex-shrink:0;"></div>'
 
     /* Area Info — label text hidden on mobile (.ph-area-lbl) to save space */
-    + '<button onclick="event.stopPropagation();openAreaInfo(\'' + _safePhase + '\',' + _sid + ')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:5px 11px;font-size:.73rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">&#128269;<span class="ph-area-lbl">&nbsp;Area Info</span></button>'
+    + '<button onclick="openAreaInfo(\'' + _safePhase + '\',' + _sid + ')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:5px 11px;font-size:.73rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">&#128269;<span class="ph-area-lbl">&nbsp;Area Info</span></button>'
 
     /* Booking Confirmation — shows count badge when confirmations saved */
     + (function() {
@@ -9753,18 +9741,18 @@ function phaseHeaderHtml(phase, firstDay) {
         var _bcBg    = _bcCount ? 'rgba(255,215,0,.3)' : 'rgba(255,255,255,.12)';
         var _bcBord  = _bcCount ? '1px solid rgba(255,215,0,.6)' : '1px solid rgba(255,255,255,.2)';
         var _bcLabel = _bcCount ? '🎫\u00a0' + _bcCount : '🎫';
-        return '<button onclick="event.stopPropagation();openBookingModal(' + _sid + ')" title="Booking confirmations" style="background:' + _bcBg + ';border:' + _bcBord + ';color:#fff;border-radius:8px;padding:5px 10px;font-size:.73rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">' + _bcLabel + '</button>';
+        return '<button onclick="openBookingModal(' + _sid + ')" title="Booking confirmations" style="background:' + _bcBg + ';border:' + _bcBord + ';color:#fff;border-radius:8px;padding:5px 10px;font-size:.73rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">' + _bcLabel + '</button>';
       })()
 
     /* − Days + (tap count to set exact) */
     + '<div style="display:inline-flex;align-items:center;gap:0;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;overflow:hidden;flex-shrink:0;">'
-    + '<button onclick="event.stopPropagation();removePhaseDay(' + _sid + ')" style="background:none;border:none;color:#fff;width:28px;height:28px;font-size:1rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s;" title="Remove a day">&#8722;</button>'
-    + '<span onclick="event.stopPropagation();_editStopDays(' + _sid + ',' + nights + ')" title="Tap to set exact days" style="font-size:.72rem;font-weight:800;padding:0 6px;cursor:pointer;white-space:nowrap;line-height:28px;">' + totalNights + '&thinsp;nts</span>'
-    + '<button onclick="event.stopPropagation();addPhaseDay(' + _sid + ')" style="background:none;border:none;color:#fff;width:28px;height:28px;font-size:1rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s;" title="Add a day">&#43;</button>'
+    + '<button onclick="removePhaseDay(' + _sid + ')" style="background:none;border:none;color:#fff;width:28px;height:28px;font-size:1rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s;" title="Remove a day">&#8722;</button>'
+    + '<span onclick="_editStopDays(' + _sid + ',' + nights + ')" title="Tap to set exact nights" style="font-size:.72rem;font-weight:800;padding:0 6px;cursor:pointer;white-space:nowrap;line-height:28px;">' + totalNights + '&thinsp;nts</span>'
+    + '<button onclick="addPhaseDay(' + _sid + ')" style="background:none;border:none;color:#fff;width:28px;height:28px;font-size:1rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s;" title="Add a day">&#43;</button>'
     + '</div>'
 
     /* Remove (destructive — pill style matching white-row trash) */
-    + '<button onclick="event.stopPropagation();removeStopFromTrip(' + _sid + ',\'' + _safePhase + '\')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;width:30px;height:30px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;" title="Remove this stop"><i class="fa-solid fa-trash-can"></i></button>'
+    + '<button onclick="removeStopFromTrip(' + _sid + ',\'' + _safePhase + '\')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;width:30px;height:30px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;" title="Remove this stop"><i class="fa-solid fa-trash-can"></i></button>'
 
     + '</div>'
     + '</div>';
@@ -10122,8 +10110,10 @@ function _refreshAll(silent) {
   /* Always refresh Day Planner and Agenda so they stay in sync with Schedule
      regardless of which sub-tab is currently visible */
   try { renderStops(); } catch(e) {}
-  var _agdDiv = document.getElementById('agenda-content');
-  if (_agdDiv && _agdDiv.style.display !== 'none') { try { renderPlannerAgenda(); } catch(e) {} }
+  try { renderPlannerAgenda(); } catch(e) {}
+  /* Refresh calendar in Tools tab if visible */
+  var _calDiv = document.getElementById('tools-sub-content');
+  if (_calDiv && _calDiv.style.display !== 'none' && window._toolsTab === 'calendar') { try { renderCalendar(); } catch(e) {} }
   if (window.mainMap) setTimeout(function() {
     try { _clearAndRebuildMapMarkers(window.mainMap); } catch(e) {}
   }, 150);
@@ -13331,6 +13321,208 @@ function renderTripStats() {
 }
 
 /* ══════════════════════════════════════════════════════════════════
+   AGENDA DAY COLLAPSE + FULL ITEM EDITING
+   ══════════════════════════════════════════════════════════════════ */
+var _agCollapsed = null; /* null = uninitialized; object = {dateStr: bool} */
+
+function _agInitCollapsed(todayStr, allDates) {
+  if (_agCollapsed) return;
+  _agCollapsed = {};
+  allDates.forEach(function(ds) { if (ds < todayStr) _agCollapsed[ds] = true; });
+}
+
+function _agToggleDay(dateStr) {
+  if (!_agCollapsed) _agCollapsed = {};
+  _agCollapsed[dateStr] = !_agCollapsed[dateStr];
+  var body  = document.getElementById('ag-day-body-' + dateStr);
+  var arrow = document.getElementById('ag-arrow-' + dateStr);
+  if (body)  body.style.display  = _agCollapsed[dateStr] ? 'none' : 'block';
+  if (arrow) arrow.style.transform = _agCollapsed[dateStr] ? 'rotate(-90deg)' : '';
+}
+
+function _fmtTime24(h, m) {
+  return String(h).padStart(2,'0') + ':' + String(m || 0).padStart(2,'0');
+}
+
+/* Build a normalized item list for a day (does NOT include manual agendaEvents) */
+function _buildDayItems(d, agOpts) {
+  var items = [];
+  agOpts = agOpts || {};
+  var _isDrive = d.driveDay;
+  var _isHome  = d.sleepType === 'home';
+  var _stop    = getStop(d.stopId);
+  var _agDepart  = agOpts.depart  || '08:00';
+  var _agSbEvery = agOpts.sbEvery || 0;
+  var _agSbMins  = agOpts.sbMins  || 30;
+
+  if (_isDrive) {
+    var _dpt  = (appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].departTime) || _agDepart;
+    var _dptH = parseInt(_dpt.split(':')[0], 10);
+    var _dptM = parseInt(_dpt.split(':')[1] || '0', 10);
+    var _drH  = d.driveHours || 0;
+    var _sbN  = (_agSbEvery > 0 && _drH > 0) ? Math.floor(_drH / _agSbEvery) : 0;
+    var _sbH  = _sbN > 0 ? Math.round((_sbN * _agSbMins) / 60 * 10) / 10 : 0;
+    var _totH = _drH + _sbH;
+    var _arrT = _calAddHours(_dptH, _dptM, _totH);
+    var _ciTraw = _calAddHours(_arrT.h, _arrT.m, 0.75);
+    var _ciT  = (_ciTraw.h < 15) ? {h:15,m:0} : _ciTraw;
+    var _aftT = _calAddHours(_ciT.h, _ciT.m, 0.5);
+    var _drTitle = (typeof _getDriveDayTitle === 'function') ? _getDriveDayTitle(d) : (d.title || 'Drive day');
+    var _slpIcon = d.sleepType==='rv_park'?'🏕️':d.sleepType==='walmart'?'🛒':d.sleepType==='boondock'?'🏕️':'⛺';
+    var _drSub = (d.miles ? d.miles.toLocaleString() + ' mi · ' : '') + (_drH ? _drH + 'h drive' : '') + (_sbH ? ' + ' + _sbH + 'h stops' : '') + (_arrT.h ? ' · Arrive ~' + _calFmtTime(_arrT.h, _arrT.m) : '');
+    items.push({id:'bkf',  time:'07:00', icon:'🍳', title:'Breakfast & Pack Up',   subtitle:'Get the RV road-ready'});
+    items.push({id:'drv',  time:_fmtTime24(_dptH,_dptM), icon:'🚗', title:_drTitle, subtitle:_drSub});
+    if (_isHome) {
+      items.push({id:'home', time:_fmtTime24(_arrT.h,_arrT.m), icon:'🏠', title:'Welcome Home!', subtitle:'Unpack, decompress, celebrate 🎉'});
+    } else if (d.sleep) {
+      items.push({id:'ci', time:_fmtTime24(_ciT.h,_ciT.m), icon:_slpIcon, title:'Arrive & Check In',
+        subtitle:(_ciTraw.h < 15 ? 'Arrive ' + _calFmtTime(_arrT.h,_arrT.m) + ' · Check-in from 3:00 PM · ' : '') + d.sleep});
+    }
+    if (!_isHome && _aftT.h < 17) {
+      items.push({id:'aft', time:_fmtTime24(_aftT.h,_aftT.m), icon:'🌄', title:'Explore the Area', subtitle:'Short walk, local sights, or just relax'});
+    }
+    if (!_isHome) {
+      items.push({id:'din', time:'18:30', icon:'🍽️', title:'Dinner', subtitle:d.dinner || 'Camp cooking or local restaurant'});
+    }
+  } else {
+    items.push({id:'bkf',  time:'08:00', icon:'🍳', title:'Breakfast', subtitle:d.breakfast || 'Morning at camp'});
+    var _mainAct = d.title || d.phase || (_stop ? (_stop.emoji||'') + ' ' + (_stop.name||'') : 'Free explore');
+    items.push({id:'main', time:'09:00', icon:(_stop&&_stop.emoji?_stop.emoji:'🌎'), title:_calActivity(_mainAct)||_mainAct, subtitle:d.notes||''});
+    var _ai = 0;
+    if (d.activities && d.activities.length > 1) {
+      d.activities.slice(1).forEach(function(act) {
+        items.push({id:'act'+(_ai), time:_fmtTime24(11+_ai,0), icon:'🎯', title:act, subtitle:''}); _ai++;
+      });
+    }
+    items.push({id:'lnch', time:'12:00', icon:'🥙',  title:'Lunch',               subtitle:d.lunch || 'Packed lunch or local spot'});
+    items.push({id:'aft',  time:'14:00', icon:'☀️',  title:'Afternoon Free Time', subtitle:'Explore, swim, hike, or relax at camp'});
+    if (d.sleep && !_isHome) {
+      var _si2 = d.sleepType==='rv_park'?'🏕️':d.sleepType==='walmart'?'🛒':'⛺';
+      items.push({id:'camp', time:'16:30', icon:_si2, title:'Back at Camp', subtitle:d.sleep});
+    }
+    items.push({id:'din',  time:'18:30', icon:'🍽️', title:'Dinner', subtitle:d.dinner || 'Camp cooking or local restaurant'});
+  }
+  return items;
+}
+
+/* Open the Edit Day Agenda bottom sheet */
+function showEditDayAgenda(dateStr) {
+  var ex = document.getElementById('edit-day-agenda-modal');
+  if (ex) ex.remove();
+
+  /* Find the TRIP_DAY entry for this effective date */
+  var _phOff = {}, _cumO = 0, _seen = [];
+  TRIP_DAYS.forEach(function(td) {
+    if (_seen.indexOf(td.stopId) === -1) {
+      _seen.push(td.stopId);
+      _phOff[td.stopId] = _cumO;
+      _cumO += (appState.phaseExtraDays && appState.phaseExtraDays[td.stopId]) || 0;
+    }
+  });
+  var _pauses = (appState.pauseDays||[]).filter(function(p){return p.startDate&&p.endDate;}).sort(function(a,b){return a.startDate<b.startDate?-1:1;});
+  var _pi=0, _cn=0;
+  var _sorted = TRIP_DAYS.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0;});
+  var d = null;
+  _sorted.forEach(function(td) {
+    if (d) return;
+    while (_pi<_pauses.length && _pauses[_pi].startDate<=td.date) { _cn+=Math.max(0,Math.round((new Date(_pauses[_pi].endDate+'T00:00:00')-new Date(_pauses[_pi].startDate+'T00:00:00'))/86400000)); _pi++; }
+    var eStr = new Date(new Date(td.date+'T00:00:00').getTime()+(_cn+(_phOff[td.stopId]||0))*86400000).toISOString().slice(0,10);
+    if (eStr === dateStr) d = td;
+  });
+  if (!d) { showToast('Day not found', 1500); return; }
+
+  var agOpts = { depart:(appState.drivingPrefs&&appState.drivingPrefs.departureTime)||'08:00', sbEvery:(appState.drivingPrefs&&appState.drivingPrefs.stopBreakEvery)||0, sbMins:(appState.drivingPrefs&&appState.drivingPrefs.stopBreakMins)||30 };
+  var items = (appState.agendaItemOverrides && appState.agendaItemOverrides[dateStr])
+    ? JSON.parse(JSON.stringify(appState.agendaItemOverrides[dateStr]))
+    : _buildDayItems(d, agOpts);
+
+  window._editDayStr   = dateStr;
+  window._editDayItems = items;
+
+  var dObj  = new Date(dateStr+'T12:00:00');
+  var dLabel= dObj.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+  var hasOv = !!(appState.agendaItemOverrides && appState.agendaItemOverrides[dateStr]);
+
+  var modal = document.createElement('div');
+  modal.id = 'edit-day-agenda-modal';
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:flex-end;justify-content:center;';
+  modal.onclick = function(e) { if (e.target===modal) modal.remove(); };
+  modal.innerHTML = '<div style="background:var(--card);width:100%;max-width:520px;border-radius:18px 18px 0 0;padding:18px 20px 44px;box-shadow:0 -4px 30px rgba(0,0,0,.22);max-height:88vh;overflow-y:auto;" onclick="event.stopPropagation()">'
+    + '<div style="width:38px;height:4px;background:var(--border);border-radius:4px;margin:0 auto 14px;"></div>'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">'
+    + '<div><div style="font-weight:900;font-size:.95rem;">✏️ Edit Day Agenda</div><div style="font-size:.72rem;color:var(--text-2);">' + dLabel + '</div></div>'
+    + '<button onclick="document.getElementById(\'edit-day-agenda-modal\').remove()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-3);line-height:1;padding:0 4px;">×</button>'
+    + '</div>'
+    + '<div id="edi-items-list"></div>'
+    + '<button onclick="_addEditDayItem()" style="width:100%;margin-top:8px;background:none;border:1.5px dashed var(--border);border-radius:8px;padding:8px;font-size:.78rem;font-weight:700;cursor:pointer;color:var(--text-2);font-family:var(--font);">+ Add Item</button>'
+    + '<div style="display:flex;gap:8px;margin-top:14px;">'
+    + (hasOv ? '<button onclick="_resetEditDayAgenda()" style="flex:1;padding:11px;background:var(--red-l);border:1.5px solid rgba(217,79,61,.2);border-radius:12px;font-weight:700;font-size:.82rem;cursor:pointer;font-family:var(--font);color:var(--red);">↩ Reset</button>' : '')
+    + '<button onclick="document.getElementById(\'edit-day-agenda-modal\').remove()" style="flex:1;padding:11px;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;font-weight:700;font-size:.82rem;cursor:pointer;font-family:var(--font);">Cancel</button>'
+    + '<button onclick="_saveEditDayAgenda()" style="flex:2;padding:11px;background:var(--blue);color:#fff;border:none;border-radius:12px;font-weight:800;font-size:.87rem;cursor:pointer;font-family:var(--font);">✓ Save Changes</button>'
+    + '</div></div>';
+  document.body.appendChild(modal);
+  _refreshEditDayItemsList();
+}
+
+function _refreshEditDayItemsList() {
+  var list = document.getElementById('edi-items-list');
+  if (!list) return;
+  var items = window._editDayItems || [];
+  var _fld = 'border:1px solid var(--border);border-radius:6px;padding:4px 7px;font-size:.78rem;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;';
+  var html = '';
+  items.forEach(function(item, idx) {
+    var isFirst = idx === 0, isLast = idx === items.length - 1;
+    html += '<div style="display:flex;align-items:center;gap:5px;padding:6px 0;border-bottom:1px solid var(--border);">'
+      + '<div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0;">'
+      + '<button onclick="_moveEditDayItem(' + idx + ',-1)" style="background:none;border:none;cursor:pointer;font-size:.65rem;color:var(--text-3);padding:1px 4px;line-height:1;' + (isFirst?'opacity:.15;pointer-events:none':'') + '">▲</button>'
+      + '<button onclick="_moveEditDayItem(' + idx + ',1)" style="background:none;border:none;cursor:pointer;font-size:.65rem;color:var(--text-3);padding:1px 4px;line-height:1;' + (isLast?'opacity:.15;pointer-events:none':'') + '">▼</button>'
+      + '</div>'
+      + '<input value="' + (item.icon||'').replace(/"/g,'') + '" placeholder="🎯" style="' + _fld + 'width:34px;text-align:center;padding:4px;" oninput="window._editDayItems[' + idx + '].icon=this.value" />'
+      + '<input type="time" value="' + (item.time||'') + '" style="' + _fld + 'width:88px;" oninput="window._editDayItems[' + idx + '].time=this.value" />'
+      + '<input value="' + (item.title||'').replace(/"/g,'&quot;').replace(/</g,'&lt;') + '" placeholder="Event name" style="' + _fld + 'flex:1;min-width:0;" oninput="window._editDayItems[' + idx + '].title=this.value" />'
+      + '<button onclick="_removeEditDayItem(' + idx + ')" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:1rem;flex-shrink:0;padding:2px 4px;" title="Remove">✕</button>'
+      + '</div>';
+  });
+  list.innerHTML = html;
+}
+
+function _moveEditDayItem(idx, dir) {
+  var items = window._editDayItems;
+  var ni = idx + dir;
+  if (ni < 0 || ni >= items.length) return;
+  var tmp = items[idx]; items[idx] = items[ni]; items[ni] = tmp;
+  _refreshEditDayItemsList();
+}
+function _removeEditDayItem(idx) {
+  window._editDayItems.splice(idx, 1);
+  _refreshEditDayItemsList();
+}
+function _addEditDayItem() {
+  window._editDayItems.push({id:'c'+Date.now(), time:'', icon:'📌', title:'', subtitle:''});
+  _refreshEditDayItemsList();
+  var m = document.getElementById('edit-day-agenda-modal');
+  if (m) { var inner = m.querySelector('[onclick*="stopPropagation"]'); if (inner) inner.scrollTop = 99999; }
+}
+function _saveEditDayAgenda() {
+  if (!appState.agendaItemOverrides) appState.agendaItemOverrides = {};
+  appState.agendaItemOverrides[window._editDayStr] = window._editDayItems;
+  saveState(appState);
+  var m = document.getElementById('edit-day-agenda-modal');
+  if (m) m.remove();
+  renderPlannerAgenda();
+  showToast('Day agenda saved ✓', 1800);
+}
+function _resetEditDayAgenda() {
+  if (!confirm('Reset this day to the default schedule?')) return;
+  if (appState.agendaItemOverrides) delete appState.agendaItemOverrides[window._editDayStr];
+  saveState(appState);
+  var m = document.getElementById('edit-day-agenda-modal');
+  if (m) m.remove();
+  renderPlannerAgenda();
+  showToast('Reset to default ✓', 1600);
+}
+
+/* ══════════════════════════════════════════════════════════════════
    PLANNER AGENDA VIEW — Google Calendar–style time-block agenda
    Renders into #agenda-content inside the Planner tab.
    ══════════════════════════════════════════════════════════════════ */
@@ -13403,8 +13595,24 @@ function renderPlannerAgenda() {
   var _agSbEvery = (appState.drivingPrefs && appState.drivingPrefs.stopBreakEvery) || 0;
   var _agSbMins  = (appState.drivingPrefs && appState.drivingPrefs.stopBreakMins)  || 30;
 
-  var todayStr  = new Date().toISOString().slice(0,10);
+  var _td = new Date(); var todayStr = _td.getFullYear() + '-' + String(_td.getMonth()+1).padStart(2,'0') + '-' + String(_td.getDate()).padStart(2,'0');
   var lastMonth = '';
+
+  /* Pre-collect effective dates for collapse state init */
+  { var _pi2=0, _cn2=0, _allEffDates=[];
+    for (var _ai2=0; _ai2<_agSorted.length; _ai2++) {
+      var _d2=_agSorted[_ai2];
+      if (_d2.sleepType==='home' && !_d2.driveDay) continue;
+      if (_agSkip[_d2.day]) continue;
+      while (_pi2<_agPauses.length && _agPauses[_pi2].startDate<=_d2.date) {
+        _cn2 += Math.max(0, Math.round((new Date(_agPauses[_pi2].endDate+'T00:00:00')-new Date(_agPauses[_pi2].startDate+'T00:00:00'))/86400000));
+        _pi2++;
+      }
+      var _ePh2 = _agPhaseOffset[_d2.stopId]||0;
+      _allEffDates.push(new Date(new Date(_d2.date+'T00:00:00').getTime()+(_cn2+_ePh2)*86400000).toISOString().slice(0,10));
+    }
+    _agInitCollapsed(todayStr, _allEffDates);
+  }
 
   /* ── Shared micro-styles ── */
   var _row  = 'display:flex;align-items:flex-start;gap:0;padding:6px 0;border-bottom:1px solid rgba(0,0,0,.05);';
@@ -13467,8 +13675,9 @@ function renderPlannerAgenda() {
     /* ── Day card ── */
     html += '<div style="margin-bottom:10px;border-radius:10px;overflow:hidden;box-shadow:0 1px 5px rgba(0,0,0,.09);">';
 
-    /* Header row */
-    html += '<div style="background:' + _hdrBg + ';color:#fff;padding:9px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;">';
+    /* Header row — collapsible; _isCollapsed used by body wrapper below */
+    var _isCollapsed = !!(_agCollapsed && _agCollapsed[_eStr]);
+    html += '<div onclick="_agToggleDay(\'' + _eStr + '\')" style="background:' + _hdrBg + ';color:#fff;padding:9px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;user-select:none;">';
     html += '<div style="display:flex;align-items:center;gap:10px;">'
       + '<div style="background:rgba(255,255,255,.22);border-radius:7px;padding:4px 9px;text-align:center;min-width:40px;">'
       + '<div style="font-size:.68rem;font-weight:700;opacity:.9;line-height:1.3;">' + _mday + '</div>'
@@ -13480,12 +13689,29 @@ function renderPlannerAgenda() {
       + '<div style="font-size:.72rem;opacity:.85;margin-top:2px;">'
         + (_isDrive ? '🚗 Drive Day' : _isSB ? '🌟 Spring Break' : _isHome ? '🏠 Home' : (_stop ? (_stop.emoji||'') + ' ' : '') + (d.phase||''))
       + '</div></div></div>';
-    if (_wxStr) html += '<div style="font-size:.7rem;text-align:right;line-height:1.5;">' + _wxStr + '</div>';
+    html += '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">';
+    if (_wxStr) html += '<div style="font-size:.7rem;text-align:right;line-height:1.5;opacity:.9;">' + _wxStr + '</div>';
+    html += '<button onclick="event.stopPropagation();showEditDayAgenda(\'' + _eStr + '\')" style="background:rgba(255,255,255,.2);border:none;border-radius:8px;color:#fff;font-size:.68rem;font-weight:800;padding:4px 8px;cursor:pointer;font-family:var(--font);white-space:nowrap;">✏️ Edit</button>'
+      + '<span id="ag-arrow-' + _eStr + '" style="font-size:.9rem;transition:transform .2s;display:inline-block;' + (_isCollapsed ? 'transform:rotate(-90deg)' : '') + '">▾</span>'
+      + '</div>';
     html += '</div>'; /* end header */
 
-    /* Body: time blocks */
-    html += '<div style="background:var(--card);padding:8px 12px;">';
+    /* Body: time blocks — collapsible */
+    html += '<div id="ag-day-body-' + _eStr + '" style="background:var(--card);padding:8px 12px;' + (_isCollapsed ? 'display:none;' : '') + '">';
 
+    /* ── Override items (if saved) or auto-generate from TRIP_DAYS ── */
+    if (appState.agendaItemOverrides && appState.agendaItemOverrides[_eStr]) {
+      var _ovItems = appState.agendaItemOverrides[_eStr];
+      _ovItems.forEach(function(item) {
+        var _tLabel = item.time ? (function(t){var p=t.split(':');return _calFmtTime(parseInt(p[0],10),parseInt(p[1]||'0',10));})(item.time) : '';
+        html += '<div style="' + _row + '">'
+          + '<div style="' + _time + '">' + _tLabel + '</div>'
+          + '<div style="' + _ico  + '">' + (item.icon||'📌') + '</div>'
+          + '<div style="' + _txt  + '"><strong>' + (item.title||'').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</strong>'
+          + (item.subtitle ? '<div style="' + _sub + '">' + (item.subtitle||'').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' : '')
+          + '</div></div>';
+      });
+    } else {
     /* ── DRIVE DAY ── */
     if (_isDrive) {
       var _dpt  = (appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].departTime) || _agDepart;
@@ -13636,6 +13862,7 @@ function renderPlannerAgenda() {
         + '<div style="' + _txt  + '"><strong>Dinner</strong>'
         + '<div style="' + _sub  + '">' + (d.dinner || 'Camp cooking or local restaurant') + '</div></div></div>';
     }
+    } /* end else: auto-generated items */
 
     /* ── Manual events for this date (from appState.agendaEvents) ── */
     var _manualEvs = (appState.agendaEvents || [])
@@ -19009,6 +19236,31 @@ function openAreaInfo(phase, stopId) {
   document.getElementById('aim-phone').style.display = 'none';
   document.getElementById('aim-official-link').style.display = 'none';
   document.getElementById('aim-body').innerHTML = '<div style="text-align:center;padding:30px;color:var(--text-2);font-size:.88rem;">&#128269; Loading area overview&hellip;</div>';
+  // Show ideal stay badge if we have cached data for this stop
+  var _aimIdealBadge = document.getElementById('aim-ideal-badge');
+  if (_aimIdealBadge) {
+    var _aimMv = appState.stopMinVisit && appState.stopMinVisit[stopId];
+    if (_aimMv && _aimMv !== 'loading' && _aimMv.ideal) {
+      _aimIdealBadge.textContent = '⭐ ideal: ' + _aimMv.ideal;
+      _aimIdealBadge.title = _aimMv.note || '';
+      _aimIdealBadge.style.display = 'inline-block';
+    } else {
+      _aimIdealBadge.style.display = 'none';
+      // Load lazily if not yet cached
+      if (!_aimMv) {
+        if (typeof loadStopMinVisit === 'function') {
+          loadStopMinVisit(stopId, function() {
+            var _mv2 = appState.stopMinVisit && appState.stopMinVisit[stopId];
+            if (_mv2 && _mv2 !== 'loading' && _mv2.ideal) {
+              _aimIdealBadge.textContent = '⭐ ideal: ' + _mv2.ideal;
+              _aimIdealBadge.title = _mv2.note || '';
+              _aimIdealBadge.style.display = 'inline-block';
+            }
+          });
+        }
+      }
+    }
+  }
   // Hide restaurant-specific header elements
   var pb = document.getElementById('aim-price-badge'); if (pb) pb.style.display = 'none';
   var planB = document.getElementById('aim-plan-btn'); if (planB) { planB.style.display = 'none'; planB.onclick = null; }
@@ -20030,6 +20282,15 @@ function loadStopMinVisit(stopId) {
     saveState(appState);
     // Refresh the schedule to show the new badge
     try { renderSchedule(); } catch(e) {}
+    // Update aim-ideal-badge if Area Info modal is currently open for this stop
+    try {
+      var _aib = document.getElementById('aim-ideal-badge');
+      if (_aib && obj.ideal) {
+        _aib.textContent = '⭐ ideal: ' + obj.ideal;
+        _aib.title = obj.note || '';
+        _aib.style.display = 'inline-block';
+      }
+    } catch(e) {}
   })
   .catch(function() {
     appState.stopMinVisit[stopId] = null;
@@ -21811,7 +22072,7 @@ function _bcCancelEdit() {
 }
 
 /* ── All-stops bookings view (Tools tab) ──────────────────────── */
-function renderBookings() {
+function renderBookingsTools() {
   var el = document.getElementById('tools-sub-content');
   if (!el) return;
   var allBc = appState.bookingConfirmations || {};
@@ -21853,7 +22114,7 @@ function renderBookings() {
   TRIP_STOPS.forEach(function(stop) {
     if (stop.id === 15) return; // skip home
     var cnt = (allBc[stop.id] || []).length;
-    html += '<button onclick="openBookingModal(' + stop.id + ')" style="background:var(--card);border:1.5px solid ' + (cnt ? 'var(--blue)' : 'var(--border)') + ';border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);color:' + (cnt ? 'var(--blue)' : 'var(--text-2)') + ';white-space:nowrap;">'
+    html += '<button onclick="openBookingModal(' + JSON.stringify(stop.id) + ')" style="background:var(--card);border:1.5px solid ' + (cnt ? 'var(--blue)' : 'var(--border)') + ';border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);color:' + (cnt ? 'var(--blue)' : 'var(--text-2)') + ';white-space:nowrap;">'
       + _sn(stop) + (cnt ? ' <span style="background:var(--blue);color:#fff;border-radius:100px;font-size:.6rem;padding:1px 5px;">' + cnt + '</span>' : ' <i class="fa-solid fa-plus" style="font-size:.65rem;opacity:.6;"></i>')
       + '</button>';
   });
@@ -21914,7 +22175,7 @@ function renderCalendar() {
   var _calSbEvery = (appState.drivingPrefs && appState.drivingPrefs.stopBreakEvery) || 0;
   var _calSbMins  = (appState.drivingPrefs && appState.drivingPrefs.stopBreakMins)  || 30;
 
-  var todayStr = new Date().toISOString().slice(0,10);
+  var _cTd = new Date(); var todayStr = _cTd.getFullYear() + '-' + String(_cTd.getMonth()+1).padStart(2,'0') + '-' + String(_cTd.getDate()).padStart(2,'0');
   var lastMonth = '';
   var html = '<div style="padding:0 0 24px 0;">';
 
@@ -22167,7 +22428,7 @@ function _renderToolsSub() {
   if (!el) return;
   if (_toolsTab === 'calendar') renderCalendar();
   if (_toolsTab === 'expenses') renderExpenses();
-  if (_toolsTab === 'bookings') renderBookings();
+  if (_toolsTab === 'bookings') renderBookingsTools();
   if (_toolsTab === 'rvlog')    renderRVMaintenance();
   if (_toolsTab === 'membook')  renderMemoryBook();
   if (_toolsTab === 'profiles') renderProfiles();
@@ -22361,7 +22622,8 @@ function renderAuditLog() {
   });
 
   dateOrder.forEach(function(d) {
-    var label = d === new Date().toISOString().slice(0,10) ? 'Today' : formatDate(d);
+    var _ltd = new Date(); var _lts = _ltd.getFullYear() + '-' + String(_ltd.getMonth()+1).padStart(2,'0') + '-' + String(_ltd.getDate()).padStart(2,'0');
+    var label = d === _lts ? 'Today' : formatDate(d);
     html += '<div style="font-size:.72rem;font-weight:800;color:var(--text-3);text-transform:uppercase;letter-spacing:.05em;padding:8px 0 4px;">' + label + '</div>';
     dateGroups[d].forEach(function(entry) {
       var t = entry.ts ? new Date(entry.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
