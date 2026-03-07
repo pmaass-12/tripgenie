@@ -6994,6 +6994,26 @@ document.addEventListener('keydown', function(e) {
     function() {
       var m = document.getElementById('forecast-modal-wrapper');
       if (m && m.style.display !== 'none') { _closeForecastModal(); return true; }
+    },
+    function() {
+      var m = document.getElementById('add-agenda-event-modal');
+      if (m) { m.remove(); return true; }
+    },
+    function() {
+      var m = document.getElementById('edit-day-agenda-modal');
+      if (m) { m.remove(); return true; }
+    },
+    function() {
+      var m = document.getElementById('full-sched-editor');
+      if (m) { m.remove(); return true; }
+    },
+    function() {
+      var m = document.getElementById('plan-day-modal');
+      if (m && !m.classList.contains('hidden')) { closePlanPicker(); return true; }
+    },
+    function() {
+      var m = document.getElementById('stop-days-overlay');
+      if (m) { m.remove(); return true; }
     }
   ];
   for (var ci = 0; ci < closers.length; ci++) {
@@ -13595,30 +13615,42 @@ function _refreshEditDayItemsList() {
   var list = document.getElementById('edi-items-list');
   if (!list) return;
   var items = window._editDayItems || [];
-  var _fld = 'border:1px solid var(--border);border-radius:6px;padding:4px 7px;font-size:.78rem;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;';
+  var _fld  = 'border:1px solid var(--border);border-radius:6px;padding:4px 7px;font-size:.78rem;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;box-sizing:border-box;';
+  var _tFld = _fld + 'width:80px;';   /* time input */
   var html = '';
   items.forEach(function(item, idx) {
     var isFirst = idx === 0, isLast = idx === items.length - 1;
     var _hasRich = item.address || item.phone || item.hours || item.url;
-    html += '<div style="display:flex;align-items:center;gap:5px;padding:6px 0;border-bottom:' + (_hasRich?'none':'1px solid var(--border)') + ';">'
+    /* Row 1: reorder arrows | emoji | title | delete */
+    html += '<div style="padding:6px 0 2px;border-bottom:none;">'
+      + '<div style="display:flex;align-items:center;gap:5px;">'
       + '<div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0;">'
       + '<button onclick="_moveEditDayItem(' + idx + ',-1)" style="background:none;border:none;cursor:pointer;font-size:.65rem;color:var(--text-3);padding:1px 4px;line-height:1;' + (isFirst?'opacity:.15;pointer-events:none':'') + '">▲</button>'
       + '<button onclick="_moveEditDayItem(' + idx + ',1)" style="background:none;border:none;cursor:pointer;font-size:.65rem;color:var(--text-3);padding:1px 4px;line-height:1;' + (isLast?'opacity:.15;pointer-events:none':'') + '">▼</button>'
       + '</div>'
-      + '<input value="' + (item.icon||'').replace(/"/g,'') + '" placeholder="🎯" style="' + _fld + 'width:34px;text-align:center;padding:4px;" oninput="window._editDayItems[' + idx + '].icon=this.value" />'
-      + '<input type="time" value="' + (item.time||'') + '" style="' + _fld + 'width:88px;" oninput="window._editDayItems[' + idx + '].time=this.value" />'
+      + '<input value="' + (item.icon||'').replace(/"/g,'') + '" placeholder="🎯" style="' + _fld + 'width:34px;text-align:center;padding:4px;flex-shrink:0;" oninput="window._editDayItems[' + idx + '].icon=this.value" />'
       + '<input value="' + (item.title||'').replace(/"/g,'&quot;').replace(/</g,'&lt;') + '" placeholder="Event name" style="' + _fld + 'flex:1;min-width:0;" oninput="window._editDayItems[' + idx + '].title=this.value" />'
       + '<button onclick="_removeEditDayItem(' + idx + ')" style="background:none;border:none;cursor:pointer;color:var(--red);font-size:1rem;flex-shrink:0;padding:2px 4px;" title="Remove">✕</button>'
+      + '</div>'
+      /* Row 2: start + end time pickers (indented to align under title) */
+      + '<div style="display:flex;align-items:center;gap:6px;padding:4px 0 4px 48px;">'
+      + '<span style="font-size:.67rem;color:var(--text-3);white-space:nowrap;">Start</span>'
+      + '<input type="time" value="' + (item.time||'') + '" style="' + _tFld + '" oninput="window._editDayItems[' + idx + '].time=this.value" />'
+      + '<span style="font-size:.67rem;color:var(--text-3);white-space:nowrap;">End</span>'
+      + '<input type="time" value="' + (item.endTime||'') + '" style="' + _tFld + '" oninput="window._editDayItems[' + idx + '].endTime=this.value" />'
       + '</div>';
-    /* Rich-fields sub-row (read-only; fields are preserved automatically on save) */
+    /* Rich-fields sub-row (read-only; preserved on save) */
     if (_hasRich) {
-      html += '<div style="font-size:.67rem;color:var(--text-3);padding:1px 0 6px 54px;border-bottom:1px solid var(--border);line-height:1.5;">'
+      html += '<div style="font-size:.67rem;color:var(--text-3);padding:2px 0 6px 48px;border-bottom:1px solid var(--border);line-height:1.5;">'
         + (item.address ? '📍 ' + item.address.replace(/</g,'&lt;') + ' ' : '')
-        + (item.phone   ? '&nbsp;📞 ' + item.phone + ' ' : '')
-        + (item.hours   ? '&nbsp;🕐 ' + item.hours : '')
+        + (item.phone   ? '📞 ' + item.phone + ' ' : '')
+        + (item.hours   ? '🕐 ' + item.hours : '')
         + (item.url     ? ' <a href="' + item.url.replace(/"/g,'&quot;') + '" target="_blank" style="color:var(--blue);text-decoration:none;" onclick="event.stopPropagation()">🔗</a>' : '')
         + '</div>';
+    } else {
+      html += '<div style="border-bottom:1px solid var(--border);margin-left:0;"></div>';
     }
+    html += '</div>';
   });
   list.innerHTML = html;
 }
@@ -13635,14 +13667,19 @@ function _removeEditDayItem(idx) {
   _refreshEditDayItemsList();
 }
 function _addEditDayItem() {
-  window._editDayItems.push({id:'c'+Date.now(), time:'', icon:'📌', title:'', subtitle:''});
-  _refreshEditDayItemsList();
-  var m = document.getElementById('edit-day-agenda-modal');
-  if (m) { var inner = m.querySelector('[onclick*="stopPropagation"]'); if (inner) inner.scrollTop = 99999; }
+  /* Open the full smart modal (Gemini lookup + email paste) pre-set to the current day.
+     When saved it writes to agendaItemOverrides[date] and refreshes the Edit Day list. */
+  showAddAgendaEventModal(window._editDayStr);
 }
 function _saveEditDayAgenda() {
   if (!appState.agendaItemOverrides) appState.agendaItemOverrides = {};
-  appState.agendaItemOverrides[window._editDayStr] = window._editDayItems;
+  /* Auto-sort chronologically before saving */
+  var _itemsToSave = (window._editDayItems || []).slice();
+  _itemsToSave.sort(function(a, b) {
+    var at = a.time || '23:59', bt = b.time || '23:59';
+    return at < bt ? -1 : at > bt ? 1 : 0;
+  });
+  appState.agendaItemOverrides[window._editDayStr] = _itemsToSave;
   saveState(appState);
   var m = document.getElementById('edit-day-agenda-modal');
   if (m) m.remove();
@@ -14106,10 +14143,14 @@ function showAddAgendaEventModal(prefillDate, editId) {
     + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Place Name *</label>'
     + '<input id="aae-name" type="text" placeholder="e.g. Dollywood, Zipline Adventures…" value="' + (ev ? ev.name.replace(/"/g,'&quot;') : '') + '" style="' + _fld + '">'
     + '</div>'
-    /* Date */
+    /* Date — fixed label when opened from a specific day, full dropdown otherwise */
     + '<div style="margin-bottom:12px;">'
-    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Date *</label>'
-    + '<select id="aae-date" style="' + _fld + '">' + dateOptions + '</select>'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Date</label>'
+    + (prefillDate && !editId
+        ? '<div style="padding:9px 12px;font-size:.88rem;font-weight:700;color:var(--text);background:var(--bg);border:1.5px solid var(--border);border-radius:9px;">'
+          + new Date(prefillDate + 'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
+          + '</div><input id="aae-date" type="hidden" value="' + prefillDate + '">'
+        : '<select id="aae-date" style="' + _fld + '">' + dateOptions + '</select>')
     + '</div>'
     /* Start + End time */
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'
@@ -14123,6 +14164,13 @@ function showAddAgendaEventModal(prefillDate, editId) {
     + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Website URL <span style="opacity:.6;font-weight:500;">(optional — helps Gemini find address &amp; hours)</span></label>'
     + '<input id="aae-url" type="url" placeholder="https://www.dollywood.com" value="' + (ev ? (ev.url||'').replace(/"/g,'&quot;') : '') + '" style="' + _fld + '">'
     + '</div>'
+    /* Email paste section */
+    + '<div style="margin-bottom:10px;border:1.5px solid rgba(44,95,138,.18);border-radius:9px;overflow:hidden;">'
+    + '<button type="button" onclick="_aaeToggleEmail()" id="aae-email-toggle" style="width:100%;background:rgba(44,95,138,.05);border:none;color:var(--blue);font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);padding:9px 13px;display:flex;align-items:center;justify-content:space-between;">📧 Auto-fill from confirmation email<span id="aae-email-arrow">▸</span></button>'
+    + '<div id="aae-email-body" style="display:none;padding:10px 12px;background:var(--bg);">'
+    + '<textarea id="aae-email-text" rows="4" placeholder="Paste your booking or confirmation email here. Gemini will extract the name, address, phone, hours, and date…" style="' + _fld + 'resize:vertical;margin-bottom:7px;font-size:.78rem;"></textarea>'
+    + '<button id="aae-email-extract-btn" type="button" onclick="_agendaExtractFromEmail()" style="width:100%;background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px;font-size:.78rem;font-weight:800;cursor:pointer;font-family:var(--font);">✨ Extract Info with Gemini</button>'
+    + '</div></div>'
     /* Lookup button */
     + '<button id="aae-lookup-btn" onclick="_agendaLookupInfo()" style="display:flex;align-items:center;justify-content:center;gap:7px;background:var(--blue);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);width:100%;margin-bottom:12px;box-sizing:border-box;">🔍 Look Up Address &amp; Hours with Gemini</button>'
     /* AI result display */
@@ -14156,6 +14204,97 @@ function showAddAgendaEventModal(prefillDate, editId) {
     + '</div></div>';
 
   document.body.insertAdjacentHTML('beforeend', html);
+  /* Escape key closes the modal */
+  function _aaeEscHandler(e) {
+    if (e.key === 'Escape') {
+      var m = document.getElementById('add-agenda-event-modal');
+      if (m) m.remove();
+      document.removeEventListener('keydown', _aaeEscHandler);
+    }
+  }
+  document.addEventListener('keydown', _aaeEscHandler);
+  /* Focus name field */
+  var _nameEl = document.getElementById('aae-name');
+  if (_nameEl && !editId) setTimeout(function() { _nameEl.focus(); }, 60);
+}
+
+/* Toggle email paste section */
+function _aaeToggleEmail() {
+  var body  = document.getElementById('aae-email-body');
+  var arrow = document.getElementById('aae-email-arrow');
+  if (!body) return;
+  var open = body.style.display !== 'none';
+  body.style.display  = open ? 'none' : 'block';
+  if (arrow) arrow.textContent = open ? '▸' : '▾';
+}
+
+/* Extract event info from pasted confirmation email text via Gemini */
+function _agendaExtractFromEmail() {
+  var txt = (document.getElementById('aae-email-text') || {}).value || '';
+  var btn = document.getElementById('aae-email-extract-btn');
+  if (!txt.trim()) { showToast('⚠️ Paste some email text first', 2000); return; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Extracting…'; }
+
+  var prompt = 'From the following email text, extract event/booking details and respond ONLY with these labeled lines (use "Not found" if unknown):\n'
+    + 'NAME: [place or event name]\n'
+    + 'ADDRESS: [full street address with city, state, zip]\n'
+    + 'PHONE: [phone number]\n'
+    + 'HOURS: [hours, e.g. "Open daily 9 AM – 5 PM"]\n'
+    + 'DATE: [date of visit or check-in, in YYYY-MM-DD format]\n'
+    + 'START_TIME: [start or check-in time, in HH:MM 24h format]\n'
+    + 'END_TIME: [end or check-out time, in HH:MM 24h format]\n\n'
+    + 'EMAIL TEXT:\n' + txt.slice(0, 3000);
+
+  var body = JSON.stringify({
+    contents: [{ role:'user', parts:[{ text: prompt }] }],
+    generationConfig: { maxOutputTokens: 300, temperature: 0 }
+  });
+  fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=' + GEMINI_KEY, {
+    method: 'POST', headers: { 'Content-Type':'application/json' }, body: body
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(j) {
+    var raw = ((j.candidates||[])[0]||{});
+    var txt2 = ((raw.content||{}).parts||[]).map(function(p){return p.text||'';}).join('');
+    var _g = function(label) {
+      var m = txt2.match(new RegExp(label + ':\\s*(.+)', 'i'));
+      return (m && m[1].trim() !== 'Not found') ? m[1].trim() : '';
+    };
+    var eName = _g('NAME'), eAddr = _g('ADDRESS'), ePhone = _g('PHONE'),
+        eHours = _g('HOURS'), eDate = _g('DATE'), eStart = _g('START_TIME'), eEnd = _g('END_TIME');
+    /* Fill in the form fields */
+    var nameEl  = document.getElementById('aae-name');
+    var addrEl  = document.getElementById('aae-address');
+    var phoneEl = document.getElementById('aae-phone');
+    var hoursEl = document.getElementById('aae-hours');
+    var startEl = document.getElementById('aae-start');
+    var endEl   = document.getElementById('aae-end');
+    var dateEl  = document.getElementById('aae-date');
+    var resEl   = document.getElementById('aae-ai-result');
+    if (nameEl  && eName)  nameEl.value  = eName;
+    if (addrEl  && eAddr)  addrEl.value  = eAddr;
+    if (phoneEl && ePhone) phoneEl.value = ePhone;
+    if (hoursEl && eHours) hoursEl.value = eHours;
+    if (startEl && eStart) startEl.value = eStart;
+    if (endEl   && eEnd)   endEl.value   = eEnd;
+    /* Date field: only fill if it's a select (multi-day choice) */
+    if (dateEl && eDate && dateEl.tagName === 'SELECT') {
+      dateEl.value = eDate;
+    }
+    /* Show enrichment result */
+    if (resEl && (eAddr || ePhone || eHours)) {
+      resEl.innerHTML = _agendaFormatEnrich(eAddr, ePhone, eHours);
+      resEl.style.display = 'block';
+    }
+    /* Collapse the email section */
+    _aaeToggleEmail();
+    if (btn) { btn.disabled = false; btn.textContent = '✨ Extract Info with Gemini'; }
+    showToast('✅ Info extracted!', 2000);
+  })
+  .catch(function() {
+    if (btn) { btn.disabled = false; btn.textContent = '✨ Extract Info with Gemini'; }
+    showToast('❌ Extraction failed', 2200);
+  });
 }
 
 function _agendaFormatEnrich(address, phone, hours) {
@@ -14181,7 +14320,8 @@ function _agendaLookupInfo() {
     + ' — provide ONLY these 3 lines, no extra text:\n'
     + 'ADDRESS: [full street address with city, state, zip — or "Not found"]\n'
     + 'PHONE: [phone number — or "Not found"]\n'
-    + 'HOURS: [typical hours, e.g. "Open daily 9 AM – 9 PM" — or "Check website"]\n';
+    + 'HOURS: [typical opening hours, e.g. "Open daily 9 AM – 5 PM" or "Mon–Fri 10 AM–6 PM, Sat–Sun 9 AM–4 PM" — or "Not found"]\n'
+    + 'Do not say "Check website" — give your best answer from training data.';
 
   var body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
@@ -14202,7 +14342,7 @@ function _agendaLookupInfo() {
     /* Discard placeholder values */
     if (/not found|not available/i.test(address)) address = '';
     if (/not found|not available/i.test(phone))   phone   = '';
-    if (/check website/i.test(hours))             hours   = '';
+    if (/not found|not available|check website/i.test(hours)) hours = '';
 
     var fA = document.getElementById('aae-address');
     var fP = document.getElementById('aae-phone');
@@ -14269,14 +14409,24 @@ function _saveAgendaEvent(editId) {
     /* Build rich schedule item — subtitle = address · hours */
     var _schedSub = [address, hours].filter(Boolean).join(' · ');
     _agSched.push({
-      id: record.id, time: start || '10:00', icon: '🎯',
+      id: record.id, time: start || '10:00', endTime: end, icon: '🎯',
       title: name, subtitle: _schedSub,
       address: address, phone: phone, hours: hours, url: url, notes: notes
+    });
+    /* Auto-sort the day's items chronologically */
+    _agSched.sort(function(a, b) {
+      var at = a.time || '23:59', bt = b.time || '23:59';
+      return at < bt ? -1 : at > bt ? 1 : 0;
     });
     appState.agendaItemOverrides[date] = _agSched;
     saveState(appState);
     var modal2 = document.getElementById('add-agenda-event-modal');
     if (modal2) modal2.remove();
+    /* If the Edit Day modal is open for the same date, refresh its items list */
+    if (window._editDayStr === date && document.getElementById('edit-day-agenda-modal')) {
+      window._editDayItems = JSON.parse(JSON.stringify(_agSched));
+      _refreshEditDayItemsList();
+    }
     renderPlannerAgenda();
     showToast('📋 Added to day schedule!', 2200);
     return;

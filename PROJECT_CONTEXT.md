@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-07 (Session 19, fifty-third context)
+2026-03-07 (Session 19, fifty-fourth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -55,6 +55,19 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 19 (fifty-fourth context) — 2026-03-07
+
+**Agenda smart modal UX overhaul: date label, email paste, Escape, auto-sort, 2-row Edit Day items, Gemini hours fix.**
+
+- **Date dropdown removed** from smart modal when opened from a specific day — shows fixed date label + hidden input instead of a full dropdown.
+- **+Add Item in Edit Day modal** now opens the full smart modal (Gemini lookup + email paste) instead of adding a blank inline row.
+- **Smart modal refreshes Edit Day list** after save: when `_saveAgendaEvent` saves to `agendaItemOverrides[date]` and the Edit Day modal is open for the same date, it refreshes `window._editDayItems` and re-renders the list.
+- **Email paste → auto-fill**: new collapsible "📧 Auto-fill from confirmation email" section in smart modal. User pastes email text, clicks "Extract Info with Gemini" — Gemini returns NAME, ADDRESS, PHONE, HOURS, DATE, START_TIME, END_TIME and fills all form fields.
+- **Escape closes all modals**: added `add-agenda-event-modal`, `edit-day-agenda-modal`, `full-sched-editor`, `plan-day-modal`, `stop-days-overlay` to the global Escape handler. Smart modal also attaches its own `_aaeEscHandler` on open.
+- **Auto-sort chronologically**: `_saveAgendaEvent` sorts items by `time` before writing to `agendaItemOverrides`. `_saveEditDayAgenda` also sorts before saving.
+- **Edit Day item rows redesigned**: 2-row layout per item — Row 1: arrows | emoji | title | ✕. Row 2 (indented): Start [time] End [time]. Prevents time inputs from falling off screen edge. Items now also store/edit `endTime`.
+- **Gemini hours lookup fixed**: prompt previously said `"Check website"` as a fallback, which was then filtered out. Changed fallback to `"Not found"` and added explicit instruction "Do not say 'Check website' — give your best answer from training data."
 
 ### Session 19 (fifty-third context) — 2026-03-07
 
