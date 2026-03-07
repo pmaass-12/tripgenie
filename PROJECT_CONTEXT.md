@@ -56,6 +56,14 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 19 (fifty-fifth context) — 2026-03-07
+
+**Three schedule date fixes: blue bar depart off-by-one, first stop arrival editable, Settings date sync.**
+
+- **Blue bar depart date fixed**: `_phLastDate` formula changed from `_phCumOffset + totalNights - 1` (which showed the last *night* date, not the departure day, and showed the same date as arrival for 1-night stays) to `_phCumOffset + totalNights`. Now "Depart Wed Mar 4" for a 2-night stay starting Mon Mar 2. Also changed condition from `totalNights > 1` to `totalNights > 0` so 1-night stays correctly show a depart date.
+- **First stop arrival now editable**: Removed the "First stop — read-only" restriction in `_editStopDays`. All stops now show an editable arrive date picker. For the first stop, the hint text reads "Changing this updates the trip start date in Settings." In `_saveStopDays`, when `_sdePrevStopId` is null (first stop), changing the arrive date re-dates all TRIP_DAYS from the new date and updates both `CONFIG.startDate` and `appState.tripSettings.startDate` (same logic as `saveTripSettings`).
+- **Settings start date synced with schedule**: `renderTripSettings` now derives `startVal` from `TRIP_DAYS[0].date` and `endVal` from `TRIP_DAYS[last].date` as ground truth, falling back to saved settings / CONFIG. This ensures the Settings form always reflects the actual first/last dates in the schedule, even if `appState.tripSettings` is stale.
+
 ### Session 19 (fifty-fourth context) — 2026-03-07
 
 **Agenda smart modal UX overhaul: date label, email paste, Escape, auto-sort, 2-row Edit Day items, Gemini hours fix.**

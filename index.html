@@ -9700,8 +9700,8 @@ function phaseHeaderHtml(phase, firstDay) {
   };
   /* Effective start date = raw first date + cumulative prior-stop offsets */
   var _phFirstDate = _phOffDate(phaseDays.length > 0 ? phaseDays[0].date : '', _phCumOffset) || (phaseDays.length > 0 ? phaseDays[0].date : '');
-  /* Effective last date = first date + (totalNights - 1) to account for added/removed days */
-  var _phLastDate  = totalNights > 1 ? (_phOffDate(phaseDays.length > 0 ? phaseDays[0].date : '', _phCumOffset + totalNights - 1) || _phFirstDate) : _phFirstDate;
+  /* Effective last date = first date + totalNights (departure DAY, not last night) */
+  var _phLastDate  = totalNights > 0 ? (_phOffDate(phaseDays.length > 0 ? phaseDays[0].date : '', _phCumOffset + totalNights) || _phFirstDate) : _phFirstDate;
 
   return '<div style="display:flex;align-items:center;gap:0;padding:11px 16px;background:var(--blue);color:#fff;border-radius:10px;margin:18px 0 6px;flex-wrap:wrap;row-gap:8px;">'
 
@@ -9942,25 +9942,17 @@ function _editStopDays(stopId, baseDays) {
   var _lblS  = 'font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);margin-bottom:2px;';
   var _inpS  = 'margin-top:3px;font-size:.92rem;font-weight:800;color:var(--text);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;background:var(--bg);font-family:var(--font);width:100%;box-sizing:border-box;cursor:pointer;';
 
-  var _arrRow = _prevStopId
-    /* Editable arrive picker (not the first stop) */
-    ? '<div style="' + _rowS + 'border-bottom:1px solid var(--border);">'
+  /* Arrive is always editable — for first stop it updates the trip start date */
+  var _arrRow = '<div style="' + _rowS + 'border-bottom:1px solid var(--border);">'
       + '<span style="font-size:1.1rem;width:28px;text-align:center;flex-shrink:0;">🛬</span>'
       + '<div style="flex:1;">'
       + '<div style="' + _lblS + '">Arrive</div>'
       + '<input id="sde-arr-date" type="date" value="' + _arrDate + '"'
       + ' oninput="_sdeArrChanged()"'
       + ' style="' + _inpS + '" />'
-      + '<div style="font-size:.62rem;color:var(--text-3);margin-top:3px;">Changing this also adjusts the prior stop\'s departure</div>'
+      + '<div style="font-size:.62rem;color:var(--text-3);margin-top:3px;">'
+      + (_prevStopId ? 'Changing this also adjusts the prior stop\'s departure' : 'Changing this updates the trip start date in Settings')
       + '</div>'
-      + '</div>'
-    /* Read-only arrive for the very first stop */
-    : '<div style="' + _rowS + 'border-bottom:1px solid var(--border);background:rgba(0,0,0,.02);">'
-      + '<span style="font-size:1.1rem;width:28px;text-align:center;flex-shrink:0;">🛬</span>'
-      + '<div>'
-      + '<div style="' + _lblS + '">Arrive</div>'
-      + '<div style="font-size:.96rem;font-weight:800;color:var(--text);">' + (_arrDate ? formatDate(_arrDate) : '—') + '</div>'
-      + '<div style="font-size:.66rem;color:var(--text-3);margin-top:2px;">First stop — reflects trip start date</div>'
       + '</div>'
       + '</div>';
 
@@ -10070,14 +10062,33 @@ function _saveStopDays(stopId, baseDays) {
 
   if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
 
-  /* If arrival date was changed, absorb the delta into the PREVIOUS stop's phaseExtraDays.
-     This shifts Winchester's arrival from (e.g.) Mar 1 → Mar 2 by telling the
-     prior stop it ran 1 day longer — all subsequent stops cascade forward.          */
-  if (arrInp && arrInp.value && window._sdeOrigArrMs && window._sdePrevStopId) {
+  /* If arrival date changed: cascade the delta appropriately */
+  if (arrInp && arrInp.value && window._sdeOrigArrMs) {
     var arrDelta = Math.round((newArrMs - window._sdeOrigArrMs) / 86400000);
     if (arrDelta !== 0) {
-      appState.phaseExtraDays[window._sdePrevStopId] =
-        (appState.phaseExtraDays[window._sdePrevStopId] || 0) + arrDelta;
+      if (window._sdePrevStopId) {
+        /* Non-first stop: absorb delta into previous stop's phaseExtraDays
+           so all subsequent stops cascade forward by the same amount.      */
+        appState.phaseExtraDays[window._sdePrevStopId] =
+          (appState.phaseExtraDays[window._sdePrevStopId] || 0) + arrDelta;
+      } else {
+        /* First stop: changing arrival = changing the trip start date.
+           Re-date all TRIP_DAYS from the new start and update CONFIG.     */
+        var _newStartStr = arrInp.value;
+        CONFIG.startDate = _newStartStr;
+        if (!appState.tripSettings) appState.tripSettings = {};
+        appState.tripSettings.startDate = _newStartStr;
+        var _rdMs = new Date(_newStartStr + 'T00:00:00').getTime();
+        TRIP_DAYS.forEach(function(d, i) {
+          var _rd = new Date(_rdMs + i * 86400000);
+          d.date = _rd.getFullYear() + '-'
+            + String(_rd.getMonth() + 1).padStart(2, '0') + '-'
+            + String(_rd.getDate()).padStart(2, '0');
+        });
+        /* Recompute newArrMs from the freshly-updated TRIP_DAYS[0].date */
+        var _phaseDays0 = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
+        if (_phaseDays0.length) newArrMs = new Date(_phaseDays0[0].date + 'T12:00:00').getTime();
+      }
     }
   }
 
@@ -23271,10 +23282,10 @@ function renderTripSettings() {
   var el = document.getElementById('tools-sub-content');
   if (!el) return;
 
-  // Current values — use any saved overrides, otherwise CONFIG defaults
+  // Current values — derive from TRIP_DAYS (ground truth) then fall back to saved settings / CONFIG
   var s = appState.tripSettings || {};
-  var startVal = s.startDate || CONFIG.startDate;
-  var endVal   = s.endDate   || CONFIG.endDate;
+  var startVal = (TRIP_DAYS && TRIP_DAYS.length ? TRIP_DAYS[0].date : null) || s.startDate || CONFIG.startDate;
+  var endVal   = (TRIP_DAYS && TRIP_DAYS.length ? TRIP_DAYS[TRIP_DAYS.length - 1].date : null) || s.endDate || CONFIG.endDate;
   var nameVal  = s.tripName  || 'Maass Family RV Adventure 2026';
 
   // Compute days between the two dates
