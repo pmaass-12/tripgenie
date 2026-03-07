@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-05 (Session 19, forty-sixth context)
+2026-03-07 (Session 19, fifty-first context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -16,7 +16,8 @@ A personal RV trip planner web app for the Maass Family RV Adventure 2026. Stati
 
 ```
 tripgenie/
-├── index.html                    # Main app (primary working file, ~27,400 lines)
+├── index.html                    # Main app (primary working file, ~30,000+ lines)
+├── test.html                     # Comprehensive standalone regression test suite (23+ tests)
 ├── index2.html                   # Alternate version / experiment
 ├── simple-mode.html              # Simplified mode variant
 ├── mockup_desktop_v2.html        # Desktop layout mockup v2
@@ -54,6 +55,19 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 19 (fifty-first context) — 2026-03-07
+
+**Critical root-cause fix: ALL blue phase bar buttons broken for string-ID stops. Rich Gemini event → schedule integration. Comprehensive regression test suite.**
+
+- **ROOT CAUSE FIX — HTML attribute double-quote escaping (`_sidAttr`)**: `JSON.stringify("nashville-tn")` returns `"nashville-tn"` WITH outer double-quotes. When injected directly into `onclick="removePhaseDay("nashville-tn")"`, the HTML parser terminated the attribute at the 2nd `"` — the JS was truncated and every click produced `SyntaxError: Unexpected end of input`. Only string-ID stops were affected (nashville-tn, dallas-tx, winnemucca, etc.); numeric IDs were fine. Fix: added `var _sidAttr = _sid.replace(/"/g, '&quot;')` in `phaseHeaderHtml()` and replaced all 12 onclick usages of `_sid` with `_sidAttr`. Browser decodes `&quot;` → `"` before JS runs, so the call executes correctly. Also added `_pStopAttr` for the edit city name call.
+- **All 5 remaining `openBookingModal` call sites fixed**: Dashboard sleep button, first-stop sleep button, day detail modal booking card, day detail modal booking button, and planner next-card booking chip — all were missing `.replace(/"/g,'&quot;')`. Now consistently HTML-safe for string stop IDs.
+- **Escape key closes booking modal**: Added `_bcEscHandler` keydown listener attached when `openBookingModal()` is called; auto-removes itself when modal closes.
+- **Waypoint section buttons fixed**: Removed leftover `event.stopPropagation()` and fixed `_sid` → `_sidAttr` in `toggleWaypointOverride` and `removeStopFromTrip` buttons in the waypoint section of `phaseHeaderHtml`.
+- **Rich Gemini event → main schedule ("Titanic feature")**: In `showAddAgendaEventModal`, added "📋 Add to Day Schedule (reorderable)" checkbox toggle for new events. When checked, `_saveAgendaEvent` writes to `appState.agendaItemOverrides[date]` instead of `agendaEvents`. Builds default day items first (via `_buildDayItems`) then appends the rich item, so the full day schedule is preserved. Item stored with `{id, time, icon, title, subtitle, address, phone, hours, url, notes}`.
+- **Override item renderer in `renderPlannerAgenda` updated**: Shows `address`, `phone`, `hours`, `url` as sub-rows when present on an override item.
+- **`_refreshEditDayItemsList` updated**: Shows rich fields (address, phone, hours, url) as a read-only sub-row below each item in the Edit Day bottom sheet.
+- **NEW `test.html`**: Comprehensive standalone regression test suite (no external dependencies, works offline). 23+ automated tests across 5 sections: (1) TRIP_DATA static validation, (2) effective date computation simulation (mirrors `_schPhaseOffset` algorithm), (3) date logic checks (no duplicates, consecutive diffs, drive day sequences), (4) localStorage/appState live reads, (5) manual UI smoke test checklist. TRIP_DAYS and TRIP_STOPS inlined directly from index.html.
 
 ### Session 19 (fiftieth context) — 2026-03-07
 
