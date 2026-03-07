@@ -11845,7 +11845,7 @@ function renderStops() {
         ? 'background:var(--green);color:#fff;border:none;'
         : 'background:var(--green-l);color:var(--green);border:1px solid #a8d5b8;';
 
-      html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius-s);padding:11px 14px;cursor:pointer;" onclick="openPlaceInfo(\'a\',' + stop.id + ',' + ai + ')">';
+      html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius-s);padding:11px 14px;cursor:pointer;" onclick="openPlaceInfo(\'a\',' + JSON.stringify(stop.id).replace(/"/g,'&quot;') + ',' + ai + ')">';
       html += '<div style="display:flex;align-items:flex-start;gap:10px;">';
       html += '<div style="flex:1;">';
       html += '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:5px;">';
@@ -11861,7 +11861,7 @@ function renderStops() {
       html += '</div>';
       html += '<div style="text-align:center;min-width:56px;display:flex;flex-direction:column;align-items:center;gap:6px;">';
       html += '<div><div style="font-size:.82rem;font-weight:700;color:var(--text-2);">' + act.kidRating + '<span style="color:#E8813A;">&#9733;</span></div><div style="font-size:.62rem;color:var(--text-3);">kids</div></div>';
-      html += '<button onclick="event.stopPropagation();openPlanPicker(' + stop.id + ',\'a\',' + ai + ')" style="' + planBtnA + 'border-radius:100px;font-family:var(--font);font-size:.7rem;font-weight:800;padding:5px 8px;cursor:pointer;white-space:nowrap;">'
+      html += '<button onclick="event.stopPropagation();openPlanPicker(' + JSON.stringify(stop.id).replace(/"/g,'&quot;') + ',\'a\',' + ai + ')" style="' + planBtnA + 'border-radius:100px;font-family:var(--font);font-size:.7rem;font-weight:800;padding:5px 8px;cursor:pointer;white-space:nowrap;">'
         + (isPlannedA ? '&#9989; Planned' : '+ Plan') + '</button>';
       html += '<span style="font-size:.9rem;color:var(--text-3);">&#8250;</span>';
       html += '</div>';
@@ -11904,7 +11904,7 @@ function renderStops() {
         ? 'background:var(--green);color:#fff;border:none;'
         : 'background:var(--green-l);color:var(--green);border:1px solid #a8d5b8;';
 
-      html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius-s);padding:11px 14px;cursor:pointer;" onclick="openPlaceInfo(\'r\',' + stop.id + ',' + ri + ')">';
+      html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius-s);padding:11px 14px;cursor:pointer;" onclick="openPlaceInfo(\'r\',' + JSON.stringify(stop.id).replace(/"/g,'&quot;') + ',' + ri + ')">';
       html += '<div style="display:flex;align-items:flex-start;gap:10px;">';
       html += '<div style="flex:1;">';
       html += '<div style="display:flex;align-items:center;flex-wrap:wrap;gap:7px;margin-bottom:4px;">';
@@ -11926,7 +11926,7 @@ function renderStops() {
       html += '<div>'
         + '<div style="font-size:.82rem;font-weight:700;color:var(--text-2);">' + rest.rating + '<span style="color:#E8813A;">&#9733;</span></div>'
         + '<div style="font-size:.72rem;font-weight:800;color:' + priceClr + ';background:' + priceBg + ';border-radius:12px;padding:1px 6px;">' + rest.price + '</div></div>';
-      html += '<button onclick="event.stopPropagation();openPlanPicker(' + stop.id + ',\'r\',' + ri + ')" style="' + planBtnR + 'border-radius:100px;font-family:var(--font);font-size:.7rem;font-weight:800;padding:5px 8px;cursor:pointer;white-space:nowrap;">'
+      html += '<button onclick="event.stopPropagation();openPlanPicker(' + JSON.stringify(stop.id).replace(/"/g,'&quot;') + ',\'r\',' + ri + ')" style="' + planBtnR + 'border-radius:100px;font-family:var(--font);font-size:.7rem;font-weight:800;padding:5px 8px;cursor:pointer;white-space:nowrap;">'
         + (isPlannedR ? '&#9989; Planned' : '+ Plan') + '</button>';
       html += '<span style="font-size:.9rem;color:var(--text-3);">&#8250;</span>';
       html += '</div>';
@@ -18306,7 +18306,7 @@ function renderDayTimeBlocks(d, stop) {
   var dRest = rests.length ? pickMealRest(rests, 'dinner',    _usedMealIdxs, mealSkips.dinner)    : null;
 
   function tbbAiBtn(type, stopId, idx) {
-    return 'openPlaceInfo(\'' + type + '\',' + stopId + ',' + idx + ')';
+    return 'openPlaceInfo(\'' + type + '\',' + JSON.stringify(stopId).replace(/"/g,'&quot;') + ',' + idx + ')';
   }
 
   /* Pull per-day overrides (custom times, custom places, notes) */
