@@ -9887,10 +9887,28 @@ function _editStopDays(stopId, baseDays) {
 
   /* Effective dates for this stop */
   var _ed      = _getStopEffectiveDates(stopId);
-  window._sdeArrMs = _ed.arrMs || null;
+  window._sdeOrigArrMs = _ed.arrMs || null;  /* original arrival — used to compute delta on save */
+  window._sdeArrMs     = _ed.arrMs || null;  /* kept in sync with arr input for _sdeUpdateNights */
   var _arrDate = _ed.arrival   || '';   /* YYYY-MM-DD */
   var _depDate = _ed.departure || '';   /* YYYY-MM-DD */
-  var _arrFmt  = _arrDate ? formatDate(_arrDate) : '—';
+
+  /* Find the previous stop in TRIP_DAYS (to absorb arrive-date shifts) */
+  var _seenPrev = [], _prevStopId = null;
+  TRIP_DAYS.forEach(function(d) {
+    if (_seenPrev.indexOf(d.stopId) === -1) {
+      _seenPrev.push(d.stopId);
+      if (d.stopId !== stopId) _prevStopId = d.stopId;
+      /* stop scanning once we've passed our stop */
+    }
+  });
+  /* Proper approach: find last unique stopId BEFORE ours */
+  _prevStopId = null;
+  var _hitThis = false;
+  for (var _pi = _seenPrev.length - 1; _pi >= 0; _pi--) {
+    if (_seenPrev[_pi] === stopId) { _hitThis = true; continue; }
+    if (_hitThis) { _prevStopId = _seenPrev[_pi]; break; }
+  }
+  window._sdePrevStopId = _prevStopId;    /* null if this is the first stop */
 
   /* HTML-safe stopId for onclick attributes inside innerHTML */
   var _sidSafe = JSON.stringify(stopId).replace(/"/g, '&quot;');
@@ -9900,9 +9918,31 @@ function _editStopDays(stopId, baseDays) {
   ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.48);z-index:9800;display:flex;align-items:center;justify-content:center;padding:16px;';
   ov.onclick = function(e) { if (e.target === ov) ov.remove(); };
 
-  var _rowS = 'display:flex;align-items:center;gap:12px;padding:12px 16px;';
-  var _lblS = 'font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);margin-bottom:2px;';
-  var _valS = 'font-size:.96rem;font-weight:800;color:var(--text);';
+  var _rowS  = 'display:flex;align-items:center;gap:12px;padding:12px 16px;';
+  var _lblS  = 'font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--text-3);margin-bottom:2px;';
+  var _inpS  = 'margin-top:3px;font-size:.92rem;font-weight:800;color:var(--text);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;background:var(--bg);font-family:var(--font);width:100%;box-sizing:border-box;cursor:pointer;';
+
+  var _arrRow = _prevStopId
+    /* Editable arrive picker (not the first stop) */
+    ? '<div style="' + _rowS + 'border-bottom:1px solid var(--border);">'
+      + '<span style="font-size:1.1rem;width:28px;text-align:center;flex-shrink:0;">🛬</span>'
+      + '<div style="flex:1;">'
+      + '<div style="' + _lblS + '">Arrive</div>'
+      + '<input id="sde-arr-date" type="date" value="' + _arrDate + '"'
+      + ' oninput="_sdeArrChanged()"'
+      + ' style="' + _inpS + '" />'
+      + '<div style="font-size:.62rem;color:var(--text-3);margin-top:3px;">Changing this also adjusts the prior stop\'s departure</div>'
+      + '</div>'
+      + '</div>'
+    /* Read-only arrive for the very first stop */
+    : '<div style="' + _rowS + 'border-bottom:1px solid var(--border);background:rgba(0,0,0,.02);">'
+      + '<span style="font-size:1.1rem;width:28px;text-align:center;flex-shrink:0;">🛬</span>'
+      + '<div>'
+      + '<div style="' + _lblS + '">Arrive</div>'
+      + '<div style="font-size:.96rem;font-weight:800;color:var(--text);">' + (_arrDate ? formatDate(_arrDate) : '—') + '</div>'
+      + '<div style="font-size:.66rem;color:var(--text-3);margin-top:2px;">First stop — reflects trip start date</div>'
+      + '</div>'
+      + '</div>';
 
   ov.innerHTML =
     '<div style="background:var(--card);border-radius:18px;max-width:340px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.28);overflow:hidden;">'
@@ -9913,15 +9953,8 @@ function _editStopDays(stopId, baseDays) {
     + '<div style="font-size:.72rem;opacity:.8;margin-top:1px;">Edit dates at this stop</div></div>'
     + '<button onclick="document.getElementById(\'stop-days-overlay\').remove()" style="margin-left:auto;background:rgba(255,255,255,.18);border:none;color:#fff;border-radius:50%;width:28px;height:28px;font-size:1.1rem;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>'
     + '</div>'
-    /* Arrive row — read-only (set by prior stops) */
-    + '<div style="' + _rowS + 'border-bottom:1px solid var(--border);background:rgba(0,0,0,.02);">'
-    + '<span style="font-size:1.1rem;width:28px;text-align:center;flex-shrink:0;">🛬</span>'
-    + '<div>'
-    + '<div style="' + _lblS + '">Arrive</div>'
-    + '<div style="' + _valS + '">' + _arrFmt + '</div>'
-    + '<div style="font-size:.66rem;color:var(--text-3);margin-top:2px;">Determined by prior stops</div>'
-    + '</div>'
-    + '</div>'
+    /* Arrive row (editable or read-only depending on whether there's a prior stop) */
+    + _arrRow
     /* Depart date picker */
     + '<div style="' + _rowS + 'border-bottom:1px solid var(--border);">'
     + '<span style="font-size:1.1rem;width:28px;text-align:center;flex-shrink:0;">🛫</span>'
@@ -9930,10 +9963,10 @@ function _editStopDays(stopId, baseDays) {
     + '<input id="sde-dep-date" type="date" value="' + _depDate + '"'
     + (_arrDate ? ' min="' + _arrDate + '"' : '')
     + ' oninput="_sdeUpdateNights()"'
-    + ' style="margin-top:3px;font-size:.92rem;font-weight:800;color:var(--text);border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;background:var(--bg);font-family:var(--font);width:100%;box-sizing:border-box;cursor:pointer;" />'
+    + ' style="' + _inpS + '" />'
     + '</div>'
     + '</div>'
-    /* Nights — auto-calculated from the two dates */
+    /* Nights — auto-calculated */
     + '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px 12px;background:rgba(44,95,138,.05);">'
     + '<span style="font-size:1rem;width:28px;text-align:center;flex-shrink:0;">🌙</span>'
     + '<div id="sde-nights-label" style="font-size:.87rem;font-weight:700;color:var(--blue);">'
@@ -9952,30 +9985,82 @@ function _editStopDays(stopId, baseDays) {
     + '</div>';
 
   document.body.appendChild(ov);
-  var inp = document.getElementById('sde-dep-date');
-  if (inp) inp.focus();
+  /* Focus arrive if editable, else depart */
+  var focusEl = document.getElementById('sde-arr-date') || document.getElementById('sde-dep-date');
+  if (focusEl) focusEl.focus();
   ov.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') ov.remove();
   });
 }
 
-/* Live-update the nights count as the depart date changes */
+/* Called when the arrive date input changes — advances depart to keep the same number of
+   nights, and updates the depart min so depart can't be set before arrive.                 */
+function _sdeArrChanged() {
+  var arrInp = document.getElementById('sde-arr-date');
+  var depInp = document.getElementById('sde-dep-date');
+  var lbl    = document.getElementById('sde-nights-label');
+  if (!arrInp || !depInp) return;
+
+  var newArrMs = arrInp.value ? new Date(arrInp.value + 'T12:00:00').getTime() : null;
+  if (!newArrMs) return;
+
+  /* Keep the same number of nights — slide depart forward/backward with arrive */
+  var origArrMs = window._sdeOrigArrMs || newArrMs;
+  var depMs     = depInp.value ? new Date(depInp.value + 'T12:00:00').getTime() : (newArrMs + 86400000);
+  var nights    = Math.max(0, Math.round((depMs - origArrMs) / 86400000));
+  var newDepMs  = newArrMs + nights * 86400000;
+  depInp.value  = new Date(newDepMs).toISOString().substring(0, 10);
+  depInp.min    = arrInp.value;
+
+  /* Keep _sdeArrMs in sync so _sdeUpdateNights reads the right base */
+  window._sdeArrMs = newArrMs;
+  _sdeUpdateNights();
+}
+
+/* Live-update the nights count as the arrive or depart date changes */
 function _sdeUpdateNights() {
-  var inp = document.getElementById('sde-dep-date');
-  var lbl = document.getElementById('sde-nights-label');
-  if (!inp || !lbl || !window._sdeArrMs) return;
-  var depMs = inp.value ? new Date(inp.value + 'T12:00:00').getTime() : null;
-  if (!depMs || depMs <= window._sdeArrMs) { lbl.textContent = '0 nights'; return; }
-  var n = Math.round((depMs - window._sdeArrMs) / 86400000);
+  var arrInp = document.getElementById('sde-arr-date');
+  var depInp = document.getElementById('sde-dep-date');
+  var lbl    = document.getElementById('sde-nights-label');
+  if (!depInp || !lbl) return;
+  /* Use arr input if present (editable), else fall back to original computed value */
+  var arrMs = (arrInp && arrInp.value)
+    ? new Date(arrInp.value + 'T12:00:00').getTime()
+    : window._sdeArrMs;
+  if (!arrMs) return;
+  var depMs = depInp.value ? new Date(depInp.value + 'T12:00:00').getTime() : null;
+  if (!depMs || depMs <= arrMs) { lbl.textContent = '0 nights'; return; }
+  var n = Math.round((depMs - arrMs) / 86400000);
   lbl.textContent = n + ' night' + (n !== 1 ? 's' : '');
 }
 
 function _saveStopDays(stopId, baseDays) {
-  var inp = document.getElementById('sde-dep-date');
-  if (!inp || !inp.value || !window._sdeArrMs) return;
-  var depMs    = new Date(inp.value + 'T12:00:00').getTime();
-  var newTotal = Math.max(0, Math.round((depMs - window._sdeArrMs) / 86400000));
+  var arrInp = document.getElementById('sde-arr-date');
+  var depInp = document.getElementById('sde-dep-date');
+  if (!depInp || !depInp.value) return;
+
+  /* Resolve the effective arrival — may have been edited */
+  var newArrMs = (arrInp && arrInp.value)
+    ? new Date(arrInp.value + 'T12:00:00').getTime()
+    : window._sdeOrigArrMs;
+  if (!newArrMs) return;
+
+  var depMs    = new Date(depInp.value + 'T12:00:00').getTime();
+  var newTotal = Math.max(0, Math.round((depMs - newArrMs) / 86400000));
+
   if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
+
+  /* If arrival date was changed, absorb the delta into the PREVIOUS stop's phaseExtraDays.
+     This shifts Winchester's arrival from (e.g.) Mar 1 → Mar 2 by telling the
+     prior stop it ran 1 day longer — all subsequent stops cascade forward.          */
+  if (arrInp && arrInp.value && window._sdeOrigArrMs && window._sdePrevStopId) {
+    var arrDelta = Math.round((newArrMs - window._sdeOrigArrMs) / 86400000);
+    if (arrDelta !== 0) {
+      appState.phaseExtraDays[window._sdePrevStopId] =
+        (appState.phaseExtraDays[window._sdePrevStopId] || 0) + arrDelta;
+    }
+  }
+
   appState.phaseExtraDays[stopId] = newTotal - baseDays;
   saveState(appState);
   var ov = document.getElementById('stop-days-overlay');

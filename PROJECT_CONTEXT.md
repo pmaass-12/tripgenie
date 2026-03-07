@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-07 (Session 19, fifty-second context)
+2026-03-07 (Session 19, fifty-third context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -55,6 +55,16 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 19 (fifty-third context) — 2026-03-07
+
+**Arrive date now editable in single-stop date editor.**
+
+- **`_editStopDays`**: Arrive row is now an editable `<input type="date">` for any stop that has a prior stop. First stop still shows arrival as read-only (trip start). Helper note explains "Changing this also adjusts the prior stop's departure".
+- **`_sdeArrChanged()`**: New handler — when arrive date changes, slides depart forward/backward to preserve the same number of nights, updates depart `min`, keeps `_sdeArrMs` in sync.
+- **`_sdeUpdateNights()`**: Now reads from `sde-arr-date` input if present, falling back to `_sdeOrigArrMs` if arrive is read-only.
+- **`_saveStopDays()`**: If arrive date changed, computes the delta (days) and applies it to the **previous stop's** `phaseExtraDays`. This shifts the arrival of the current stop without breaking the cascade (all subsequent stops shift the same amount). Current stop's nights = (dep − new_arr) stored normally.
+- Modal now auto-focuses the arrive input (if editable).
 
 ### Session 19 (fifty-second context) — 2026-03-07
 
