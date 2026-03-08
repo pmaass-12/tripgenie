@@ -56,6 +56,15 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 19 (fifty-seventh context) — 2026-03-07
+
+**Agenda date bugs fixed: unsorted _agPhaseOffset, _getStopEffectiveDates loop, agendaItemOverrides key migration.**
+
+- **Bug 1 (Agenda dates wrong — Mar 7 pushed to Mar 8, Nashville missing)**: `renderPlannerAgenda._agPhaseOffset` was computed from unsorted `TRIP_DAYS`, causing every stop's phase offset to be wrong whenever `customTripData.days` is out of date order. Fixed by computing `_agPhaseOffset` from `_agSorted` (date-sorted), matching `renderSchedule._schPhaseOffset` exactly.
+- **Bug 2 (showEditDayAgenda could find wrong day)**: Same unsorted-TRIP_DAYS issue in `showEditDayAgenda._phOff`. Fixed to sort before computing.
+- **Bug 3 (_getStopEffectiveDates included subsequent stops in cumOffset)**: The `forEach` loop only did `return` (skip current iteration) when hitting `stopId`, so it continued and added phaseExtraDays for stops AFTER the current stop into cumOffset — logically wrong. Fixed by changing to a `for` loop that `break`s when `stopId` is hit. Now cumOffset only includes stops strictly before the current stop, matching `renderSchedule._schPhaseOffset`.
+- **Bug 4 (Planner suggestions / agenda items "deleted" after date edits)**: `agendaItemOverrides` was keyed by effective-date strings. When `phaseExtraDays` changed (e.g., after editing arrive dates), effective dates shifted and items appeared to vanish. Fixed by keying all new saves by `d.day` (day number, stable through date changes). Added `_migrateAgendaItemOverrideKeys()` — called at the top of `renderPlannerAgenda()` — which remaps any legacy date-string keys to day-number keys on first run.
+
 ### Session 19 (fifty-sixth context) — 2026-03-07
 
 **Fix date cascade for out-of-order TRIP_DAYS (blue bar / modal inconsistency, GSM not cascading).**

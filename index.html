@@ -9854,6 +9854,55 @@ function removePhaseDay(stopId) {
    Shows arrival date, live-updating departure, and a nights stepper.
    "Edit all stops" opens showFullScheduleEditor() for batch edits.       */
 
+/* One-time migration: convert agendaItemOverrides keys from date-strings to day-numbers.
+   Date-string keys break when phaseExtraDays shifts effective dates — items appear to vanish.
+   Day-number keys are stable regardless of schedule date changes.                          */
+function _migrateAgendaItemOverrideKeys() {
+  if (!appState.agendaItemOverrides) return;
+  /* Check if any keys are date strings (YYYY-MM-DD) */
+  var _hasDateKey = false;
+  Object.keys(appState.agendaItemOverrides).forEach(function(k) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(k))) _hasDateKey = true;
+  });
+  if (!_hasDateKey) return; /* already fully migrated */
+
+  /* Build effective-date → dayNum + base-date → dayNum maps using sorted TRIP_DAYS */
+  var _mTD = TRIP_DAYS.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0;});
+  var _mSeen = [], _mCum = 0, _mOff = {};
+  _mTD.forEach(function(d) {
+    if (_mSeen.indexOf(d.stopId) === -1) {
+      _mSeen.push(d.stopId);
+      _mOff[d.stopId] = _mCum;
+      _mCum += (appState.phaseExtraDays && appState.phaseExtraDays[d.stopId]) || 0;
+    }
+  });
+  var _dateToDay = {};
+  _mTD.forEach(function(d) {
+    var off = _mOff[d.stopId] || 0;
+    var effDate = new Date(new Date(d.date+'T00:00:00').getTime() + off*86400000).toISOString().slice(0,10);
+    if (!_dateToDay[effDate]) _dateToDay[effDate] = d.day; /* effective date */
+    if (!_dateToDay[d.date])  _dateToDay[d.date]  = d.day; /* base date (fallback) */
+  });
+
+  var _newOv = {}, _changed = false;
+  Object.keys(appState.agendaItemOverrides).forEach(function(k) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(k))) {
+      var _dn = _dateToDay[k];
+      if (_dn !== undefined) {
+        _newOv[_dn] = appState.agendaItemOverrides[k];
+        _changed = true;
+      }
+      /* Drop date keys that don't map to any day — stale/no longer in schedule */
+    } else {
+      _newOv[k] = appState.agendaItemOverrides[k]; /* keep non-date keys */
+    }
+  });
+  if (_changed) {
+    appState.agendaItemOverrides = _newOv;
+    saveState(appState);
+  }
+}
+
 /* Compute cumulative phaseExtraDays offset for a stopId (from prior stops only) */
 function _getStopEffectiveDates(stopId) {
   /* Sort by date so cumOffset reflects the same chronological order
@@ -9861,14 +9910,18 @@ function _getStopEffectiveDates(stopId) {
   var _sortedTD = TRIP_DAYS.slice().sort(function(a, b) {
     return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.day||0) - (b.day||0);
   });
+  /* Accumulate phaseExtraDays only from stops that come BEFORE stopId.
+     Use a for loop with break so we stop as soon as we reach stopId —
+     a forEach 'return' only skips the current iteration, not the whole loop,
+     which would incorrectly include subsequent stops' extras in cumOffset. */
   var cumOffset = 0, seenStops = [];
-  _sortedTD.forEach(function(d) {
-    if (seenStops.indexOf(d.stopId) === -1) {
-      seenStops.push(d.stopId);
-      if (d.stopId === stopId) return; /* don't include this stop's own extras */
-      cumOffset += (appState.phaseExtraDays && appState.phaseExtraDays[d.stopId]) || 0;
-    }
-  });
+  for (var _gsi = 0; _gsi < _sortedTD.length; _gsi++) {
+    var _gd = _sortedTD[_gsi];
+    if (seenStops.indexOf(_gd.stopId) !== -1) continue;
+    seenStops.push(_gd.stopId);
+    if (_gd.stopId === stopId) break; /* reached current stop — stop here */
+    cumOffset += (appState.phaseExtraDays && appState.phaseExtraDays[_gd.stopId]) || 0;
+  }
   var phaseDays = _sortedTD.filter(function(d) { return d.stopId === stopId; });
   if (!phaseDays.length || !phaseDays[0].date) return { arrival:null, departure:null, totalNights:0 };
   var arrMs = new Date(phaseDays[0].date + 'T12:00:00').getTime() + cumOffset * 86400000;
@@ -13557,9 +13610,11 @@ function showEditDayAgenda(dateStr) {
   var ex = document.getElementById('edit-day-agenda-modal');
   if (ex) ex.remove();
 
-  /* Find the TRIP_DAY entry for this effective date */
+  /* Find the TRIP_DAY entry for this effective date.
+     IMPORTANT: sort before computing _phOff so cumulative offsets match renderSchedule. */
+  var _sorted = TRIP_DAYS.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0;});
   var _phOff = {}, _cumO = 0, _seen = [];
-  TRIP_DAYS.forEach(function(td) {
+  _sorted.forEach(function(td) {
     if (_seen.indexOf(td.stopId) === -1) {
       _seen.push(td.stopId);
       _phOff[td.stopId] = _cumO;
@@ -13568,7 +13623,6 @@ function showEditDayAgenda(dateStr) {
   });
   var _pauses = (appState.pauseDays||[]).filter(function(p){return p.startDate&&p.endDate;}).sort(function(a,b){return a.startDate<b.startDate?-1:1;});
   var _pi=0, _cn=0;
-  var _sorted = TRIP_DAYS.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0;});
   var d = null;
   _sorted.forEach(function(td) {
     if (d) return;
@@ -13579,16 +13633,19 @@ function showEditDayAgenda(dateStr) {
   if (!d) { showToast('Day not found', 1500); return; }
 
   var agOpts = { depart:(appState.drivingPrefs&&appState.drivingPrefs.departureTime)||'08:00', sbEvery:(appState.drivingPrefs&&appState.drivingPrefs.stopBreakEvery)||0, sbMins:(appState.drivingPrefs&&appState.drivingPrefs.stopBreakMins)||30 };
-  var items = (appState.agendaItemOverrides && appState.agendaItemOverrides[dateStr])
-    ? JSON.parse(JSON.stringify(appState.agendaItemOverrides[dateStr]))
+  /* Use day number as key (stable through date changes). Fall back to dateStr for old data. */
+  var _edKey = d.day;
+  var items = (appState.agendaItemOverrides && (appState.agendaItemOverrides[_edKey] || appState.agendaItemOverrides[dateStr]))
+    ? JSON.parse(JSON.stringify(appState.agendaItemOverrides[_edKey] || appState.agendaItemOverrides[dateStr]))
     : _buildDayItems(d, agOpts);
 
-  window._editDayStr   = dateStr;
+  window._editDayStr   = dateStr; /* kept for display */
+  window._editDayNum   = _edKey;  /* stable day-number key for save/delete */
   window._editDayItems = items;
 
   var dObj  = new Date(dateStr+'T12:00:00');
   var dLabel= dObj.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-  var hasOv = !!(appState.agendaItemOverrides && appState.agendaItemOverrides[dateStr]);
+  var hasOv = !!(appState.agendaItemOverrides && (appState.agendaItemOverrides[_edKey] || appState.agendaItemOverrides[dateStr]));
 
   var modal = document.createElement('div');
   modal.id = 'edit-day-agenda-modal';
@@ -13679,7 +13736,12 @@ function _saveEditDayAgenda() {
     var at = a.time || '23:59', bt = b.time || '23:59';
     return at < bt ? -1 : at > bt ? 1 : 0;
   });
-  appState.agendaItemOverrides[window._editDayStr] = _itemsToSave;
+  /* Save under day number (stable) key; also remove any old date-string key for this day */
+  var _saveKey = window._editDayNum || window._editDayStr;
+  appState.agendaItemOverrides[_saveKey] = _itemsToSave;
+  if (window._editDayNum && appState.agendaItemOverrides[window._editDayStr]) {
+    delete appState.agendaItemOverrides[window._editDayStr]; /* clean up old date key */
+  }
   saveState(appState);
   var m = document.getElementById('edit-day-agenda-modal');
   if (m) m.remove();
@@ -13688,7 +13750,11 @@ function _saveEditDayAgenda() {
 }
 function _resetEditDayAgenda() {
   if (!confirm('Reset this day to the default schedule?')) return;
-  if (appState.agendaItemOverrides) delete appState.agendaItemOverrides[window._editDayStr];
+  var _resetKey = window._editDayNum || window._editDayStr;
+  if (appState.agendaItemOverrides) {
+    delete appState.agendaItemOverrides[_resetKey];
+    delete appState.agendaItemOverrides[window._editDayStr]; /* also clean up any date key */
+  }
   saveState(appState);
   var m = document.getElementById('edit-day-agenda-modal');
   if (m) m.remove();
@@ -13703,6 +13769,9 @@ function _resetEditDayAgenda() {
 function renderPlannerAgenda() {
   var el = document.getElementById('agenda-content');
   if (!el) return;
+
+  /* Migrate any legacy date-string keys to day-number keys (one-time, no-op after first run) */
+  _migrateAgendaItemOverrideKeys();
 
   /* Build skip set (removed stops + phaseExtraDays < 0 hidden explore days) */
   var _agRemoved = {};
@@ -13731,23 +13800,25 @@ function renderPlannerAgenda() {
     });
   }
 
+  /* Sort days chronologically — MUST be done before computing _agPhaseOffset so that
+     cumulative offsets reflect the same chronological order as renderSchedule.        */
+  var _agSorted = TRIP_DAYS.slice().sort(function(a,b){
+    if (a.date < b.date) return -1; if (a.date > b.date) return 1; return (a.day||0)-(b.day||0);
+  });
+
   /* Pre-compute cumulative phaseExtraDays offset per stop (same as renderSchedule's _schPhaseOffset).
+     Uses _agSorted (date-sorted) to match renderSchedule._schPhaseOffset exactly.
      When stop A has phaseExtraDays = +2, every stop after A shifts 2 days later; -1 shifts 1 day earlier. */
   var _agPhaseOffset = {};
   var _agPhaseCumOffset = 0;
   var _agSeenStops = [];
-  TRIP_DAYS.forEach(function(d) {
+  _agSorted.forEach(function(d) {
     if (_agSeenStops.indexOf(d.stopId) === -1) {
       _agSeenStops.push(d.stopId);
       _agPhaseOffset[d.stopId] = _agPhaseCumOffset;
       var _agPhExtra = (appState.phaseExtraDays && appState.phaseExtraDays[d.stopId]) || 0;
       _agPhaseCumOffset += _agPhExtra;
     }
-  });
-
-  /* Sort days chronologically */
-  var _agSorted = TRIP_DAYS.slice().sort(function(a,b){
-    if (a.date < b.date) return -1; if (a.date > b.date) return 1; return (a.day||0)-(b.day||0);
   });
 
   /* Visible day numbering */
@@ -13873,9 +13944,11 @@ function renderPlannerAgenda() {
     /* Body: time blocks — collapsible */
     html += '<div id="ag-day-body-' + _eStr + '" style="background:var(--card);padding:8px 12px;' + (_isCollapsed ? 'display:none;' : '') + '">';
 
-    /* ── Override items (if saved) or auto-generate from TRIP_DAYS ── */
-    if (appState.agendaItemOverrides && appState.agendaItemOverrides[_eStr]) {
-      var _ovItems = appState.agendaItemOverrides[_eStr];
+    /* ── Override items (if saved) or auto-generate from TRIP_DAYS ──
+       Key is d.day (day number) — stable through schedule date changes.
+       Fall back to _eStr (effective date) for any not-yet-migrated items. */
+    if (appState.agendaItemOverrides && (appState.agendaItemOverrides[d.day] || appState.agendaItemOverrides[_eStr])) {
+      var _ovItems = appState.agendaItemOverrides[d.day] || appState.agendaItemOverrides[_eStr];
       _ovItems.forEach(function(item) {
         var _tLabel = item.time ? (function(t){var p=t.split(':');return _calFmtTime(parseInt(p[0],10),parseInt(p[1]||'0',10));})(item.time) : '';
         var _hasRich = item.address || item.phone || item.hours || item.url;
@@ -14391,14 +14464,32 @@ function _saveAgendaEvent(editId) {
   var _toSchedule   = !editId && _toScheduleEl && _toScheduleEl.checked;
   if (_toSchedule) {
     if (!appState.agendaItemOverrides) appState.agendaItemOverrides = {};
-    /* Get or build the existing override list for this date */
-    var _agSched = appState.agendaItemOverrides[date]
-      ? JSON.parse(JSON.stringify(appState.agendaItemOverrides[date]))
+
+    /* Find the TRIP_DAYS entry by effective date (not base date) so the lookup
+       works correctly when phaseExtraDays shifts base dates away from calendar dates. */
+    var _aeSortedTD = TRIP_DAYS.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0;});
+    var _aeSeen = [], _aeCum = 0, _aeOff = {};
+    _aeSortedTD.forEach(function(td) {
+      if (_aeSeen.indexOf(td.stopId) === -1) {
+        _aeSeen.push(td.stopId);
+        _aeOff[td.stopId] = _aeCum;
+        _aeCum += (appState.phaseExtraDays && appState.phaseExtraDays[td.stopId]) || 0;
+      }
+    });
+    var _tdForDate = null;
+    _aeSortedTD.forEach(function(td) {
+      if (_tdForDate) return;
+      var _aeEff = new Date(new Date(td.date+'T00:00:00').getTime()+(_aeOff[td.stopId]||0)*86400000).toISOString().slice(0,10);
+      if (_aeEff === date) _tdForDate = td;
+    });
+    /* Use day number as key (stable) — fall back to date string if no day found */
+    var _aeKey = _tdForDate ? _tdForDate.day : date;
+
+    /* Get or build the existing override list for this key */
+    var _agSched = (appState.agendaItemOverrides[_aeKey] || appState.agendaItemOverrides[date])
+      ? JSON.parse(JSON.stringify(appState.agendaItemOverrides[_aeKey] || appState.agendaItemOverrides[date]))
       : null;
     if (!_agSched) {
-      /* Build default items from TRIP_DAYS so the full day is preserved */
-      var _tdForDate = null;
-      TRIP_DAYS.forEach(function(td) { if (td.date === date && !_tdForDate) _tdForDate = td; });
       var _agOpts2 = {
         depart: (appState.drivingPrefs && appState.drivingPrefs.departureTime) || '08:00',
         sbEvery:(appState.drivingPrefs && appState.drivingPrefs.stopBreakEvery) || 0,
@@ -14418,12 +14509,16 @@ function _saveAgendaEvent(editId) {
       var at = a.time || '23:59', bt = b.time || '23:59';
       return at < bt ? -1 : at > bt ? 1 : 0;
     });
-    appState.agendaItemOverrides[date] = _agSched;
+    appState.agendaItemOverrides[_aeKey] = _agSched;
+    /* Clean up any old date-string key for this same day */
+    if (typeof _aeKey !== 'string' && appState.agendaItemOverrides[date]) {
+      delete appState.agendaItemOverrides[date];
+    }
     saveState(appState);
     var modal2 = document.getElementById('add-agenda-event-modal');
     if (modal2) modal2.remove();
-    /* If the Edit Day modal is open for the same date, refresh its items list */
-    if (window._editDayStr === date && document.getElementById('edit-day-agenda-modal')) {
+    /* If the Edit Day modal is open for the same day, refresh its items list */
+    if ((window._editDayNum === _aeKey || window._editDayStr === date) && document.getElementById('edit-day-agenda-modal')) {
       window._editDayItems = JSON.parse(JSON.stringify(_agSched));
       _refreshEditDayItemsList();
     }
