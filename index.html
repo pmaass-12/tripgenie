@@ -8196,7 +8196,7 @@ function renderDashboard() {
 
   var tonightTile = (!_destIsHome && curStop)
     ? '<div style="display:flex;gap:8px;margin-top:12px;">'
-      + '<div style="' + _boxStyle + 'background:var(--green-l);border:1px solid #a5d6a7;" onclick="showStopForecastModal(' + curStop.id + ')" title="Tap for weather forecast">'
+      + '<div style="' + _boxStyle + 'background:var(--green-l);border:1px solid #a5d6a7;" onclick="showStopForecastModal(\'' + curStop.id + '\')" title="Tap for weather forecast">'
         + '<div style="font-size:.6rem;font-weight:800;color:#2e7d32;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Destination</div>'
         + '<div style="font-weight:800;font-size:.85rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _destLabel + '</div>'
       + '</div>'
@@ -8205,7 +8205,7 @@ function renderDashboard() {
         + '<div style="font-weight:700;font-size:.82rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _sleepDisplay + '</div>'
         + _availBadge
       + '</div>'
-      + '<div style="' + _boxStyle + 'background:var(--orange-l);border:1px solid rgba(232,129,58,.25);" onclick="showStopForecastModal(' + curStop.id + ')" title="Tap for weather forecast">'
+      + '<div style="' + _boxStyle + 'background:var(--orange-l);border:1px solid rgba(232,129,58,.25);" onclick="showStopForecastModal(\'' + curStop.id + '\')" title="Tap for weather forecast">'
         + '<div style="font-size:.6rem;font-weight:800;color:var(--orange-d);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Tonight\'s Weather</div>'
         + '<div style="font-weight:700;font-size:.82rem;color:var(--text);">' + _wxBox + '</div>'
       + '</div>'
@@ -8238,7 +8238,7 @@ function renderDashboard() {
         var _fsName  = _fs ? (_fs.emoji + ' ' + _fs.name + ', ' + _fs.state) : 'Shenandoah Valley, VA';
         var _fsSleep = _fsDay1 ? (_fsDay1.sleep || 'First campground') : 'Luray RV Resort';
         return '<div style="display:flex;gap:8px;margin-top:12px;">'
-          + '<div style="' + _boxStyle + 'background:var(--green-l);border:1px solid #a5d6a7;cursor:pointer;" onclick="showStopForecastModal(' + _fsId + ')">'
+          + '<div style="' + _boxStyle + 'background:var(--green-l);border:1px solid #a5d6a7;cursor:pointer;" onclick="showStopForecastModal(\'' + _fsId + '\')">'
             + '<div style="font-size:.6rem;font-weight:800;color:#2e7d32;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">First Stop</div>'
             + '<div style="font-weight:800;font-size:.78rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _fsName + '</div>'
           + '</div>'
@@ -8254,7 +8254,7 @@ function renderDashboard() {
                 + '<div style="font-weight:700;font-size:.76rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _fsSleepName + '</div>'
                 + '</div>';
             })()
-          + '<div style="' + _boxStyle + 'background:var(--orange-l);border:1px solid rgba(232,129,58,.25);cursor:pointer;" onclick="showStopForecastModal(' + _fsId + ')">'
+          + '<div style="' + _boxStyle + 'background:var(--orange-l);border:1px solid rgba(232,129,58,.25);cursor:pointer;" onclick="showStopForecastModal(\'' + _fsId + '\')">'
             + '<div style="font-size:.6rem;font-weight:800;color:var(--orange-d);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">' + _fsWxLabel + '</div>'
             + '<div style="font-weight:700;font-size:.8rem;color:var(--text);">' + _fsWxStr + '</div>'
           + '</div>'
@@ -9175,9 +9175,9 @@ function buildMapMarkers(mapObj) {
             <div style="font-size:.78rem;color:#333;margin-top:1px;"><strong>${wx.hi}°F</strong> high &nbsp;·&nbsp; <strong>${wx.lo}°F</strong> low</div>
             <div style="font-size:.73rem;color:#555;margin-top:1px;">${wx.desc}</div>
           </div>
-          <button onclick="showStopForecastModal(${stop.id})" style="margin-left:auto;font-size:.7rem;color:#2C5F8A;text-decoration:none;white-space:nowrap;border:1px solid #a8cde8;border-radius:100px;padding:3px 7px;background:#fff;cursor:pointer;font-family:inherit;">Forecast →</button>
+          <button onclick="showStopForecastModal('${stop.id}')" style="margin-left:auto;font-size:.7rem;color:#2C5F8A;text-decoration:none;white-space:nowrap;border:1px solid #a8cde8;border-radius:100px;padding:3px 7px;background:#fff;cursor:pointer;font-family:inherit;">Forecast →</button>
         </div>`
-      : `<div style="margin-bottom:8px;"><button onclick="showStopForecastModal(${stop.id})" style="font-size:.78rem;color:#2C5F8A;background:none;border:none;text-decoration:none;cursor:pointer;padding:0;font-family:inherit;">🌤️ Check forecast →</button></div>`;
+      : `<div style="margin-bottom:8px;"><button onclick="showStopForecastModal('${stop.id}')" style="font-size:.78rem;color:#2C5F8A;background:none;border:none;text-decoration:none;cursor:pointer;padding:0;font-family:inherit;">🌤️ Check forecast →</button></div>`;
 
     const stopDesc = (stop.description || stop.desc || '');
     const popup = `
@@ -9875,7 +9875,7 @@ function phaseHeaderHtml(phase, firstDay) {
       var _topCode = _codes.length ? parseInt(Object.keys(_codeCount).sort(function(a,b){return _codeCount[b]-_codeCount[a];})[0]) : null;
       var _wxIcon = _topCode === null ? '🌡️' : (_topCode <= 1 ? '☀️' : _topCode <= 3 ? '⛅' : _topCode <= 49 ? '🌫️' : _topCode <= 67 ? '🌧️' : _topCode <= 77 ? '❄️' : '🌩️');
       var _wxType = (_wxData[phaseDays[0].date] && _wxData[phaseDays[0].date].type === 'forecast') ? 'Forecast' : 'Typical';
-      _wxHtml = '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.15);border-radius:20px;padding:3px 9px;flex-shrink:0;cursor:pointer;" onclick="showStopForecastModal(' + _sidAttr + ')" title="' + _wxType + ' weather — tap for full forecast">'
+      _wxHtml = '<div style="display:flex;align-items:center;gap:4px;background:rgba(255,255,255,.15);border-radius:20px;padding:3px 9px;flex-shrink:0;cursor:pointer;" onclick="showStopForecastModal(\'' + _sidAttr + '\')" title="' + _wxType + ' weather — tap for full forecast">'
         + '<span style="font-size:.85rem;">' + _wxIcon + '</span>'
         + '<span style="font-size:.76rem;font-weight:800;color:#fff;white-space:nowrap;">' + _avgHigh + '° / ' + _avgLow + '°</span>'
         + '</div>';
@@ -9977,7 +9977,7 @@ function phaseHeaderHtml(phase, firstDay) {
     + '<div class="ph-sep-div" style="width:1px;height:22px;background:rgba(255,255,255,.2);flex-shrink:0;"></div>'
 
     /* Area Info — label text hidden on mobile (.ph-area-lbl) to save space */
-    + '<button onclick="openAreaInfo(\'' + _safePhase + '\',' + _sidAttr + ')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:5px 11px;font-size:.73rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">&#128269;<span class="ph-area-lbl">&nbsp;Area Info</span></button>'
+    + '<button onclick="openAreaInfo(\'' + _safePhase + '\',\'' + _sidAttr + '\')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;padding:5px 11px;font-size:.73rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">&#128269;<span class="ph-area-lbl">&nbsp;Area Info</span></button>'
 
     /* Booking Confirmation — shows count badge when confirmations saved */
     + (function() {
@@ -10945,7 +10945,7 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
 
   /* Depart chip */
   var _chipBg = _isBefore ? 'rgba(0,0,0,.15)' : 'rgba(255,255,255,.2)';
-  var _departChip = '<button onclick="event.stopPropagation();openDriveTimeModal(' + d.day + ',null,' + (stop ? stop.id : 'null') + ',' + effectiveDate.getTime() + ')" '
+  var _departChip = '<button onclick="event.stopPropagation();openDriveTimeModal(' + d.day + ',null,' + (stop ? '\'' + stop.id + '\'' : 'null') + ',' + effectiveDate.getTime() + ')" '
     + 'title="Tap to set departure date & time" '
     + 'style="display:inline-flex;align-items:center;gap:4px;background:' + _chipBg + ';border:1px solid rgba(255,255,255,.35);'
     + 'color:#fff;border-radius:100px;padding:2px 9px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;white-space:nowrap;">'
@@ -11623,7 +11623,7 @@ function renderSchedule() {
     html += '<div style="padding:8px 12px;display:flex;flex-direction:column;align-items:flex-end;gap:6px;">';
     html += '<div style="display:flex;gap:4px;">';
     if (stop && stop.id !== 15) {
-      html += '<button onclick="showStopForecastModal(' + stop.id + ')" title="Forecast" style="background:var(--blue-l);border:1px solid var(--border);border-radius:100px;padding:4px 8px;font-size:.72rem;cursor:pointer;color:var(--blue);font-family:var(--font);">&#127780;&#65039;</button>';
+      html += '<button onclick="showStopForecastModal(\'' + stop.id + '\')" title="Forecast" style="background:var(--blue-l);border:1px solid var(--border);border-radius:100px;padding:4px 8px;font-size:.72rem;cursor:pointer;color:var(--blue);font-family:var(--font);">&#127780;&#65039;</button>';
       /* Day-row action button — opens action sheet (remove 1 day / remove whole stop) */
       var _safeRowPhase = (d.phase || '').replace(/'/g, "\\'");
       html += '<button onclick="event.stopPropagation();_dayRowAction(' + d.stopId + ',\'' + _safeRowPhase + '\')" title="Adjust days at this stop" style="background:#fff0ef;border:1px solid #fca5a5;border-radius:100px;padding:4px 8px;font-size:.7rem;cursor:pointer;color:#dc2626;font-family:var(--font);display:flex;align-items:center;gap:3px;" onmouseenter="this.style.background=\'#fee2e2\'" onmouseleave="this.style.background=\'#fff0ef\'"><i class="fa-solid fa-trash-can"></i></button>';
@@ -12248,7 +12248,7 @@ function renderStops() {
 
     // Forecast button
     html += '<div class="sc-fcst-col">'
-      + '<button onclick="event.stopPropagation();showStopForecastModal(' + stop.id + ')" style="background:#fff;border:1.5px solid var(--blue);color:var(--blue);border-radius:100px;font-size:.75rem;font-weight:800;padding:6px 11px;cursor:pointer;font-family:var(--font);white-space:nowrap;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-cloud-sun"></i> Forecast</button>'
+      + '<button onclick="event.stopPropagation();showStopForecastModal(\'' + stop.id + '\')" style="background:#fff;border:1.5px solid var(--blue);color:var(--blue);border-radius:100px;font-size:.75rem;font-weight:800;padding:6px 11px;cursor:pointer;font-family:var(--font);white-space:nowrap;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-cloud-sun"></i> Forecast</button>'
       + '</div>';
 
     // Chevron

@@ -69,6 +69,8 @@ tripgenie/
 
 - **Fix ReferenceError: "dallas is not defined" on Schedule tab departure time chip**: The `_departChip` onclick handler (line 11278) interpolated stop IDs directly into the HTML onclick string without quotes. Stop IDs like `dallas-tx` were read as `dallas - tx` (variable minus variable) by JavaScript → ReferenceError. Fixed by wrapping both `prevStop.id` and `destStop.id` in single-quotes inside the onclick string: `openDriveTimeModal(5,'dallas-tx','nashville-tn',1234567890)`. Now correctly passes quoted string IDs.
 
+- **Comprehensive onclick quoting audit — 10 additional unquoted stop ID calls fixed**: A full audit found the same unquoted-stop-ID pattern in 10 more places: `showStopForecastModal` (7 occurrences — curStop.id×2, _fsId×2, _sidAttr, stop.id×2, and 2 template literals using `${stop.id}`), `openAreaInfo` (_sidAttr argument unquoted), and a second `openDriveTimeModal` call (stop.id). All now wrapped in single-quotes so the generated onclick HTML passes the stop ID as a proper JS string literal, not an arithmetic expression.
+
 ### Session 26 (continued 2) — 2026-03-08
 
 **IndexedDB photo storage — remove the ~5 photo localStorage limit.**
