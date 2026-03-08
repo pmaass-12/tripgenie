@@ -3044,8 +3044,7 @@
             <span class="map-legend-item" style="display:flex;align-items:center;gap:5px;"><span style="width:20px;height:0;border-top:3px dashed #a855f7;display:inline-block;border-radius:2px"></span> Return</span>
             <button onclick="forceRefreshMap(this)" title="Refresh map" style="display:flex;align-items:center;gap:5px;background:var(--blue-l);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:var(--blue);cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-rotate"></i><span class="map-btn-label"> Refresh</span></button>
             <button onclick="printTripPlan()" title="Print PDF" style="display:flex;align-items:center;gap:5px;background:var(--orange-l);border:1px solid var(--border);border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:var(--orange);cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-print"></i><span class="map-btn-label"> Print PDF</span></button>
-            <button onclick="_copyShareLink()" title="Share route with friends" style="display:flex;align-items:center;gap:5px;background:#f3edff;border:1px solid #c9a8f5;border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:#7B5EA7;cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-share-nodes"></i><span class="map-btn-label"> Share Route</span></button>
-            <button onclick="_copyGalleryLink()" title="Share photo gallery with friends" style="display:flex;align-items:center;gap:5px;background:#fff4ee;border:1px solid #f5c9a8;border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:var(--orange);cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-images"></i><span class="map-btn-label"> Share Gallery</span></button>
+            <button onclick="_copyGalleryLink()" title="Share route map &amp; gallery with friends" style="display:flex;align-items:center;gap:5px;background:#f3edff;border:1px solid #c9a8f5;border-radius:100px;padding:5px 12px;font-size:.78rem;font-weight:700;color:#7B5EA7;cursor:pointer;font-family:var(--font);transition:opacity .15s;"><i class="fa-solid fa-share-nodes"></i><span class="map-btn-label"> Share</span></button>
           </div>
         </div>
         <!-- Nav + Map row -->
@@ -13436,7 +13435,7 @@ function _copyGalleryLink() {
   var url = window.location.origin + window.location.pathname + '?gallery=1';
   if (navigator.clipboard) {
     navigator.clipboard.writeText(url).then(function() {
-      showToast('🔗 Gallery link copied! Share it with friends and family.', 4000);
+      showToast('🔗 Link copied! Friends can view the route map &amp; gallery — no login needed.', 4000);
     }).catch(function() {
       _copyGalleryLinkFallback(url);
     });
@@ -15977,27 +15976,29 @@ function _initGalleryShareMode() {
 }
 
 function _applyGalleryMode() {
-  /* Hide every nav tab except gallery */
+  /* Show only Route Map + Gallery tabs; hide everything else */
+  var _shareableTabs = ['map', 'gallery'];
   document.querySelectorAll('.nav-tab').forEach(function(t) {
-    if (t.getAttribute('data-tab') !== 'gallery') t.style.display = 'none';
+    var tab = t.getAttribute('data-tab');
+    t.style.display = _shareableTabs.indexOf(tab) !== -1 ? '' : 'none';
   });
-  /* Activate the gallery panel */
+  /* Start on the Gallery tab */
   document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
   var gTab = document.getElementById('tab-gallery');
   if (gTab) { gTab.classList.remove('hidden'); gTab.classList.add('active'); }
-  /* Add a "Gallery View" badge next to the logo */
+  /* Add a shared-view badge next to the logo */
   var hdr = document.querySelector('.app-header');
   if (hdr && !document.getElementById('gallery-view-badge')) {
     var badge = document.createElement('div');
     badge.id = 'gallery-view-badge';
     badge.style.cssText = 'background:rgba(255,255,255,.2);color:#fff;font-size:.7rem;font-weight:800;'
       + 'padding:3px 10px;border-radius:100px;margin-left:8px;border:1px solid rgba(255,255,255,.4);flex-shrink:0;';
-    badge.textContent = '📷 Gallery View';
+    badge.textContent = '🗺️ Shared View';
     var title = hdr.querySelector('.header-logo');
     if (title) title.appendChild(badge);
   }
   renderGalleryTab();
-  showToast('📷 Maass Family Gallery — read-only view', 3500);
+  showToast('📷 Maass Family RV — Route Map & Gallery', 3500);
 }
 
 /* ── "Where are they now?" logic ─────────────────────────────────── */
