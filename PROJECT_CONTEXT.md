@@ -56,6 +56,20 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 24 — 2026-03-08
+
+**Photo gallery cross-device sync fix; agenda item click-to-edit and move-between-days.**
+
+- **Photo gallery cross-device sync (`_makeCloudSafeState`)**: Photos uploaded on one device no longer disappear on other devices. Root cause: full-size base64 photo dataUrls (~200-400 KB each) were included in `appState.photoPool` and pushed to Supabase, exceeding payload limits. Fix: `_makeCloudSafeState(state)` strips `dataUrl` from each photoPool entry before cloud sync, keeping only metadata + `thumb` (200px JPEG). `syncToCloud` now uses the cloud-safe copy. `_galleryUpload` generates a `thumb` via `_compressPhotoThumb` for each uploaded photo. `renderGalleryTab` uses `p.dataUrl || p.thumb` so mobile/other devices show thumbnails while the uploading device shows full resolution. Thumbnail entries show a ☁️ badge.
+
+- **Agenda item click-to-edit**: All rows in the agenda view are now clickable (hover highlight + ☁️✏️ indicator). Custom `agendaEvent` items (📌 pinned events): clicking opens `showAddAgendaEventModal(null, ev.id)` with all fields editable. Built-in/override items (Breakfast, Drive, etc.): clicking opens the new `_showMoveItemSheet` bottom sheet.
+
+- **`showAddAgendaEventModal` date field**: When editing an existing event, date is always a dropdown so the user can move it to a different day.
+
+- **`_showMoveItemSheet` + `_saveMoveItem`**: New bottom sheet for editing/moving built-in and override agenda items. Editable title, start/end time, and "Move to Day" dropdown. Removes item from source day's override (builds from `_buildDayItems` if no override exists), adds to target day's override, saves under day-number keys.
+
+- **Stale entry cleanup in `_saveAgendaEvent`**: When an `agendaEvent`'s date changes, old `_fromEvents` override entries on the previous day are cleaned up.
+
 ### Session 23 (continued, part 2) — 2026-03-08
 
 **Smart multi-user conflict resolution — no more lost edits.**

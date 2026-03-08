@@ -5955,10 +5955,37 @@ function _resolveConflict(choice) {
   window._conflictTheirState = null;
 }
 
+/* ── Make a cloud-safe copy of state: strip full-size photo dataUrls ────
+   Photos are large base64 blobs (~200-400 KB each) that quickly exhaust
+   Supabase payload limits and localStorage on other devices.  We sync
+   only metadata + a 200px thumbnail ("thumb") to the cloud; the full
+   image lives in localStorage on the uploading device only.
+   On other devices the gallery shows the thumbnail instead.           */
+function _makeCloudSafeState(state) {
+  /* Deep-copy only if photoPool has entries — avoid overhead otherwise */
+  if (!state.photoPool || !state.photoPool.length) return state;
+  var cs = JSON.parse(JSON.stringify(state));
+  cs.photoPool = cs.photoPool.map(function(p) {
+    /* Keep everything EXCEPT the full dataUrl (which can be hundreds of KB) */
+    return {
+      id:        p.id,
+      fileName:  p.fileName,
+      timestamp: p.timestamp,
+      caption:   p.caption,
+      stopId:    p.stopId,
+      dayNum:    p.dayNum,
+      source:    p.source,
+      exif:      p.exif   || null,
+      thumb:     p.thumb  || null   /* 200px JPEG thumbnail or null */
+    };
+  });
+  return cs;
+}
+
 function syncToCloud(state) {
   if (_isTestMode || _isViewer) return;
   if (_syncTimer) clearTimeout(_syncTimer);
-  _syncTimer = setTimeout(function() { _doCloudSave(state); }, 1800);
+  _syncTimer = setTimeout(function() { _doCloudSave(_makeCloudSafeState(state)); }, 1800);
 }
 
 function _saveLocalBackup(state) {
@@ -12596,7 +12623,12 @@ function _galleryUpload(input) {
           stopId:    null,
           dayNum:    null,
           source:    'gallery-upload',
+          thumb:     null,  /* 200px thumbnail — filled in below, used for cloud sync */
         };
+        /* Generate 200px thumbnail immediately for cloud sync */
+        _compressPhotoThumb(dataUrl, function(thumbUrl) {
+          if (thumbUrl) entry.thumb = thumbUrl;
+        });
 
         /* Read EXIF (GPS + date) from original JPEG/TIFF file */
         var _doSave = function(finalEntry) {
@@ -13409,15 +13441,20 @@ function renderGalleryTab() {
       if (poolPhoto.source === 'journal') return;
       var stop = poolPhoto.stopId ? getStop(poolPhoto.stopId) : null;
       var exif = poolPhoto.exif || null;
+      /* Use full dataUrl when available (uploading device); fall back to
+         200px thumbnail on other devices that only received the cloud copy */
+      var _poolSrc = poolPhoto.dataUrl || poolPhoto.thumb;
+      if (!_poolSrc) return; // no image data at all — skip
       allPhotos.push({
-        src:      poolPhoto.dataUrl,
-        type:     'image',
-        caption:  poolPhoto.caption || '',
-        location: (exif && exif.locationName) || (stop ? _sn(stop) : ''),
-        date:     (exif && exif.dt) ? exif.dt.split('T')[0] : (poolPhoto.timestamp ? poolPhoto.timestamp.split('T')[0] : ''),
-        day:      poolPhoto.dayNum,
-        source:   'pool',
-        exif:     exif
+        src:          _poolSrc,
+        type:         'image',
+        caption:      poolPhoto.caption || '',
+        location:     (exif && exif.locationName) || (stop ? _sn(stop) : ''),
+        date:         (exif && exif.dt) ? exif.dt.split('T')[0] : (poolPhoto.timestamp ? poolPhoto.timestamp.split('T')[0] : ''),
+        day:          poolPhoto.dayNum,
+        source:       'pool',
+        exif:         exif,
+        isCloudThumb: !poolPhoto.dataUrl && !!poolPhoto.thumb
       });
     });
   }
@@ -13703,7 +13740,7 @@ function openGalleryPhoto(idx) {
   var photos = window._galleryLookup || [];
   var p = photos[idx];
   if (!p) return;
-  _openMediaLightbox(p.dataUrl, 'image', p.caption || '');
+  _openMediaLightbox(p.src || p.dataUrl, 'image', p.caption || '');
 }
 
 function _openMediaLightbox(src, type, caption) {
@@ -14188,6 +14225,146 @@ function _resetEditDayAgenda() {
   showToast('Reset to default ✓', 1600);
 }
 
+/* ── Move/Edit a built-in or override agenda item ───────────────────
+   Opens a lightweight bottom sheet for editing an item's title, start
+   time, end time, and target day.  On save:
+     • Removes item from fromDayNum's override list (building it from
+       the auto-generated list if no override exists yet)
+     • Adds updated item to toDayNum's override list (building from
+       auto-generated if needed)
+   Both overrides are saved under day-number keys for date stability.  */
+function _showMoveItemSheet(item, fromDayNum, fromEffDate) {
+  var ex = document.getElementById('move-item-sheet');
+  if (ex) ex.remove();
+
+  /* Build date options for the full trip */
+  var _sorted4 = TRIP_DAYS.slice().sort(function(a,b){return a.date<b.date?-1:a.date>b.date?1:0;});
+  /* Compute phase offsets + pause offsets so effective dates match the agenda */
+  var _ph4 = {}, _cum4 = 0, _seen4 = [];
+  _sorted4.forEach(function(td) {
+    if (_seen4.indexOf(td.stopId) === -1) {
+      _seen4.push(td.stopId);
+      _ph4[td.stopId] = _cum4;
+      _cum4 += (appState.phaseExtraDays && appState.phaseExtraDays[td.stopId]) || 0;
+    }
+  });
+  var _pz4 = (appState.pauseDays||[]).filter(function(p){return p.startDate&&p.endDate;}).sort(function(a,b){return a.startDate<b.startDate?-1:1;});
+  var _pi4=0,_cn4=0;
+  var dateOptions4 = '';
+  _sorted4.forEach(function(td) {
+    if (td.sleepType==='home' && !td.driveDay) return;
+    if ((appState.removedStops||{})[td.stopId]) return;
+    while (_pi4<_pz4.length && _pz4[_pi4].startDate<=td.date) {
+      _cn4 += Math.max(0,Math.round((new Date(_pz4[_pi4].endDate+'T00:00:00')-new Date(_pz4[_pi4].startDate+'T00:00:00'))/86400000));
+      _pi4++;
+    }
+    var eStr4 = new Date(new Date(td.date+'T00:00:00').getTime()+(_cn4+(_ph4[td.stopId]||0))*86400000).toISOString().slice(0,10);
+    var dObj4 = new Date(eStr4+'T12:00:00');
+    var lbl4  = dObj4.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+    var stop4 = getStop(td.stopId);
+    if (stop4) lbl4 += ' — ' + stop4.name;
+    var sel4  = (td.day === fromDayNum) ? ' selected' : '';
+    dateOptions4 += '<option value="' + td.day + '"' + sel4 + '>' + lbl4 + '</option>';
+  });
+
+  var _fld = 'width:100%;box-sizing:border-box;border:1.5px solid var(--border);border-radius:9px;padding:9px 12px;font-size:.88rem;font-family:var(--font);color:var(--text);background:var(--bg);outline:none;';
+  var html = '<div id="move-item-sheet" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100010;display:flex;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)this.remove()">'
+    + '<div style="background:var(--card);width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:20px 20px 36px;box-shadow:0 -4px 30px rgba(0,0,0,.22);max-height:90vh;overflow-y:auto;" onclick="event.stopPropagation()">'
+    + '<div style="width:38px;height:4px;background:var(--border);border-radius:4px;margin:0 auto 16px;"></div>'
+    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">'
+    + '<div style="font-weight:900;font-size:1.05rem;color:var(--text);">✏️ Edit &amp; Move Item</div>'
+    + '<button onclick="document.getElementById(\'move-item-sheet\').remove()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-3);padding:0 4px;">×</button>'
+    + '</div>'
+    /* Title */
+    + '<div style="margin-bottom:12px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Title</label>'
+    + '<input id="mis-title" type="text" value="' + (item.title||'').replace(/"/g,'&quot;') + '" style="' + _fld + '">'
+    + '</div>'
+    /* Start + End time */
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'
+    + '<div><label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Start Time</label>'
+    + _timeSelectHtml('mis-start', item.time||'09:00', '', _fld) + '</div>'
+    + '<div><label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">End Time</label>'
+    + _timeSelectHtml('mis-end', item.endTime||item.time||'10:00', '', _fld) + '</div>'
+    + '</div>'
+    /* Move to day */
+    + '<div style="margin-bottom:20px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Day <span style="color:var(--orange);">(change to move to another day)</span></label>'
+    + '<select id="mis-day" style="' + _fld + '">' + dateOptions4 + '</select>'
+    + '</div>'
+    /* Save / Cancel */
+    + '<div style="display:flex;gap:8px;">'
+    + '<button onclick="_saveMoveItem(' + fromDayNum + ',\'' + fromEffDate + '\')" style="flex:2;background:var(--orange);color:#fff;border:none;border-radius:100px;padding:12px;font-size:.95rem;font-weight:900;cursor:pointer;font-family:var(--font);">💾 Save Changes</button>'
+    + '<button onclick="document.getElementById(\'move-item-sheet\').remove()" style="flex:1;background:var(--bg);color:var(--text-2);border:1.5px solid var(--border);border-radius:100px;padding:12px;font-size:.88rem;font-weight:700;cursor:pointer;font-family:var(--font);">Cancel</button>'
+    + '</div>'
+    + '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+  /* Store original item for save reference */
+  window._misOrigItem = item;
+  setTimeout(function() { var el=document.getElementById('mis-title'); if(el) el.focus(); }, 60);
+}
+
+function _saveMoveItem(fromDayNum, fromEffDate) {
+  var titleEl  = document.getElementById('mis-title');
+  var startEl  = document.getElementById('mis-start');
+  var endEl    = document.getElementById('mis-end');
+  var toDayEl  = document.getElementById('mis-day');
+  if (!titleEl || !toDayEl) return;
+  var newTitle  = titleEl.value.trim();
+  if (!newTitle) { showToast('Title cannot be empty', 1800); return; }
+  var newStart  = startEl ? startEl.value : '';
+  var newEnd    = endEl   ? endEl.value   : '';
+  var toDayNum  = parseInt(toDayEl.value, 10);
+  var origItem  = window._misOrigItem || {};
+  var agOpts    = { depart:(appState.drivingPrefs&&appState.drivingPrefs.departureTime)||'08:00',
+                    sbEvery:(appState.drivingPrefs&&appState.drivingPrefs.stopBreakEvery)||0,
+                    sbMins:(appState.drivingPrefs&&appState.drivingPrefs.stopBreakMins)||30 };
+
+  if (!appState.agendaItemOverrides) appState.agendaItemOverrides = {};
+
+  /* ── Get item list for fromDay (override or auto-generated) ── */
+  function _getDayItems(dayNum) {
+    if (appState.agendaItemOverrides[dayNum]) {
+      return appState.agendaItemOverrides[dayNum].slice();
+    }
+    /* Fall back to auto-generated list */
+    var td = TRIP_DAYS.filter(function(x){return x.day===dayNum;})[0];
+    if (!td) return [];
+    return _buildDayItems(td, agOpts);
+  }
+
+  /* ── Remove from source day ── */
+  var fromItems = _getDayItems(fromDayNum);
+  fromItems = fromItems.filter(function(it) { return it.id !== origItem.id; });
+  appState.agendaItemOverrides[fromDayNum] = fromItems;
+
+  /* ── Add updated item to target day ── */
+  var updatedItem = Object.assign({}, origItem, {
+    title:   newTitle,
+    time:    newStart,
+    endTime: newEnd
+  });
+  if (toDayNum !== fromDayNum) {
+    var toItems = _getDayItems(toDayNum);
+    toItems.push(updatedItem);
+    toItems.sort(function(a,b){ var at=a.time||'23:59',bt=b.time||'23:59'; return at<bt?-1:at>bt?1:0; });
+    appState.agendaItemOverrides[toDayNum] = toItems;
+  } else {
+    /* Same day — just re-insert with updates */
+    fromItems.push(updatedItem);
+    fromItems.sort(function(a,b){ var at=a.time||'23:59',bt=b.time||'23:59'; return at<bt?-1:at>bt?1:0; });
+    appState.agendaItemOverrides[fromDayNum] = fromItems;
+  }
+
+  saveState(appState);
+  var sheet = document.getElementById('move-item-sheet');
+  if (sheet) sheet.remove();
+  window._misOrigItem = null;
+  renderPlannerAgenda();
+  var msg = toDayNum !== fromDayNum ? '✅ Item moved to ' + toDayEl.options[toDayEl.selectedIndex].text.split(' —')[0] : '✅ Item updated';
+  showToast(msg, 2500);
+}
+
 /* ══════════════════════════════════════════════════════════════════
    PLANNER AGENDA VIEW — Google Calendar–style time-block agenda
    Renders into #agenda-content inside the Planner tab.
@@ -14434,7 +14611,13 @@ function renderPlannerAgenda() {
             + '<div style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;background:var(--orange);color:#fff;border-radius:50%;font-size:.65rem;font-weight:900;margin-top:2px;">' + _pinNum + '</div>'
             + '</div>'
           : '<div style="' + _ico + '">' + (item.icon||'📌') + '</div>';
-        html += '<div style="' + _row + (_hasRich ? 'padding-bottom:8px;' : '') + '">'
+        /* Click to edit: agendaEvent items → full modal; built-in items → move sheet */
+        var _clickFn = item._fromEvents
+          ? 'showAddAgendaEventModal(null,\'' + item.id + '\')'
+          : '_showMoveItemSheet(' + JSON.stringify(item).replace(/'/g,"\\'") + ',' + d.day + ',\'' + _eStr + '\')';
+        html += '<div style="' + _row + (_hasRich ? 'padding-bottom:8px;' : '') + 'cursor:pointer;border-radius:6px;transition:background .13s;" '
+          + 'onclick="' + _clickFn + '" '
+          + 'onmouseover="this.style.background=\'rgba(0,0,0,.04)\'" onmouseout="this.style.background=\'none\'">'
           + '<div style="' + _time + '">' + _tLabel + '</div>'
           + _icoHtml
           + '<div style="' + _txt  + '"><strong>' + (item.title||'').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</strong>'
@@ -14444,7 +14627,9 @@ function renderPlannerAgenda() {
           + (item.hours    ? '<div style="' + _sub + '">🕐 ' + item.hours.replace(/</g,'&lt;') + '</div>' : '')
           + (item.notes    ? '<div style="' + _sub + ';font-style:italic;">💬 ' + item.notes.replace(/</g,'&lt;') + '</div>' : '')
           + (item.url      ? '<a href="' + item.url.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" style="font-size:.74rem;color:var(--blue);font-weight:600;text-decoration:none;" onclick="event.stopPropagation()">🔗 Website</a>' : '')
-          + '</div></div>';
+          + '</div>'
+          + '<div style="font-size:.8rem;color:var(--text-3);padding-left:4px;flex-shrink:0;padding-top:2px;opacity:.7;">✏️</div>'
+          + '</div>';
       });
     } else {
     /* ── DRIVE DAY ── */
@@ -14605,7 +14790,9 @@ function renderPlannerAgenda() {
       _dayManual.slice().sort(function(a,b){return (a.startTime||'') < (b.startTime||'') ? -1 : 1;}).forEach(function(ev) {
         var _tLabel2 = _tFmt2(ev.startTime);
         if (ev.endTime && _tLabel2) _tLabel2 += '<br><span style="opacity:.75">' + _tFmt2(ev.endTime) + '</span>';
-        html += '<div style="' + _row + (ev.address||ev.phone||ev.hours ? 'padding-bottom:8px;' : '') + '">'
+        html += '<div style="' + _row + (ev.address||ev.phone||ev.hours ? 'padding-bottom:8px;' : '') + 'cursor:pointer;border-radius:6px;transition:background .13s;" '
+          + 'onclick="showAddAgendaEventModal(null,\'' + ev.id + '\')" '
+          + 'onmouseover="this.style.background=\'rgba(0,0,0,.04)\'" onmouseout="this.style.background=\'none\'">'
           + '<div style="' + _time + '">' + _tLabel2 + '</div>'
           + '<div style="' + _ico  + '">📌</div>'
           + '<div style="' + _txt  + '"><strong>' + (ev.name||'').replace(/</g,'&lt;') + '</strong>'
@@ -14613,7 +14800,9 @@ function renderPlannerAgenda() {
           + (ev.phone   ? '<div style="' + _sub + '">📞 ' + ev.phone + '</div>' : '')
           + (ev.hours   ? '<div style="' + _sub + '">🕐 ' + ev.hours.replace(/</g,'&lt;') + '</div>' : '')
           + (ev.url     ? '<a href="' + ev.url.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" style="font-size:.7rem;color:var(--blue);font-weight:600;text-decoration:none;" onclick="event.stopPropagation()">🔗 Website</a>' : '')
-          + '</div></div>';
+          + '</div>'
+          + '<div style="font-size:.8rem;color:var(--text-3);padding-left:4px;flex-shrink:0;padding-top:2px;opacity:.7;">✏️</div>'
+          + '</div>';
       });
     }
 
@@ -14745,11 +14934,14 @@ function showAddAgendaEventModal(prefillDate, editId) {
     /* Date — fixed label when opened from a specific day, full dropdown otherwise */
     + '<div style="margin-bottom:12px;">'
     + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Date</label>'
+    /* When editing an existing event, always show date as a dropdown so the user can move it.
+       When adding to a specific day (no editId), show the day as a fixed label for clarity. */
     + (prefillDate && !editId
         ? '<div style="padding:9px 12px;font-size:.88rem;font-weight:700;color:var(--text);background:var(--bg);border:1.5px solid var(--border);border-radius:9px;">'
           + new Date(prefillDate + 'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
           + '</div><input id="aae-date" type="hidden" value="' + prefillDate + '">'
-        : '<select id="aae-date" style="' + _fld + '">' + dateOptions + '</select>')
+        : '<select id="aae-date" style="' + _fld + '">' + dateOptions + '</select>'
+          + (editId ? '<div style="font-size:.7rem;color:var(--text-3);margin-top:4px;">💡 Change the date above to move this event to a different day.</div>' : ''))
     + '</div>'
     /* Start + End time */
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'
@@ -15371,8 +15563,20 @@ function _saveAgendaEvent(editId) {
   if (editId) {
     var idx = -1;
     appState.agendaEvents.forEach(function(e, i) { if (e.id === editId) idx = i; });
+    var oldRecord = idx >= 0 ? appState.agendaEvents[idx] : null;
     if (idx >= 0) appState.agendaEvents[idx] = record;
     else          appState.agendaEvents.push(record);
+
+    /* If the date changed, clean up any stale _fromEvents entries in agendaItemOverrides
+       so the event doesn't ghost-appear on the old day after being moved. */
+    if (oldRecord && oldRecord.date && oldRecord.date !== record.date && appState.agendaItemOverrides) {
+      Object.keys(appState.agendaItemOverrides).forEach(function(k) {
+        var arr = appState.agendaItemOverrides[k];
+        if (arr && arr.some(function(it) { return it.id === editId; })) {
+          appState.agendaItemOverrides[k] = arr.filter(function(it) { return it.id !== editId; });
+        }
+      });
+    }
   } else {
     appState.agendaEvents.push(record);
   }
@@ -15381,7 +15585,8 @@ function _saveAgendaEvent(editId) {
   var modal = document.getElementById('add-agenda-event-modal');
   if (modal) modal.remove();
   renderPlannerAgenda();
-  showToast('📅 Event saved!', 2000);
+  var _moved = editId && record.date !== ((appState.agendaEvents||[]).find(function(e){return e.id===editId;})||{}).date;
+  showToast('📅 ' + (editId ? 'Event updated!' : 'Event saved!'), 2000);
 }
 
 function _deleteAgendaEvent(id) {
