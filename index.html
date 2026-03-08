@@ -14055,7 +14055,8 @@ var _agCollapsed = null; /* null = uninitialized; object = {dateStr: bool} */
 function _agInitCollapsed(todayStr, allDates) {
   if (_agCollapsed) return;
   _agCollapsed = {};
-  allDates.forEach(function(ds) { if (ds < todayStr) _agCollapsed[ds] = true; });
+  /* Collapse EVERY day except today — user sees just today's card open on first load */
+  allDates.forEach(function(ds) { if (ds !== todayStr) _agCollapsed[ds] = true; });
 }
 
 function _agToggleDay(dateStr) {
@@ -14678,13 +14679,14 @@ function renderPlannerAgenda() {
         /* Click to edit: agendaEvent items → full modal; built-in items → move sheet */
         var _clickFn = item._fromEvents
           ? 'showAddAgendaEventModal(null,\'' + item.id + '\')'
-          : '_showMoveItemSheet(' + JSON.stringify(item).replace(/'/g,"\\'") + ',' + d.day + ',\'' + _eStr + '\')';
+          : '_showMoveItemSheet(' + JSON.stringify(item).replace(/"/g,'&quot;') + ',' + d.day + ',\'' + _eStr + '\')';
         html += '<div style="' + _row + (_hasRich ? 'padding-bottom:8px;' : '') + 'cursor:pointer;border-radius:6px;transition:background .13s;" '
           + 'onclick="' + _clickFn + '" '
           + 'onmouseover="this.style.background=\'rgba(0,0,0,.04)\'" onmouseout="this.style.background=\'none\'">'
           + '<div style="' + _time + '">' + _tLabel + '</div>'
           + _icoHtml
           + '<div style="' + _txt  + '"><strong>' + (item.title||'').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</strong>'
+          + ' <span style="font-size:.72rem;opacity:.5;vertical-align:middle;">✏️</span>'
           + (item.subtitle ? '<div style="' + _sub + '">' + (item.subtitle||'').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' : '')
           + (item.address  ? '<div style="' + _sub + '">📍 ' + item.address.replace(/</g,'&lt;') + '</div>' : '')
           + (item.phone    ? '<div style="' + _sub + '">📞 ' + item.phone + '</div>' : '')
@@ -14692,7 +14694,6 @@ function renderPlannerAgenda() {
           + (item.notes    ? '<div style="' + _sub + ';font-style:italic;">💬 ' + item.notes.replace(/</g,'&lt;') + '</div>' : '')
           + (item.url      ? '<a href="' + item.url.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" style="font-size:.74rem;color:var(--blue);font-weight:600;text-decoration:none;" onclick="event.stopPropagation()">🔗 Website</a>' : '')
           + '</div>'
-          + '<div style="font-size:.8rem;color:var(--text-3);padding-left:4px;flex-shrink:0;padding-top:2px;opacity:.7;">✏️</div>'
           + '</div>';
       });
     } else {
@@ -14860,12 +14861,12 @@ function renderPlannerAgenda() {
           + '<div style="' + _time + '">' + _tLabel2 + '</div>'
           + '<div style="' + _ico  + '">📌</div>'
           + '<div style="' + _txt  + '"><strong>' + (ev.name||'').replace(/</g,'&lt;') + '</strong>'
+          + ' <span style="font-size:.72rem;opacity:.5;vertical-align:middle;">✏️</span>'
           + (ev.address ? '<div style="' + _sub + '">📍 ' + ev.address.replace(/</g,'&lt;') + '</div>' : '')
           + (ev.phone   ? '<div style="' + _sub + '">📞 ' + ev.phone + '</div>' : '')
           + (ev.hours   ? '<div style="' + _sub + '">🕐 ' + ev.hours.replace(/</g,'&lt;') + '</div>' : '')
           + (ev.url     ? '<a href="' + ev.url.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" style="font-size:.7rem;color:var(--blue);font-weight:600;text-decoration:none;" onclick="event.stopPropagation()">🔗 Website</a>' : '')
           + '</div>'
-          + '<div style="font-size:.8rem;color:var(--text-3);padding-left:4px;flex-shrink:0;padding-top:2px;opacity:.7;">✏️</div>'
           + '</div>';
       });
     }
@@ -14884,6 +14885,14 @@ function renderPlannerAgenda() {
 
   html += '</div>';
   el.innerHTML = html;
+
+  /* Auto-scroll to today's card so it appears at the top of the view */
+  setTimeout(function() {
+    var todayCard = document.getElementById('ag-day-body-' + todayStr);
+    if (todayCard && todayCard.parentElement) {
+      todayCard.parentElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, 80);
 }
 
 /* ── Helper: format "HH:MM" time string to "9:00 AM" ── */
