@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-07 (Session 19, fifty-fifth context)
+2026-03-08 (Session 20)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -55,6 +55,18 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 20 — 2026-03-08
+
+**Lookup, sort, dismiss-X, image upload, and Add Item modal fixes.**
+
+- **Gemini lookup now fetches the URL**: `_agendaLookupInfo` now passes `tools: [{ urlContext: {} }]` when a URL is provided. Gemini 2.0 Flash (used by the Netlify proxy) fetches the actual page and returns accurate address/hours from it, instead of guessing from training data. Prompt now says "Use ONLY what is on the page."
+- **× dismiss button on AI result panel**: The green result box now has a small ✕ button (top-right corner) to clear the extracted details. Inner content is now in `aae-ai-result-inner` div; all `.innerHTML` setters updated to target the inner div.
+- **Sort fix — events no longer stuck at bottom**: Root cause was `agendaEvents` (events saved without "Add to Day Schedule" checked) being always rendered at the bottom regardless of time.
+  - `_saveAgendaEvent`: When ANY `date` is set (i.e., modal opened from a specific day), `_toSchedule = true` regardless of checkbox state. Events from the "Add event this day" button now always go to `agendaItemOverrides` with proper sort.
+  - Modal UI: "Add to Day Schedule" checkbox is now hidden when `prefillDate` is set (it was always going to override path anyway).
+  - Render: Override items path now merges any existing `agendaEvents` items for the day into `_ovItems`, sorts the combined list, and renders together. Auto-gen path renders `_dayManual` items sorted inline too.
+- **"+ Add Item" modal z-index fix**: `showAddAgendaEventModal` now uses `z-index:100001` (was 99999), so it always appears on top of the Edit Day modal (z-index:99999).
 
 ### Session 19 (fifty-eighth context) — 2026-03-07
 

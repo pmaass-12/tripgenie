@@ -13944,11 +13944,28 @@ function renderPlannerAgenda() {
     /* Body: time blocks — collapsible */
     html += '<div id="ag-day-body-' + _eStr + '" style="background:var(--card);padding:8px 12px;' + (_isCollapsed ? 'display:none;' : '') + '">';
 
+    /* ── Pre-collect any agendaEvents for this effective date ── */
+    var _dayManual = (appState.agendaEvents || []).filter(function(ev) { return ev.date === _eStr; });
+
     /* ── Override items (if saved) or auto-generate from TRIP_DAYS ──
        Key is d.day (day number) — stable through schedule date changes.
        Fall back to _eStr (effective date) for any not-yet-migrated items. */
     if (appState.agendaItemOverrides && (appState.agendaItemOverrides[d.day] || appState.agendaItemOverrides[_eStr])) {
-      var _ovItems = appState.agendaItemOverrides[d.day] || appState.agendaItemOverrides[_eStr];
+      /* Convert agendaEvents to override format and merge into the list, then sort */
+      var _ovItems = (appState.agendaItemOverrides[d.day] || appState.agendaItemOverrides[_eStr]).slice();
+      _dayManual.forEach(function(ev) {
+        /* Only inject if not already present in override list (by id) */
+        var _alreadyIn = _ovItems.some(function(it) { return it.id === ev.id; });
+        if (!_alreadyIn) {
+          _ovItems.push({ id: ev.id, time: ev.startTime||'', endTime: ev.endTime||'',
+            icon: '📌', title: ev.name, address: ev.address||'', phone: ev.phone||'',
+            hours: ev.hours||'', url: ev.url||'', notes: ev.notes||'', _fromEvents: true });
+        }
+      });
+      _ovItems.sort(function(a, b) {
+        var at = a.time || '23:59', bt = b.time || '23:59';
+        return at < bt ? -1 : at > bt ? 1 : 0;
+      });
       _ovItems.forEach(function(item) {
         var _tFmt = function(t) { var p=t.split(':'); return _calFmtTime(parseInt(p[0],10),parseInt(p[1]||'0',10)); };
         var _tLabel = item.time ? _tFmt(item.time) : '';
@@ -14119,29 +14136,21 @@ function renderPlannerAgenda() {
     }
     } /* end else: auto-generated items */
 
-    /* ── Manual events for this date (from appState.agendaEvents) ── */
-    var _manualEvs = (appState.agendaEvents || [])
-      .filter(function(ev) { return ev.date === _eStr; })
-      .sort(function(a, b) { return (a.startTime || '') < (b.startTime || '') ? -1 : 1; });
-    if (_manualEvs.length > 0) {
-      html += '<div style="height:1px;background:linear-gradient(90deg,transparent,rgba(123,94,167,.3),transparent);margin:4px 0 2px;"></div>';
-      _manualEvs.forEach(function(ev) {
-        var _evStart = _agEvFmt(ev.startTime);
-        var _evEnd   = _agEvFmt(ev.endTime);
-        var _evTimeLabel = _evStart + (_evEnd ? '–' + _evEnd : '');
-        html += '<div style="display:flex;align-items:flex-start;gap:0;padding:7px 0;border-bottom:1px solid rgba(123,94,167,.1);background:rgba(123,94,167,.04);margin:0 -12px;padding:7px 12px;">'
-          + '<div style="min-width:54px;font-size:.68rem;font-weight:700;color:#7B5EA7;padding-top:2px;flex-shrink:0;line-height:1.2;">' + _evTimeLabel + '</div>'
-          + '<div style="width:24px;font-size:.9rem;flex-shrink:0;text-align:center;line-height:1.6;">📌</div>'
-          + '<div style="flex:1;font-size:.8rem;color:var(--text);line-height:1.35;min-width:0;">'
-          + '<strong>' + ev.name + '</strong>'
-          + (ev.address ? '<div style="font-size:.68rem;color:var(--text-3);margin-top:1px;">📍 ' + ev.address + '</div>' : '')
-          + (ev.phone   ? '<div style="font-size:.68rem;color:var(--text-3);">📞 ' + ev.phone + '</div>' : '')
-          + (ev.hours   ? '<div style="font-size:.68rem;color:var(--text-3);">🕐 ' + ev.hours + '</div>' : '')
-          + (ev.notes   ? '<div style="font-size:.68rem;color:var(--text-3);font-style:italic;">' + ev.notes + '</div>' : '')
-          + (ev.url     ? '<a href="' + ev.url + '" target="_blank" rel="noopener" style="font-size:.7rem;color:var(--blue);font-weight:600;text-decoration:none;" onclick="event.stopPropagation()">🔗 Website</a>' : '')
-          + '</div>'
-          + '<button onclick="event.stopPropagation();showAddAgendaEventModal(null,\'' + ev.id + '\')" style="background:rgba(123,94,167,.12);border:none;color:#7B5EA7;border-radius:6px;padding:3px 8px;font-size:.66rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;align-self:flex-start;margin-left:4px;white-space:nowrap;">✏️ Edit</button>'
-          + '</div>';
+    /* ── agendaEvents for auto-gen days: inject sorted (override path already merged them above) ── */
+    if (_dayManual.length > 0 && !(appState.agendaItemOverrides && (appState.agendaItemOverrides[d.day] || appState.agendaItemOverrides[_eStr]))) {
+      var _tFmt2 = function(t) { if (!t) return ''; var p=t.split(':'); return _calFmtTime(parseInt(p[0],10),parseInt(p[1]||'0',10)); };
+      _dayManual.slice().sort(function(a,b){return (a.startTime||'') < (b.startTime||'') ? -1 : 1;}).forEach(function(ev) {
+        var _tLabel2 = _tFmt2(ev.startTime);
+        if (ev.endTime && _tLabel2) _tLabel2 += '<br><span style="opacity:.75">' + _tFmt2(ev.endTime) + '</span>';
+        html += '<div style="' + _row + (ev.address||ev.phone||ev.hours ? 'padding-bottom:8px;' : '') + '">'
+          + '<div style="' + _time + '">' + _tLabel2 + '</div>'
+          + '<div style="' + _ico  + '">📌</div>'
+          + '<div style="' + _txt  + '"><strong>' + (ev.name||'').replace(/</g,'&lt;') + '</strong>'
+          + (ev.address ? '<div style="' + _sub + '">📍 ' + ev.address.replace(/</g,'&lt;') + '</div>' : '')
+          + (ev.phone   ? '<div style="' + _sub + '">📞 ' + ev.phone + '</div>' : '')
+          + (ev.hours   ? '<div style="' + _sub + '">🕐 ' + ev.hours.replace(/</g,'&lt;') + '</div>' : '')
+          + (ev.url     ? '<a href="' + ev.url.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" style="font-size:.7rem;color:var(--blue);font-weight:600;text-decoration:none;" onclick="event.stopPropagation()">🔗 Website</a>' : '')
+          + '</div></div>';
       });
     }
 
@@ -14255,7 +14264,7 @@ function showAddAgendaEventModal(prefillDate, editId) {
   var _hasEnrich = ev && (ev.address || ev.phone || ev.hours);
   var _fld = 'width:100%;box-sizing:border-box;border:1.5px solid var(--border);border-radius:9px;padding:9px 12px;font-size:.85rem;font-family:var(--font);color:var(--text);background:var(--bg);outline:none;';
 
-  var html = '<div id="add-agenda-event-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:99999;display:flex;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)this.remove()">'
+  var html = '<div id="add-agenda-event-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100001;display:flex;align-items:flex-end;justify-content:center;" onclick="if(event.target===this)this.remove()">'
     + '<div style="background:var(--card);width:100%;max-width:480px;border-radius:18px 18px 0 0;padding:20px 20px 36px;box-shadow:0 -4px 30px rgba(0,0,0,.22);max-height:92vh;overflow-y:auto;" onclick="event.stopPropagation()">'
     /* Handle bar */
     + '<div style="width:38px;height:4px;background:var(--border);border-radius:4px;margin:0 auto 16px;"></div>'
@@ -14319,8 +14328,10 @@ function showAddAgendaEventModal(prefillDate, editId) {
     /* Lookup button */
     + '<button id="aae-lookup-btn" onclick="_agendaLookupInfo()" style="display:flex;align-items:center;justify-content:center;gap:7px;background:var(--blue);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);width:100%;margin-bottom:12px;box-sizing:border-box;">🔍 Look Up Address &amp; Hours with Gemini</button>'
     /* AI result display */
-    + '<div id="aae-ai-result" style="display:' + (_hasEnrich ? 'block' : 'none') + ';background:#f0faf5;border:1.5px solid #a8d8c8;border-radius:9px;padding:12px;margin-bottom:12px;font-size:.81rem;color:var(--text);line-height:1.6;">'
-    + (_hasEnrich ? _agendaFormatEnrich(ev.address, ev.phone, ev.hours) : '') + '</div>'
+    + '<div id="aae-ai-result" style="display:' + (_hasEnrich ? 'block' : 'none') + ';position:relative;background:#f0faf5;border:1.5px solid #a8d8c8;border-radius:9px;padding:10px 34px 10px 12px;margin-bottom:12px;font-size:.81rem;color:var(--text);line-height:1.6;">'
+    + '<button type="button" onclick="document.getElementById(\'aae-ai-result\').style.display=\'none\'" title="Dismiss" style="position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;font-size:.9rem;color:var(--text-3);line-height:1;padding:2px 4px;">✕</button>'
+    + '<div id="aae-ai-result-inner">' + (_hasEnrich ? _agendaFormatEnrich(ev.address, ev.phone, ev.hours) : '') + '</div>'
+    + '</div>'
     /* Hidden enrichment storage */
     + '<input id="aae-address" type="hidden" value="' + (ev ? (ev.address||'').replace(/"/g,'&quot;') : '') + '">'
     + '<input id="aae-phone"   type="hidden" value="' + (ev ? (ev.phone||'').replace(/"/g,'&quot;')   : '') + '">'
@@ -14330,8 +14341,8 @@ function showAddAgendaEventModal(prefillDate, editId) {
     + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Notes <span style="opacity:.6;font-weight:500;">(optional)</span></label>'
     + '<textarea id="aae-notes" rows="2" placeholder="Tip: bring bug spray · reserve tickets in advance…" style="' + _fld + 'resize:vertical;">' + (ev ? (ev.notes||'') : '') + '</textarea>'
     + '</div>'
-    /* ── "Add to schedule" toggle — only shown for new events ── */
-    + (editId ? '' :
+    /* ── "Add to schedule" toggle — only shown for new events WITHOUT a prefilled date ── */
+    + (editId || prefillDate ? '' :
         '<div style="margin-bottom:14px;">'
         + '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:11px 13px;background:rgba(44,95,138,.07);border:1.5px solid rgba(44,95,138,.22);border-radius:10px;">'
         + '<input type="checkbox" id="aae-to-schedule" checked style="width:18px;height:18px;accent-color:var(--blue);cursor:pointer;flex-shrink:0;">'
@@ -14434,7 +14445,8 @@ function _aaeApplyExtracted(txt2) {
   if (endEl   && eEnd)   { endEl.value   = eEnd;   }
   if (dateEl && eDate && dateEl.tagName === 'SELECT') { dateEl.value = eDate; }
   if (resEl && (eAddr || ePhone || eHours)) {
-    resEl.innerHTML = _agendaFormatEnrich(eAddr, ePhone, eHours);
+    var _inner = document.getElementById('aae-ai-result-inner');
+    if (_inner) _inner.innerHTML = _agendaFormatEnrich(eAddr, ePhone, eHours);
     resEl.style.display = 'block';
   }
   showToast('✅ Info extracted!', 2000);
@@ -14534,18 +14546,29 @@ function _agendaLookupInfo() {
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Looking up…'; }
   if (res) { res.style.display = 'none'; }
 
-  var prompt = 'For the place: "' + name.trim() + '"'
-    + (url.trim() ? ' (website: ' + url.trim() + ')' : '')
-    + ' — provide ONLY these 3 lines, no extra text:\n'
-    + 'ADDRESS: [full street address with city, state, zip — or "Not found"]\n'
-    + 'PHONE: [phone number — or "Not found"]\n'
-    + 'HOURS: [typical opening hours, e.g. "Open daily 9 AM – 5 PM" or "Mon–Fri 10 AM–6 PM, Sat–Sun 9 AM–4 PM" — or "Not found"]\n'
-    + 'Do not say "Check website" — give your best answer from training data.';
+  var hasUrl = !!url.trim();
+  var prompt = hasUrl
+    ? 'Fetch the page at this URL and extract the venue details for "' + name.trim() + '".\n'
+      + 'URL: ' + url.trim() + '\n\n'
+      + 'From the page content, provide ONLY these 3 lines — no extra text:\n'
+      + 'ADDRESS: [full street address with city, state, zip — or "Not found"]\n'
+      + 'PHONE: [phone number — or "Not found"]\n'
+      + 'HOURS: [opening hours or visit info — or "Not found"]\n'
+      + 'Use ONLY what is on the page. Do not guess or use training data.'
+    : 'For the place: "' + name.trim() + '" — provide ONLY these 3 lines, no extra text:\n'
+      + 'ADDRESS: [full street address with city, state, zip — or "Not found"]\n'
+      + 'PHONE: [phone number — or "Not found"]\n'
+      + 'HOURS: [typical opening hours, e.g. "Open daily 9 AM – 5 PM" — or "Not found"]\n'
+      + 'Give your best answer from training data.';
 
-  var body = JSON.stringify({
+  var requestBody = {
     contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { maxOutputTokens: 200, temperature: 0.1 }
-  });
+    generationConfig: { maxOutputTokens: 200, temperature: 0 }
+  };
+  /* When a URL is provided, enable urlContext so Gemini actually fetches the page */
+  if (hasUrl) requestBody.tools = [{ urlContext: {} }];
+
+  var body = JSON.stringify(requestBody);
 
   fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body: body })
   .then(function(r) { return r.json(); })
@@ -14571,11 +14594,12 @@ function _agendaLookupInfo() {
     if (fH) fH.value = hours;
 
     if (res) {
+      var _ri = document.getElementById('aae-ai-result-inner');
       res.style.display = 'block';
       if (address || phone || hours) {
-        res.innerHTML = _agendaFormatEnrich(address, phone, hours);
+        if (_ri) _ri.innerHTML = _agendaFormatEnrich(address, phone, hours);
       } else {
-        res.innerHTML = '<span style="color:var(--text-3);">⚠️ Couldn\'t find details. Try adding the website URL above and look up again.</span>';
+        if (_ri) _ri.innerHTML = '<span style="color:var(--text-3);">⚠️ Couldn\'t find details. Try adding the website URL above and look up again.</span>';
       }
     }
   })
@@ -14605,9 +14629,11 @@ function _saveAgendaEvent(editId) {
     startTime: start, endTime: end, url: url,
     address: address, phone: phone, hours: hours, notes: notes };
 
-  /* ── "Add to schedule" path: save as a reorderable agendaItemOverride ── */
+  /* ── "Add to schedule" path: save as a reorderable agendaItemOverride ──
+     Always use this path when a specific date was prefilled (day-context add),
+     ensuring new events are always inserted in chronological order.            */
   var _toScheduleEl = document.getElementById('aae-to-schedule');
-  var _toSchedule   = !editId && _toScheduleEl && _toScheduleEl.checked;
+  var _toSchedule   = !editId && (!!date || (_toScheduleEl && _toScheduleEl.checked));
   if (_toSchedule) {
     if (!appState.agendaItemOverrides) appState.agendaItemOverrides = {};
 
