@@ -56,6 +56,16 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 19 (fifty-sixth context) — 2026-03-07
+
+**Fix date cascade for out-of-order TRIP_DAYS (blue bar / modal inconsistency, GSM not cascading).**
+
+- **Root cause**: `_getStopEffectiveDates`, `phaseHeaderHtml._phCumOffset`, `renderSchedule._schPhaseOffset`, and `_editStopDays` prev-stop detection all iterated `TRIP_DAYS` in raw array order. AI-generated or edited `customTripData.days` can have entries in a different order than their dates, causing wrong cumulative offsets (e.g. GSM appearing before Winchester → Winchester extras not counted for GSM).
+- **Fix 1**: `_getStopEffectiveDates` now sorts `TRIP_DAYS` by date before computing `cumOffset` and filtering `phaseDays`.
+- **Fix 2**: `phaseHeaderHtml` now calls `_getStopEffectiveDates(firstDay.stopId)` directly — blue bar always matches modal.
+- **Fix 3**: `renderSchedule._schPhaseOffset` computed from `_sortedDays` (date-sorted) not raw `TRIP_DAYS`.
+- **Fix 4**: `_editStopDays` prev-stop detection sorts `TRIP_DAYS` before building the stop list.
+
 ### Session 19 (fifty-fifth context) — 2026-03-07
 
 **Three schedule date fixes: blue bar depart off-by-one, first stop arrival editable, Settings date sync.**

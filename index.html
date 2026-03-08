@@ -9678,30 +9678,12 @@ function phaseHeaderHtml(phase, firstDay) {
   var _cityDisp = pStop ? _stopCityDisplay(pStop) : '';
   var _hasOverride = pStop && appState.stopCityNames && appState.stopCityNames[pStop.id];
 
-  /* Compute cumulative phaseExtraDays offset from stops BEFORE this one so the
-     phase header shows dates that match what renderSchedule actually displays.
-     (renderSchedule calls this same function but its _schPhaseOffset is local.) */
-  var _phCumOffset = 0;
-  var _phSeenStops = [];
-  TRIP_DAYS.forEach(function(td) {
-    if (_phSeenStops.indexOf(td.stopId) === -1) {
-      _phSeenStops.push(td.stopId);
-      if (td.stopId === firstDay.stopId) return; /* stop before adding this stop's own extras */
-      var _e = (appState.phaseExtraDays && appState.phaseExtraDays[td.stopId]) || 0;
-      _phCumOffset += _e;
-    }
-  });
-  /* Shift a YYYY-MM-DD string by N days */
-  var _phOffDate = function(ds, off) {
-    if (!ds || !off) return ds;
-    var _d = new Date(ds + 'T12:00:00');
-    _d.setDate(_d.getDate() + off);
-    return _d.toISOString().substring(0, 10);
-  };
-  /* Effective start date = raw first date + cumulative prior-stop offsets */
-  var _phFirstDate = _phOffDate(phaseDays.length > 0 ? phaseDays[0].date : '', _phCumOffset) || (phaseDays.length > 0 ? phaseDays[0].date : '');
-  /* Effective last date = first date + totalNights (departure DAY, not last night) */
-  var _phLastDate  = totalNights > 0 ? (_phOffDate(phaseDays.length > 0 ? phaseDays[0].date : '', _phCumOffset + totalNights) || _phFirstDate) : _phFirstDate;
+  /* Use _getStopEffectiveDates for arrive/depart — this now uses date-sorted TRIP_DAYS
+     for cumOffset, matching renderSchedule's _schPhaseOffset logic exactly.
+     Guarantees the blue bar always shows the same dates as the date-editor modal.   */
+  var _phEffDates  = _getStopEffectiveDates(firstDay.stopId);
+  var _phFirstDate = _phEffDates.arrival   || (phaseDays.length > 0 ? phaseDays[0].date : '');
+  var _phLastDate  = _phEffDates.departure || _phFirstDate;
 
   return '<div style="display:flex;align-items:center;gap:0;padding:11px 16px;background:var(--blue);color:#fff;border-radius:10px;margin:18px 0 6px;flex-wrap:wrap;row-gap:8px;">'
 
@@ -9874,15 +9856,20 @@ function removePhaseDay(stopId) {
 
 /* Compute cumulative phaseExtraDays offset for a stopId (from prior stops only) */
 function _getStopEffectiveDates(stopId) {
+  /* Sort by date so cumOffset reflects the same chronological order
+     that renderSchedule uses — guards against out-of-order customTripData */
+  var _sortedTD = TRIP_DAYS.slice().sort(function(a, b) {
+    return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.day||0) - (b.day||0);
+  });
   var cumOffset = 0, seenStops = [];
-  TRIP_DAYS.forEach(function(d) {
+  _sortedTD.forEach(function(d) {
     if (seenStops.indexOf(d.stopId) === -1) {
       seenStops.push(d.stopId);
       if (d.stopId === stopId) return; /* don't include this stop's own extras */
       cumOffset += (appState.phaseExtraDays && appState.phaseExtraDays[d.stopId]) || 0;
     }
   });
-  var phaseDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
+  var phaseDays = _sortedTD.filter(function(d) { return d.stopId === stopId; });
   if (!phaseDays.length || !phaseDays[0].date) return { arrival:null, departure:null, totalNights:0 };
   var arrMs = new Date(phaseDays[0].date + 'T12:00:00').getTime() + cumOffset * 86400000;
   var extras = (appState.phaseExtraDays && appState.phaseExtraDays[stopId]) || 0;
@@ -9912,16 +9899,16 @@ function _editStopDays(stopId, baseDays) {
   var _arrDate = _ed.arrival   || '';   /* YYYY-MM-DD */
   var _depDate = _ed.departure || '';   /* YYYY-MM-DD */
 
-  /* Find the previous stop in TRIP_DAYS (to absorb arrive-date shifts) */
-  var _seenPrev = [], _prevStopId = null;
-  TRIP_DAYS.forEach(function(d) {
-    if (_seenPrev.indexOf(d.stopId) === -1) {
-      _seenPrev.push(d.stopId);
-      if (d.stopId !== stopId) _prevStopId = d.stopId;
-      /* stop scanning once we've passed our stop */
-    }
+  /* Find the previous stop in date-sorted TRIP_DAYS (to absorb arrive-date shifts).
+     Sort matches the order used by _getStopEffectiveDates and renderSchedule.       */
+  var _sortedForPrev = TRIP_DAYS.slice().sort(function(a,b){
+    return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.day||0)-(b.day||0);
   });
-  /* Proper approach: find last unique stopId BEFORE ours */
+  var _seenPrev = [], _prevStopId = null;
+  _sortedForPrev.forEach(function(d) {
+    if (_seenPrev.indexOf(d.stopId) === -1) _seenPrev.push(d.stopId);
+  });
+  /* Find the unique stopId that immediately precedes ours in sorted order */
   _prevStopId = null;
   var _hitThis = false;
   for (var _pi = _seenPrev.length - 1; _pi >= 0; _pi--) {
@@ -11037,13 +11024,22 @@ function renderSchedule() {
   }, 0);
   var _plannedEndDate = new Date(new Date(CONFIG.endDate + 'T00:00:00').getTime() + _totalPauseNights * 86400000);
 
-  /* Pre-compute cumulative phaseExtraDays offset per stop (in TRIP_DAYS order).
+  /* Sort by date (then day#) so customized trips always render in chronological order.
+     IMPORTANT: compute _schPhaseOffset from the SAME sorted order so that cascade
+     offsets match _getStopEffectiveDates (which also now uses date-sorted order).   */
+  var _sortedDays = TRIP_DAYS.slice().sort(function(a, b) {
+    if (a.date < b.date) return -1;
+    if (a.date > b.date) return  1;
+    return (a.day || 0) - (b.day || 0);
+  });
+
+  /* Pre-compute cumulative phaseExtraDays offset per stop (in sorted date order).
      When stop A has phaseExtraDays = -1, every stop that comes AFTER A in the
-     schedule is 1 day earlier — matching how the Stop Navigator computes dates. */
+     schedule is 1 day earlier — matching how _getStopEffectiveDates computes dates. */
   var _schPhaseOffset = {};
   var _schPhaseCumOffset = 0;
   var _schSeenStops = [];
-  TRIP_DAYS.forEach(function(d) {
+  _sortedDays.forEach(function(d) {
     if (_schSeenStops.indexOf(d.stopId) === -1) {
       _schSeenStops.push(d.stopId);
       /* This stop inherits the cumulative offset from all previous stops */
@@ -11054,13 +11050,6 @@ function renderSchedule() {
     }
   });
   var _overflowDayCount = 0;
-
-  /* Sort by date (then day#) so customized trips always render in chronological order */
-  var _sortedDays = TRIP_DAYS.slice().sort(function(a, b) {
-    if (a.date < b.date) return -1;
-    if (a.date > b.date) return  1;
-    return (a.day || 0) - (b.day || 0);
-  });
 
   /* Track drive-day entries that were "pre-rendered" before their phase header to
      avoid showing them a second time when the iteration reaches them normally.
