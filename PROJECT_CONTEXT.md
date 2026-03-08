@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-08 (Session 22)
+2026-03-08 (Session 23)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -55,6 +55,20 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 23 — 2026-03-08
+
+**Gallery enhancements: EXIF date sorting, location map view, and upload capacity fix.**
+
+- **Upload capacity fix (`_compressImage`)**: Reduced default `maxDim` from 1200 → 800 and `quality` from 0.70 → 0.55. This roughly triples the number of photos that can be stored in the ~5 MB localStorage quota (~200 KB/photo at old settings → ~70 KB/photo at new settings). Users should now be able to upload 10–15 photos per batch instead of 3–4.
+
+- **EXIF reading in `_galleryUpload`**: Gallery uploads now capture GPS coordinates, DateTimeOriginal, and reverse-geocoded location name from JPEG/TIFF files via `exifr`. The new flow restructures `_galleryUpload` to: (1) compress all images first, (2) run `Promise.all()` over EXIF promises for each entry in parallel (including Nominatim reverse-geocode for any GPS-tagged photos), (3) clean up temp `_file` reference from each entry, then (4) save to localStorage once with full EXIF data attached. Photo pool entries now store: `exif: { lat, lon, dt, locationName }`. Previously, gallery uploads had no EXIF data at all — only journal photos did.
+
+- **Date-sorted gallery (`renderGalleryTab`)**: Photos in the Gallery tab are now sorted by actual photo date (newest first) using `exif.dt` (EXIF DateTimeOriginal) when available, falling back to `entry.date` (journal date) or upload timestamp. Previously photos appeared in reverse upload order regardless of when they were actually taken.
+
+- **Gallery map view**: Added `[📷 Grid] [🗺 Map]` segmented toggle in the gallery header — only shown when at least one photo has GPS coordinates. Map view uses Leaflet with circle markers (number = photo count), clustered to 0.05° (~5 km) resolution. Clicking a pin filters the photo grid below the map to show only photos from that location; clicking again deselects (or tap "✕ Show all"). Map view state is tracked in `_galleryTabView` and `_galleryMapFilter`. Leaflet instance stored in `window._galleryMapInstance` and destroyed/recreated on each render to prevent memory leaks.
+
+- **New state vars and helpers**: Added `_galleryTabView` ('grid'|'map'), `_galleryMapFilter` (location cluster key), `_setGalleryTabView(v)`, and `_setGalleryMapFilter(k)` (toggle-style: calling with same key deselects).
 
 ### Session 22 — 2026-03-08
 

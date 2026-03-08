@@ -12375,8 +12375,8 @@ function _openGalleryFilePicker() {
    through unchanged.  callback receives the (possibly compressed)
    data URL.                                                         */
 function _compressImage(dataUrl, callback, maxDim, quality) {
-  maxDim   = maxDim   || 1200;
-  quality  = quality  || 0.70;
+  maxDim   = maxDim   || 800;   // reduced from 1200 → ~2× smaller storage footprint
+  quality  = quality  || 0.55;  // reduced from 0.70 → allows ~3× more photos in localStorage
   try {
     var img = new Image();
     img.onload = function() {
@@ -12410,7 +12410,6 @@ function _galleryUpload(input) {
   appState.photoPool.forEach(function(p) {
     if (p.fileName) _existingNames[p.fileName.toLowerCase()] = true;
   });
-  // Also scan journal photos
   (_journalEntries || []).forEach(function(e) {
     (e.photos || []).forEach(function(p) {
       if (p && p.fileName) _existingNames[p.fileName.toLowerCase()] = true;
@@ -12420,16 +12419,62 @@ function _galleryUpload(input) {
   var files = Array.prototype.slice.call(input.files);
   var added = 0, dupes = 0, total = files.length;
   var processed = 0;
-  var newEntries = []; // accumulate all new entries; save once at the end
+  var newEntries = [];
 
+  /* After all compressions complete, run EXIF on every new entry in
+     parallel (GPS + date), then geocode any that have coordinates,
+     then save once.  Using Promise.all ensures the saved objects
+     already carry full EXIF metadata.                                */
   function _finish() {
-    // Prepend all new entries at once, then save a single time
-    if (newEntries.length > 0) {
-      newEntries.reverse(); // so last-processed ends up at top after unshift
-      newEntries.forEach(function(entry) { appState.photoPool.unshift(entry); });
-      saveState(appState);
-    }
-    _galleryUploadDone(added, dupes, input);
+    var exifJobs = newEntries.map(function(entry) {
+      var f = entry._file;
+      if (!f || !window.exifr || !f.type.match(/^image\/(jpeg|jpg|tiff)/i)) {
+        return Promise.resolve();
+      }
+      return exifr.parse(f, ['DateTimeOriginal','GPSLatitude','GPSLongitude','GPSLatitudeRef','GPSLongitudeRef'])
+        .then(function(exif) {
+          if (!exif) return;
+          entry.exif = {};
+          if (exif.latitude  != null) entry.exif.lat = exif.latitude;
+          if (exif.longitude != null) entry.exif.lon = exif.longitude;
+          if (exif.DateTimeOriginal) {
+            var dt = exif.DateTimeOriginal;
+            entry.exif.dt = dt instanceof Date ? dt.toISOString() : String(dt);
+          }
+          if (entry.exif.lat != null && entry.exif.lon != null) {
+            var geocodeUrl = 'https://nominatim.openstreetmap.org/reverse?lat=' + entry.exif.lat
+              + '&lon=' + entry.exif.lon + '&format=json&zoom=12';
+            return fetch(geocodeUrl, { headers: { 'Accept-Language': 'en' } })
+              .then(function(r2) { return r2.json(); })
+              .then(function(geo) {
+                if (geo && geo.address) {
+                  var city = geo.address.city || geo.address.town || geo.address.village || geo.address.county || '';
+                  var state = geo.address.state || '';
+                  entry.exif.locationName = [city, state].filter(Boolean).join(', ');
+                }
+              }).catch(function() {});
+          }
+        }).catch(function() {});
+    });
+
+    Promise.all(exifJobs).then(function() {
+      if (newEntries.length > 0) {
+        newEntries.forEach(function(e) { delete e._file; }); // clean tmp ref before save
+        newEntries.reverse();
+        newEntries.forEach(function(entry) { appState.photoPool.unshift(entry); });
+        saveState(appState);
+      }
+      _galleryUploadDone(added, dupes, input);
+    }).catch(function() {
+      // Safety fallback: save even if EXIF promise chain rejects
+      if (newEntries.length > 0) {
+        newEntries.forEach(function(e) { delete e._file; });
+        newEntries.reverse();
+        newEntries.forEach(function(entry) { appState.photoPool.unshift(entry); });
+        saveState(appState);
+      }
+      _galleryUploadDone(added, dupes, input);
+    });
   }
 
   files.forEach(function(file) {
@@ -12440,7 +12485,7 @@ function _galleryUpload(input) {
       if (processed === total) _finish();
       return;
     }
-    _existingNames[nameLower] = true; // prevent adding same file twice in one batch
+    _existingNames[nameLower] = true;
     var reader = new FileReader();
     reader.onload = function(ev) {
       var rawUrl  = ev.target.result;
@@ -12455,16 +12500,14 @@ function _galleryUpload(input) {
           stopId:    null,
           dayNum:    null,
           source:    'gallery-upload',
+          _file:     file,  // temp ref for EXIF — removed before localStorage save
         });
         added++;
         processed++;
         if (processed === total) _finish();
       }
-      if (isVideo) {
-        _store(rawUrl);           // videos: no canvas compression
-      } else {
-        _compressImage(rawUrl, _store);  // images: compress first
-      }
+      if (isVideo) { _store(rawUrl); }
+      else { _compressImage(rawUrl, _store); }
     };
     reader.onerror = function() {
       processed++;
@@ -13105,7 +13148,9 @@ function deleteJournalEntry(id) {
 }
 
 /* ── PHOTO GALLERY ───────────────────────────────────────────────── */
-var _galleryFilter = 'all';
+var _galleryFilter    = 'all';
+var _galleryTabView   = 'grid';   // 'grid' | 'map'
+var _galleryMapFilter = null;     // location cluster key string, or null = show all
 
 function openPlateGallery() {
   var modal = document.getElementById('plate-gallery-modal');
@@ -13174,7 +13219,7 @@ function renderGalleryTab() {
   if (!el) return;
   loadJournal();
 
-  // Collect all photos and videos from journal entries and photoPool
+  /* ── 1. Collect all photos from journal entries + photoPool ─────── */
   var allPhotos = [];
   _journalEntries.forEach(function(entry) {
     var localPhotos = entry.photos || [];
@@ -13182,55 +13227,98 @@ function renderGalleryTab() {
       localPhotos.forEach(function(p) {
         var src = (p && p.dataUrl) ? p.dataUrl : p;
         allPhotos.push({
-          src: src,
-          type: (p && p.type) ? p.type : (src && src.startsWith('data:video') ? 'video' : 'image'),
-          caption: (p && p.caption) || '',
+          src:      src,
+          type:     (p && p.type) ? p.type : (src && src.startsWith('data:video') ? 'video' : 'image'),
+          caption:  (p && p.caption) || '',
           location: entry.location || entry.stopName || '',
-          date: entry.date || '',
-          day: entry.day,
-          entryId: entry.id
+          date:     entry.date || '',
+          day:      entry.day,
+          entryId:  entry.id,
+          exif:     (p && p.exif) ? p.exif : null
         });
       });
     } else if (entry.photoThumbs && entry.photoThumbs.length > 0) {
-      /* No local photos — show cloud-synced thumbnails from other family devices */
       entry.photoThumbs.forEach(function(thumb) {
         if (!thumb) return;
         allPhotos.push({
-          src: thumb,
-          type: 'image',
-          caption: '☁️ ' + (entry.author || 'Family'),
-          location: entry.location || '',
-          date: entry.date || '',
-          day: entry.day,
-          entryId: entry.id,
-          isCloudThumb: true
+          src:         thumb,
+          type:        'image',
+          caption:     '☁️ ' + (entry.author || 'Family'),
+          location:    entry.location || '',
+          date:        entry.date || '',
+          day:         entry.day,
+          entryId:     entry.id,
+          isCloudThumb: true,
+          exif:        null
         });
       });
     }
   });
 
-  // Also include photos from unified photoPool (direct gallery uploads only — journal photos
-  // are already included above via _journalEntries to avoid duplicates)
   if (appState.photoPool && appState.photoPool.length > 0) {
     appState.photoPool.forEach(function(poolPhoto) {
-      if (poolPhoto.source === 'journal') return; /* already shown via journal entries loop */
+      if (poolPhoto.source === 'journal') return;
       var stop = poolPhoto.stopId ? getStop(poolPhoto.stopId) : null;
+      var exif = poolPhoto.exif || null;
       allPhotos.push({
-        src: poolPhoto.dataUrl,
-        type: 'image',
-        caption: poolPhoto.caption || '',
-        location: stop ? _sn(stop) : '',
-        date: poolPhoto.timestamp ? poolPhoto.timestamp.split('T')[0] : '',
-        day: poolPhoto.dayNum,
-        source: 'pool'
+        src:      poolPhoto.dataUrl,
+        type:     'image',
+        caption:  poolPhoto.caption || '',
+        location: (exif && exif.locationName) || (stop ? _sn(stop) : ''),
+        date:     (exif && exif.dt) ? exif.dt.split('T')[0] : (poolPhoto.timestamp ? poolPhoto.timestamp.split('T')[0] : ''),
+        day:      poolPhoto.dayNum,
+        source:   'pool',
+        exif:     exif
       });
     });
   }
 
-  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">'
+  /* ── 2. Sort by date: EXIF DateTimeOriginal → entry.date → upload ─ */
+  allPhotos.sort(function(a, b) {
+    var da = (a.exif && a.exif.dt) ? a.exif.dt : a.date;
+    var db = (b.exif && b.exif.dt) ? b.exif.dt : b.date;
+    if (!da && !db) return 0;
+    if (!da) return 1;   // undated → tail
+    if (!db) return -1;
+    return da < db ? 1 : (da > db ? -1 : 0); // newest first
+  });
+
+  /* ── 3. Build location groups for map view ───────────────────────── */
+  var locationGroups = {};  // key → {key, lat, lon, label, photos[]}
+  allPhotos.forEach(function(p) {
+    if (!p.exif || p.exif.lat == null || p.exif.lon == null) return;
+    // Cluster to ~5 km resolution (0.05°)
+    var key = (Math.round(p.exif.lat * 20) / 20).toFixed(2) + ',' + (Math.round(p.exif.lon * 20) / 20).toFixed(2);
+    if (!locationGroups[key]) {
+      locationGroups[key] = {
+        key:    key,
+        lat:    p.exif.lat,
+        lon:    p.exif.lon,
+        label:  (p.exif && p.exif.locationName) ? p.exif.locationName : (p.location || p.date || key),
+        photos: []
+      };
+    }
+    locationGroups[key].photos.push(p);
+  });
+  var groupKeys = Object.keys(locationGroups);
+  var hasGPS = groupKeys.length > 0;
+
+  /* ── 4. Header ───────────────────────────────────────────────────── */
+  var _isMap = (_galleryTabView === 'map') && hasGPS;
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">'
     + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-images"></i> Photo Gallery</h2>'
-    + '<div style="display:flex;align-items:center;gap:8px;">'
+    + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
     + '<span style="font-size:.8rem;color:var(--text-3);">' + allPhotos.length + ' photo' + (allPhotos.length !== 1 ? 's' : '') + '</span>'
+    + (hasGPS
+        ? '<div style="display:inline-flex;border-radius:8px;overflow:hidden;border:1px solid var(--border);">'
+          + '<button onclick="_setGalleryTabView(\'grid\')" style="padding:5px 12px;font-size:.75rem;font-weight:700;border:none;background:'
+          + (_isMap ? 'var(--bg)' : 'var(--orange)') + ';color:' + (_isMap ? 'var(--text-2)' : '#fff')
+          + ';cursor:pointer;font-family:var(--font);">📷 Grid</button>'
+          + '<button onclick="_setGalleryTabView(\'map\')" style="padding:5px 12px;font-size:.75rem;font-weight:700;border:none;background:'
+          + (_isMap ? 'var(--orange)' : 'var(--bg)') + ';color:' + (_isMap ? '#fff' : 'var(--text-2)')
+          + ';cursor:pointer;font-family:var(--font);border-left:1px solid var(--border);">🗺 Map</button>'
+          + '</div>'
+        : '')
     + '<button onclick="_openGalleryFilePicker()" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);">📤 Add Photos</button>'
     + '</div>'
     + '</div>';
@@ -13246,21 +13334,107 @@ function renderGalleryTab() {
     return;
   }
 
+  /* ── 5. Map view ─────────────────────────────────────────────────── */
+  if (_isMap) {
+    // Active location filter pill
+    var activeGroup = _galleryMapFilter ? locationGroups[_galleryMapFilter] : null;
+    if (activeGroup) {
+      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">'
+        + '<div style="background:var(--orange);color:#fff;border-radius:100px;padding:4px 12px;font-size:.78rem;font-weight:700;">'
+        + '📍 ' + activeGroup.label
+        + '</div>'
+        + '<button onclick="_setGalleryMapFilter(null)" style="font-size:.75rem;color:var(--text-3);background:none;border:none;cursor:pointer;padding:2px 6px;font-family:var(--font);">✕ Show all</button>'
+        + '</div>';
+    }
+
+    var mapContainerId = 'gallery-loc-map';
+    html += '<div id="' + mapContainerId + '" style="width:100%;height:280px;border-radius:12px;overflow:hidden;margin-bottom:14px;border:1px solid var(--border);"></div>';
+
+    // Photos to show in grid below map
+    var visPhotos = activeGroup ? activeGroup.photos : allPhotos.filter(function(p) { return p.exif && p.exif.lat != null; });
+    if (visPhotos.length === 0 && !activeGroup) visPhotos = allPhotos; // fallback: no GPS at all
+
+    if (visPhotos.length > 0) {
+      html += '<div style="font-size:.78rem;font-weight:700;color:var(--text-2);margin-bottom:8px;">'
+        + visPhotos.length + ' photo' + (visPhotos.length !== 1 ? 's' : '') + (activeGroup ? ' at this location' : ' with location data')
+        + '</div>';
+      html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">';
+      visPhotos.forEach(function(p) {
+        var isVid = p.type === 'video' || (p.src && p.src.startsWith('data:video'));
+        var capText = p.caption || p.location || '';
+        html += '<div style="cursor:zoom-in;position:relative;aspect-ratio:1;overflow:hidden;border-radius:6px;" data-media-src="' + (p.src||'') + '" data-media-type="' + (isVid?'video':'image') + '" data-media-cap="' + (capText.replace(/"/g,'&quot;')) + '">'
+          + (isVid
+              ? '<video src="' + p.src + '" style="width:100%;height:100%;object-fit:cover;" muted preload="metadata"></video>'
+                + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);"><span style="font-size:1.8rem;">▶️</span></div>'
+              : '<img src="' + p.src + '" style="width:100%;height:100%;object-fit:cover;" loading="lazy" />')
+          + (capText ? '<div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.65));padding:4px 6px;font-size:.56rem;color:#fff;line-height:1.3;">' + capText + '</div>' : '')
+          + '</div>';
+      });
+      html += '</div>';
+    }
+
+    el.innerHTML = html;
+
+    // Init Leaflet map
+    requestAnimationFrame(function() {
+      var mapEl = document.getElementById(mapContainerId);
+      if (!mapEl || typeof L === 'undefined') return;
+      if (window._galleryMapInstance) {
+        try { window._galleryMapInstance.remove(); } catch(e2) {}
+        window._galleryMapInstance = null;
+      }
+      // Compute center from all groups
+      var latSum = 0, lonSum = 0, gc = groupKeys.length;
+      groupKeys.forEach(function(k) { latSum += locationGroups[k].lat; lonSum += locationGroups[k].lon; });
+      var map = L.map(mapEl, { zoomControl: true }).setView([latSum/gc, lonSum/gc], 5);
+      window._galleryMapInstance = map;
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors', maxZoom: 18
+      }).addTo(map);
+
+      groupKeys.forEach(function(k) {
+        var group = locationGroups[k];
+        var isActive = _galleryMapFilter === k;
+        var markerHtml = '<div style="background:' + (isActive ? '#f57c00' : 'var(--blue,#1565c0)') + ';color:#fff;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:800;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.35);cursor:pointer;">' + group.photos.length + '</div>';
+        var icon = L.divIcon({ html: markerHtml, iconSize: [36,36], iconAnchor: [18,18], className: '' });
+        var marker = L.marker([group.lat, group.lon], { icon: icon }).addTo(map);
+        marker.bindTooltip((group.label || k) + ' · ' + group.photos.length + ' photo' + (group.photos.length !== 1 ? 's' : ''), { permanent: false, direction: 'top', offset: [0,-22] });
+        marker.on('click', function() { _setGalleryMapFilter(k); });
+      });
+
+      if (gc > 1) {
+        var bounds = groupKeys.map(function(k) { return [locationGroups[k].lat, locationGroups[k].lon]; });
+        try { map.fitBounds(bounds, { padding: [30,30] }); } catch(e3) {}
+      }
+    });
+
+    // Attach lightbox handlers after DOM insert
+    setTimeout(function() {
+      el.querySelectorAll('[data-media-src]').forEach(function(tile) {
+        tile.addEventListener('click', function() {
+          _openMediaLightbox(tile.dataset.mediaSrc, tile.dataset.mediaType, tile.dataset.mediaCap);
+        });
+      });
+    }, 0);
+    return;
+  }
+
+  /* ── 6. Grid view (default) ─────────────────────────────────────── */
   html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">';
   allPhotos.forEach(function(p) {
     var isVid = p.type === 'video' || (p.src && p.src.startsWith('data:video'));
-    html += '<div style="cursor:zoom-in;position:relative;aspect-ratio:1;overflow:hidden;border-radius:6px;' + (p.isCloudThumb ? 'opacity:.85;' : '') + '" data-media-src="' + (p.src||'') + '" data-media-type="' + (isVid?'video':'image') + '" data-media-cap="' + ((p.caption||p.location||'').replace(/"/g,'&quot;')) + '">'
+    var capText = p.caption || p.location || '';
+    html += '<div style="cursor:zoom-in;position:relative;aspect-ratio:1;overflow:hidden;border-radius:6px;' + (p.isCloudThumb ? 'opacity:.85;' : '') + '" data-media-src="' + (p.src||'') + '" data-media-type="' + (isVid?'video':'image') + '" data-media-cap="' + (capText.replace(/"/g,'&quot;')) + '">'
       + (isVid
         ? '<video src="' + p.src + '" style="width:100%;height:100%;object-fit:cover;" muted preload="metadata"></video>'
           + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);"><span style="font-size:1.8rem;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6));">▶️</span></div>'
         : '<img src="' + p.src + '" style="width:100%;height:100%;object-fit:cover;" loading="lazy" />')
       + (p.isCloudThumb ? '<div style="position:absolute;top:3px;right:3px;background:rgba(0,0,0,.5);border-radius:6px;padding:2px 4px;font-size:.55rem;color:#fff;line-height:1;">☁️</div>' : '')
-      + (p.caption || p.location ? '<div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.65));padding:4px 6px 4px;font-size:.56rem;color:#fff;line-height:1.3;">' + (p.caption || p.location) + '</div>' : '')
+      + (capText ? '<div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.65));padding:4px 6px 4px;font-size:.56rem;color:#fff;line-height:1.3;">' + capText + '</div>' : '')
       + '</div>';
   });
   html += '</div>';
   el.innerHTML = html;
-  // Attach click handlers after DOM insert
   el.querySelectorAll('[data-media-src]').forEach(function(tile) {
     tile.addEventListener('click', function() {
       _openMediaLightbox(tile.dataset.mediaSrc, tile.dataset.mediaType, tile.dataset.mediaCap);
@@ -13378,6 +13552,15 @@ function _renderGallery() {
 function _setGalleryFilter(filter) {
   _galleryFilter = filter;
   _renderGallery();
+}
+function _setGalleryTabView(v) {
+  _galleryTabView = v;
+  _galleryMapFilter = null;
+  renderGalleryTab();
+}
+function _setGalleryMapFilter(k) {
+  _galleryMapFilter = (_galleryMapFilter === k) ? null : k; // toggle off if same key
+  renderGalleryTab();
 }
 
 function openGalleryPhoto(idx) {
