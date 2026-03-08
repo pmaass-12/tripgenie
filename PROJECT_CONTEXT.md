@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-08 (Session 26)
+2026-03-08 (Session 26 continued)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -55,6 +55,18 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 26 (continued) — 2026-03-08
+
+**Fix gallery photo upload pipeline: dates, thumbnails, map, and empty-state.**
+
+- **Wrong photo dates (showed as upload date not capture date)**: `timestamp` was set to `new Date().toISOString()` — always today. Fixed to `new Date(file.lastModified).toISOString()`. `file.lastModified` is the file modification time, which for phone photos is almost always the camera capture time. Photos now sort into the correct date sections even without EXIF.
+
+- **Mobile photos not appearing on desktop (thumbnail race condition)**: `_compressPhotoThumb` is async (canvas onload), but `_doSave` was triggered from the EXIF promise chain — both ran concurrently and thumb almost always lost the race, so `entry.thumb = null` at save time. Cloud sync strips `dataUrl` (correct) but now also had `thumb: null` → other devices had no image data. Fixed by restructuring `_afterCompress`: generate thumbnail FIRST, then run EXIF, then save. Now `entry.thumb` is always set before hitting the cloud.
+
+- **Gallery map not showing for non-GPS photos**: Location clustering only used EXIF GPS coordinates. Journal photos have `stopId` but no GPS. Fixed: in the clustering loop, if `exif.lat` is null, fall back to `getStop(p.stopId).lat/lng`. Also added `stopId` to the `allPhotos` entries pushed from journal entries (previously missing). Now journal photos show up as stop-location pins on the gallery map.
+
+- **Errant "Add Photos" button at bottom of gallery**: When cloud-synced pool entries had `thumb: null` and `dataUrl: null`, the photo was skipped by `_poolSrc` null check → `allPhotos.length === 0` → empty state rendered with a big "📤 Add Photos" button at the bottom. This looked like a stray/errant button when photos clearly existed. Fixed: distinguish between "no photos at all" vs "photos exist but can't display" — the latter now shows a "☁️ Photos syncing from cloud…" message with guidance to re-upload if needed, not a confusing Add Photos button.
 
 ### Session 26 — 2026-03-08
 
