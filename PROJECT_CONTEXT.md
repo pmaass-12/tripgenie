@@ -56,6 +56,14 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 26 (continued 4) — 2026-03-08
+
+**Schedule stop card shows booked RV park name; Add Destination network error improved.**
+
+- **Schedule stop card now shows booked property name (`phaseHeaderHtml`)**: When a booking confirmation exists for a stop, the accommodation pill on the blue stop card now shows the actual property name (e.g. "🎫 Memphis KOA") in gold instead of the generic "🏕️ Campground" label. Tapping it opens the booking confirmation modal directly. When no booking exists, the pill works as before (tap cycles through accommodation types).
+
+- **Add Destination "Network error" now shows real cause**: `lookupDestination` previously swallowed all fetch errors into a generic "Network error" toast. Fixed by: (1) checking `r.ok` before `r.json()` — a non-JSON 404/500 page (e.g. Netlify function not found) no longer silently throws a parse error; (2) the `.catch` now receives the actual Error object and maps known server messages (GEMINI_KEY missing, 403 Forbidden, 404, 429 quota) to user-friendly text; (3) the real error is logged to console for debugging.
+
 ### Session 26 (continued 3) — 2026-03-08
 
 **Booking confirmations injected into agenda; departure time onclick quoting bug fixed.**

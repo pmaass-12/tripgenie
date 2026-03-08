@@ -9912,6 +9912,11 @@ function phaseHeaderHtml(phase, firstDay) {
   var _phFirstDate = _phEffDates.arrival   || (phaseDays.length > 0 ? phaseDays[0].date : '');
   var _phLastDate  = _phEffDates.departure || _phFirstDate;
 
+  /* Booking confirmation — used to show property name on the stay-type pill */
+  var _phBkgs    = (appState.bookingConfirmations && appState.bookingConfirmations[firstDay.stopId]) || [];
+  var _phBkg     = _phBkgs.length > 0 ? _phBkgs[0] : null;
+  var _phBkgName = _phBkg && _phBkg.propertyName ? _phBkg.propertyName : null;
+
   return '<div style="display:flex;align-items:center;gap:0;padding:11px 16px;background:var(--blue);color:#fff;border-radius:10px;margin:18px 0 6px;flex-wrap:wrap;row-gap:8px;">'
 
     /* ── Center: name + meta ── */
@@ -9951,9 +9956,13 @@ function phaseHeaderHtml(phase, firstDay) {
           + '</div>';
       })()
     + '<span style="opacity:.35;font-size:.7rem;">·</span>'
-    + '<button onclick="_cycleStayType(' + _sidAttr + ')" title="Change accommodation type" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">'
-    + _getStayMeta(firstDay.stopId).icon + '&thinsp;' + _getStayMeta(firstDay.stopId).label
-    + '</button>'
+    /* Stay-type pill: if a booking exists, shows property name in gold and opens booking modal;
+       otherwise shows generic type label and cycles through types on tap. */
+    + (_phBkgName
+        ? '<button onclick="openBookingModal(' + _sidAttr + ')" title="View booking confirmation" style="background:rgba(255,215,0,.18);border:1px solid rgba(255,215,0,.55);color:#fff;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;transition:background .15s;">🎫&thinsp;' + _phBkgName + '</button>'
+        : '<button onclick="_cycleStayType(' + _sidAttr + ')" title="Change accommodation type" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">'
+          + _getStayMeta(firstDay.stopId).icon + '&thinsp;' + _getStayMeta(firstDay.stopId).label
+          + '</button>')
     /* Explore / Waypoint segmented toggle */
     + '<div style="display:inline-flex;border-radius:7px;overflow:hidden;border:1px solid rgba(255,255,255,.28);flex-shrink:0;">'
     + (totalNights === 0
@@ -18542,7 +18551,16 @@ function lookupDestination() {
 
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:200,temperature:0.3} });
   fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
-  .then(function(r) { return r.json(); })
+  .then(function(r) {
+    /* Check HTTP status before trying to parse JSON — a non-JSON error page
+       (e.g. Netlify 404 for a missing function) would otherwise throw a parse
+       error that shows up as the misleading "Network error" toast. */
+    if (!r.ok) {
+      return r.json().catch(function() { throw new Error('Server error ' + r.status); })
+               .then(function(e) { throw new Error(e.error || ('Server error ' + r.status)); });
+    }
+    return r.json();
+  })
   .then(function(data) {
     var text = ''; try { text = data.candidates[0].content.parts[0].text.trim(); } catch(e) {}
     if (!text) { _admSetStep(1); showToast('Could not verify place. Try again.', 2500); return; }
@@ -18579,7 +18597,17 @@ function lookupDestination() {
     document.getElementById('adm-confirm-card').innerHTML = cardHtml;
     _admSetStep(2);
   })
-  .catch(function() { _admSetStep(1); showToast('Network error. Try again.', 2500); });
+  .catch(function(err) {
+    _admSetStep(1);
+    var msg = (err && err.message) ? err.message : 'Network error';
+    /* Translate server error messages into user-friendly text */
+    if (msg.indexOf('GEMINI_KEY') !== -1) msg = 'AI service not configured on server';
+    else if (msg.indexOf('403') !== -1 || msg.indexOf('Forbidden') !== -1) msg = 'Access denied — try refreshing the page';
+    else if (msg.indexOf('404') !== -1) msg = 'AI service not found — check Netlify deploy';
+    else if (msg.indexOf('429') !== -1) msg = 'AI quota exceeded — try again in a moment';
+    console.error('[lookupDestination] error:', err);
+    showToast(msg + '. Try again.', 3000);
+  });
 }
 
 function analyzeDestination() {
