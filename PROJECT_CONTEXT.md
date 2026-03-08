@@ -56,6 +56,29 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 23 (continued) — 2026-03-08
+
+**Bookings refresh fix, Add Destination wizard overhaul, gallery per-photo processing, gallery date-sections + always-on map.**
+
+- **Bookings tab refresh fix (`_refreshAll`)**: `_refreshAll()` now calls `renderBookingsTools()` whenever the bookings sub-tab is currently visible. Previously, adding a stop from the map while on the Bookings tab left the stop-selector chip list stale until the user navigated away and back.
+
+- **Add Destination wizard → actual schedule insertion**: The "Add Destination" wizard (Planner → Schedule → ➕ icon) previously saved new destinations only as pending AI suggestions (`appState.aiSuggestions`) rather than as actual schedule stops. Root cause: step 2 confirmation called `analyzeDestination()` which only populated the adjustments list. Fixed by adding a **Step 4 position picker** to the wizard modal:
+  - Step 2 primary button now reads "📍 Add to Schedule" and calls `_admToStep4()` directly (skipping AI analysis)
+  - Step 2 secondary link "✨ Analyze trip fit with AI first" is available for users who want AI analysis
+  - Step 3 (AI analysis result) now has a "📍 Add to Schedule →" primary button that also goes to step 4
+  - Step 4 shows "INSERT AFTER" dropdown (populated from current `TRIP_DAYS` stop order) and "NIGHTS TO STAY" input, then calls `_mapAddStopSave()` which does the actual insertion
+  - `_mapAddStopSave` null-safed for `_mapAddStopLatLng` (wizard doesn't provide GPS coords)
+  - Progress dots updated to 4 steps; `_admSetStep` handles 4-step flow
+
+- **Gallery: per-photo sequential processing + progress pie toast**: Reverted compression to 1200px / 0.82 quality (higher quality than the original 0.70). Photos are now processed one at a time (FileReader → compress → EXIF → save to localStorage), catching quota errors per-photo and continuing. `_galleryProgressToast(current, total)` shows a fixed bottom toast with SVG pie-chart animation displaying "Saving X of Y…". Geocoding is fire-and-forget — resolves asynchronously and updates the already-saved entry.
+
+- **Gallery: date-sectioned layout + always-on map**: Replaced the `[📷 Grid] [🗺 Map]` toggle with:
+  - Leaflet map **always shown at top** (220px) whenever any photos have GPS coordinates
+  - Map pins show photo count per location cluster; clicking a pin sets `_galleryMapFilter` to filter all date sections below to just that location; clicking again or the "✕ Show all" pill deselects
+  - Gallery below is always date-sectioned: each unique date gets a `March 14, 2026 ─────────────── (N photos)` divider, followed by a 3-column photo grid for that date
+  - Dates are sorted newest-first using EXIF DateTimeOriginal → entry.date → upload timestamp
+  - Removed `_galleryTabView` state var and toggle logic (no longer needed)
+
 ### Session 23 — 2026-03-08
 
 **Gallery enhancements: EXIF date sorting, location map view, and upload capacity fix.**
@@ -66,9 +89,7 @@ tripgenie/
 
 - **Date-sorted gallery (`renderGalleryTab`)**: Photos in the Gallery tab are now sorted by actual photo date (newest first) using `exif.dt` (EXIF DateTimeOriginal) when available, falling back to `entry.date` (journal date) or upload timestamp. Previously photos appeared in reverse upload order regardless of when they were actually taken.
 
-- **Gallery map view**: Added `[📷 Grid] [🗺 Map]` segmented toggle in the gallery header — only shown when at least one photo has GPS coordinates. Map view uses Leaflet with circle markers (number = photo count), clustered to 0.05° (~5 km) resolution. Clicking a pin filters the photo grid below the map to show only photos from that location; clicking again deselects (or tap "✕ Show all"). Map view state is tracked in `_galleryTabView` and `_galleryMapFilter`. Leaflet instance stored in `window._galleryMapInstance` and destroyed/recreated on each render to prevent memory leaks.
-
-- **New state vars and helpers**: Added `_galleryTabView` ('grid'|'map'), `_galleryMapFilter` (location cluster key), `_setGalleryTabView(v)`, and `_setGalleryMapFilter(k)` (toggle-style: calling with same key deselects).
+- **Gallery map view**: Added `[📷 Grid] [🗺 Map]` segmented toggle in the gallery header (later replaced in Session 23 continued with always-on map). Map view uses Leaflet with circle markers (number = photo count), clustered to 0.05° (~5 km) resolution.
 
 ### Session 22 — 2026-03-08
 
