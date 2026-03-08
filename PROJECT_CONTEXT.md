@@ -56,6 +56,16 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 26 (continued 5) — 2026-03-08
+
+**Agenda "yesterday" fix; Suggestions tab current-stop jump + past-stop hiding.**
+
+- **Agenda always opens to today (`_agInitCollapsed`)**: The collapse state was initialized once per JS session (`if (_agCollapsed) return`). If the app stayed open overnight, the next day it still showed yesterday's section open. Fixed by tracking `_agCollapsedForDate` — if the tracked date differs from today's, the collapse state is fully reset, so reopening the agenda always shows the actual current day expanded.
+
+- **Suggestions tab: hide past stops + auto-scroll to current stop (`_renderFriendSuggestionsFamily`)**: Past stops (those with a `departures` entry in appState) are now hidden by default, replaced by a toggle button "🕐 Show N from past stops". Current stop (arrived but not yet departed, or today's TRIP_DAYS entry as fallback) gets a green card border + "📍 You are here" badge. The view auto-scrolls to the current stop's card on render. A `_frndLastRows` cache allows the toggle to re-render without re-fetching.
+
+- **Data overwrite concern (iPad)**: The smart merge system (`_smartMergeStates`) prevents any device's save from silently overwriting another device's edits — merges are union-based, so no edits are lost. No code change needed.
+
 ### Session 26 (continued 4) — 2026-03-08
 
 **Schedule stop card shows booked RV park name; Add Destination network error improved.**

@@ -14200,11 +14200,15 @@ function renderTripStats() {
 /* ══════════════════════════════════════════════════════════════════
    AGENDA DAY COLLAPSE + FULL ITEM EDITING
    ══════════════════════════════════════════════════════════════════ */
-var _agCollapsed = null; /* null = uninitialized; object = {dateStr: bool} */
+var _agCollapsed = null;      /* null = uninitialized; object = {dateStr: bool} */
+var _agCollapsedForDate = null; /* the todayStr that was used when _agCollapsed was last set */
 
 function _agInitCollapsed(todayStr, allDates) {
-  if (_agCollapsed) return;
+  /* Reset any time the calendar date has changed (overnight, next-day reload, etc.)
+     so the agenda always opens to the ACTUAL today, not yesterday's expanded section. */
+  if (_agCollapsed && _agCollapsedForDate === todayStr) return;
   _agCollapsed = {};
+  _agCollapsedForDate = todayStr;
   /* Collapse EVERY day except today — user sees just today's card open on first load */
   allDates.forEach(function(ds) { if (ds !== todayStr) _agCollapsed[ds] = true; });
 }
@@ -16710,7 +16714,18 @@ async function _loadFriendSuggestions() {
   _renderFriendSuggestionsFamily(allRows);
 }
 
+var _frndShowPast = false; /* whether to show suggestions for already-departed stops */
+
+function _frndTogglePast() {
+  _frndShowPast = !_frndShowPast;
+  /* Re-render with current rows cached in module scope */
+  if (typeof _frndLastRows !== 'undefined') _renderFriendSuggestionsFamily(_frndLastRows);
+}
+
+var _frndLastRows = [];
+
 function _renderFriendSuggestionsFamily(rows) {
+  _frndLastRows = rows || [];
   var inner = document.getElementById('friends-inner');
   if (!inner) return;
   if (!rows || !rows.length) {
@@ -16722,6 +16737,26 @@ function _renderFriendSuggestionsFamily(rows) {
     return;
   }
 
+  /* Determine current stop and past stops from arrivals/departures */
+  var _fDepartures = (appState && appState.departures) || {};
+  var _fArrivals   = (appState && appState.arrivals)   || {};
+  /* A stop is "past" if we have departed it */
+  var _fPastIds = {};
+  Object.keys(_fDepartures).forEach(function(sid) {
+    if (_fDepartures[sid] && _fDepartures[sid].time) _fPastIds[sid] = true;
+  });
+  /* Current stop: arrived but not yet departed */
+  var _fCurrentId = null;
+  Object.keys(_fArrivals).forEach(function(sid) {
+    if (_fArrivals[sid] && _fArrivals[sid].time && !_fPastIds[sid]) _fCurrentId = sid;
+  });
+  /* If no explicit arrival, use today's TRIP_DAYS entry */
+  if (!_fCurrentId && typeof TRIP_DAYS !== 'undefined') {
+    var _fTodayStr = (function(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); })();
+    var _fTodayDay = TRIP_DAYS.filter(function(d){ return d.date === _fTodayStr; })[0];
+    if (_fTodayDay) _fCurrentId = String(_fTodayDay.stopId);
+  }
+
   /* Group by stop */
   var byStop = {}, stopOrder = [];
   rows.forEach(function(r) {
@@ -16731,14 +16766,30 @@ function _renderFriendSuggestionsFamily(rows) {
   });
   stopOrder = stopOrder.filter(function(v,i) { return stopOrder.indexOf(v) === i; });
 
+  /* Split into current/future vs past */
+  var futureKeys = stopOrder.filter(function(k) { return !_fPastIds[k]; });
+  var pastKeys   = stopOrder.filter(function(k) { return !!_fPastIds[k]; });
+  var pastCount  = pastKeys.reduce(function(n,k){ return n+(byStop[k]||[]).length; }, 0);
+
   var totalCount = rows.length;
-  var html = '<div style="font-size:.8rem;color:var(--text-3);margin-bottom:14px;">'
-    + totalCount + ' suggestion' + (totalCount !== 1 ? 's' : '') + ' from friends &amp; family</div>';
+  var shownCount = _frndShowPast ? totalCount : (totalCount - pastCount);
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">'
+    + '<div style="font-size:.8rem;color:var(--text-3);">' + shownCount + ' suggestion' + (shownCount !== 1 ? 's' : '') + ' from friends &amp; family</div>'
+    + (pastCount > 0
+        ? '<button onclick="_frndTogglePast()" style="background:none;border:1px solid var(--border);border-radius:100px;padding:4px 12px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);color:var(--text-3);">'
+          + (_frndShowPast ? '🙈 Hide past stops' : '🕐 Show ' + pastCount + ' from past stops')
+          + '</button>'
+        : '')
+    + '</div>';
   html += '<div style="display:flex;flex-direction:column;gap:16px;">';
 
-  stopOrder.forEach(function(key) {
+  /* Render current/future first, then (optionally) past */
+  var keysToRender = _frndShowPast ? stopOrder : futureKeys;
+
+  keysToRender.forEach(function(key) {
     var suggs = byStop[key];
     var stopObj = TRIP_STOPS.find(function(s) { return String(s.id) === key; });
+    var _isCurrent = (key === _fCurrentId);
     /* Build a consistent city+state label. Prefer stopObj data; fall back to
        suggs[0].stop_name which may carry a richer "City, ST" format from the
        submission form. Avoid adding a duplicate state if it's already in the name. */
@@ -16765,13 +16816,19 @@ function _renderFriendSuggestionsFamily(rows) {
       }
     }
 
-    html += '<div style="background:var(--card);border:1.5px solid #c9a8f5;border-radius:14px;overflow:hidden;">';
+    /* Current stop gets a green ring + "You are here" badge and a scroll anchor */
+    var _cardBorder = _isCurrent ? '2px solid var(--green)' : '1.5px solid #c9a8f5';
+    var _hdrGrad    = _isCurrent ? 'linear-gradient(135deg,#2e7d32,#43a047)' : 'linear-gradient(135deg,#7B5EA7,#9B6FCA)';
+    html += '<div id="frnd-stop-' + key + '" style="background:var(--card);border:' + _cardBorder + ';border-radius:14px;overflow:hidden;">';
     /* Stop header */
-    html += '<div style="background:linear-gradient(135deg,#7B5EA7,#9B6FCA);color:#fff;padding:12px 16px;'
+    html += '<div style="background:' + _hdrGrad + ';color:#fff;padding:12px 16px;'
       + 'display:flex;align-items:center;justify-content:space-between;">'
       + '<span style="font-weight:800;font-size:.92rem;">' + stopLabel + '</span>'
+      + '<div style="display:flex;align-items:center;gap:6px;">'
+      + (_isCurrent ? '<span style="background:rgba(255,255,255,.3);border-radius:100px;padding:2px 8px;font-size:.68rem;font-weight:800;">📍 You are here</span>' : '')
       + '<span style="background:rgba(255,255,255,.22);border-radius:100px;padding:2px 10px;font-size:.72rem;font-weight:700;">'
       + suggs.length + ' tip' + (suggs.length !== 1 ? 's' : '') + '</span>'
+      + '</div>'
       + '</div>';
 
     /* Suggestion cards */
@@ -16805,6 +16862,14 @@ function _renderFriendSuggestionsFamily(rows) {
   });
   html += '</div>';
   inner.innerHTML = html;
+
+  /* Scroll the current stop card into view after render */
+  if (_fCurrentId) {
+    setTimeout(function() {
+      var el = document.getElementById('frnd-stop-' + _fCurrentId);
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+  }
 }
 
 /* ── 10. Explore This Idea — AI info modal + direct Plan It button ── */
