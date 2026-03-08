@@ -11275,7 +11275,7 @@ function _renderVirtualDriveSep(prevStop, destStop, d, effectiveDate, displayNum
   metaParts.push(_estHours + 'h\u00a0drive');
 
   var _chipBg = _isBefore ? 'rgba(0,0,0,.15)' : 'rgba(255,255,255,.2)';
-  var _departChip = '<button onclick="event.stopPropagation();openDriveTimeModal(' + d.day + ',' + prevStop.id + ',' + (destStop ? destStop.id : 'null') + ',' + effectiveDate.getTime() + ')" title="Tap to set departure date & time" '
+  var _departChip = '<button onclick="event.stopPropagation();openDriveTimeModal(' + d.day + ',\'' + prevStop.id + '\',' + (destStop ? '\'' + destStop.id + '\'' : 'null') + ',' + effectiveDate.getTime() + ')" title="Tap to set departure date & time" '
     + 'style="display:inline-flex;align-items:center;gap:4px;background:' + _chipBg + ';border:1px solid rgba(255,255,255,.35);'
     + 'color:#fff;border-radius:100px;padding:2px 9px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;white-space:nowrap;">'
     + '<i class="fa-regular fa-clock" style="font-size:.65rem;"></i>\u00a0Depart\u00a0' + _departDisp + '</button>';
@@ -14224,6 +14224,48 @@ function _buildDayItems(d, agOpts) {
   var _agSbEvery = agOpts.sbEvery || 0;
   var _agSbMins  = agOpts.sbMins  || 30;
 
+  /* ── Booking confirmation for this stop ─────────────────────────────
+     Look up bookingConfirmations[stopId] and find the entry whose date
+     range covers this trip day.  Falls back to the first entry if no
+     date range is stored.                                             */
+  var _bkgs = (appState.bookingConfirmations && appState.bookingConfirmations[d.stopId]) || [];
+  var _bkg  = _bkgs.length ? (_bkgs.find(function(b) {
+    if (!b.checkInDate || !b.checkOutDate) return true;
+    return b.checkInDate <= d.date && d.date <= b.checkOutDate;
+  }) || _bkgs[0]) : null;
+
+  /* Parse booking time strings like "3:00 PM", "15:00", "3PM" → "HH:MM" */
+  function _parseBkgTime(t) {
+    if (!t) return null;
+    var m24 = t.match(/^(\d{1,2}):(\d{2})$/);
+    if (m24) return _fmtTime24(parseInt(m24[1],10), parseInt(m24[2]||'0',10));
+    var mAP = t.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/i);
+    if (mAP) {
+      var bh = parseInt(mAP[1],10), bm = parseInt(mAP[2]||'0',10);
+      if (/pm/i.test(mAP[3]) && bh < 12) bh += 12;
+      if (/am/i.test(mAP[3]) && bh === 12) bh = 0;
+      return _fmtTime24(bh, bm);
+    }
+    return null;
+  }
+
+  /* Merge booking fields onto a base item (non-destructive) */
+  function _withBkg(base) {
+    if (!_bkg) return base;
+    var sub = _bkg.propertyName || base.subtitle || '';
+    if (_bkg.siteOrRoom) sub += (sub ? ' · ' : '') + 'Site ' + _bkg.siteOrRoom;
+    return {
+      id:      base.id,
+      time:    base.time,
+      icon:    base.icon,
+      title:   base.title,
+      subtitle: sub || base.subtitle || '',
+      address:  _bkg.address || base.address || '',
+      phone:    _bkg.phone   || base.phone   || '',
+      notes:    _bkg.confirmationNumber ? 'Conf #' + _bkg.confirmationNumber : (base.notes || ''),
+    };
+  }
+
   if (_isDrive) {
     var _dpt  = (appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].departTime) || _agDepart;
     var _dptH = parseInt(_dpt.split(':')[0], 10);
@@ -14244,8 +14286,10 @@ function _buildDayItems(d, agOpts) {
     if (_isHome) {
       items.push({id:'home', time:_fmtTime24(_arrT.h,_arrT.m), icon:'🏠', title:'Welcome Home!', subtitle:'Unpack, decompress, celebrate 🎉'});
     } else if (d.sleep) {
-      items.push({id:'ci', time:_fmtTime24(_ciT.h,_ciT.m), icon:_slpIcon, title:'Arrive & Check In',
-        subtitle:(_ciTraw.h < 15 ? 'Arrive ' + _calFmtTime(_arrT.h,_arrT.m) + ' · Check-in from 3:00 PM · ' : '') + d.sleep});
+      /* Use booking check-in time if available, else fall back to calculated arrival time */
+      var _ciTimeFinal = (_bkg && _parseBkgTime(_bkg.checkInTime)) || _fmtTime24(_ciT.h, _ciT.m);
+      var _ciBaseSub   = (_ciTraw.h < 15 ? 'Arrive ' + _calFmtTime(_arrT.h,_arrT.m) + ' · Check-in from 3:00 PM · ' : '') + d.sleep;
+      items.push(_withBkg({id:'ci', time:_ciTimeFinal, icon:_slpIcon, title:'Arrive & Check In', subtitle:_ciBaseSub}));
     }
     if (!_isHome && _aftT.h < 17) {
       items.push({id:'aft', time:_fmtTime24(_aftT.h,_aftT.m), icon:'🌄', title:'Explore the Area', subtitle:'Short walk, local sights, or just relax'});
@@ -14267,7 +14311,8 @@ function _buildDayItems(d, agOpts) {
     items.push({id:'aft',  time:'14:00', icon:'☀️',  title:'Afternoon Free Time', subtitle:'Explore, swim, hike, or relax at camp'});
     if (d.sleep && !_isHome) {
       var _si2 = d.sleepType==='rv_park'?'🏕️':d.sleepType==='walmart'?'🛒':'⛺';
-      items.push({id:'camp', time:'16:30', icon:_si2, title:'Back at Camp', subtitle:d.sleep});
+      /* Enrich with booking confirmation details if available */
+      items.push(_withBkg({id:'camp', time:'16:30', icon:_si2, title:'Back at Camp', subtitle:d.sleep}));
     }
     items.push({id:'din',  time:'18:30', icon:'🍽️', title:'Dinner', subtitle:d.dinner || 'Camp cooking or local restaurant'});
   }

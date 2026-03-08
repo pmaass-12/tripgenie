@@ -56,6 +56,19 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 26 (continued 3) — 2026-03-08
+
+**Booking confirmations injected into agenda; departure time onclick quoting bug fixed.**
+
+- **Booking confirmations now appear in agenda (`_buildDayItems`)**: The daily agenda now automatically surfaces booking data from `appState.bookingConfirmations[stopId]` — no manual entry needed. Changes:
+  - Added booking lookup at the top of `_buildDayItems`: finds the booking whose `checkInDate`/`checkOutDate` spans the current day (or falls back to first booking for the stop).
+  - `_parseBkgTime(t)`: new helper that parses booking time strings in any format ("3:00 PM", "15:00", "3pm") → "HH:MM" for 24-hour display.
+  - `_withBkg(baseItem)`: new helper that enriches any agenda item with booking data — `propertyName` replaces/fills subtitle, `siteOrRoom` appended as "Site #", `address` and `phone` filled, `notes` set to "Conf #XXXX".
+  - **Drive days**: "Arrive & Check In" now uses `checkInTime` from the booking as its start time (instead of the generic arrival estimate), and `_withBkg` fills all the booking detail fields.
+  - **Stay days**: "Back at Camp" is now enriched by `_withBkg` with property name, site#, address, phone, and confirmation number.
+
+- **Fix ReferenceError: "dallas is not defined" on Schedule tab departure time chip**: The `_departChip` onclick handler (line 11278) interpolated stop IDs directly into the HTML onclick string without quotes. Stop IDs like `dallas-tx` were read as `dallas - tx` (variable minus variable) by JavaScript → ReferenceError. Fixed by wrapping both `prevStop.id` and `destStop.id` in single-quotes inside the onclick string: `openDriveTimeModal(5,'dallas-tx','nashville-tn',1234567890)`. Now correctly passes quoted string IDs.
+
 ### Session 26 (continued 2) — 2026-03-08
 
 **IndexedDB photo storage — remove the ~5 photo localStorage limit.**
