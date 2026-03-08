@@ -9705,7 +9705,7 @@ function phaseHeaderHtml(phase, firstDay) {
         };
         var _inLabel  = _fmtShort(_phFirstDate);
         var _outLabel = totalNights > 0 ? _fmtShort(_phLastDate) : '';
-        var _nLabel   = totalNights === 0 ? 'transit' : totalNights + ' night' + (totalNights !== 1 ? 's' : '') + (extras !== 0 ? (extras > 0 ? ' <span style="opacity:.75">(+' + extras + ')</span>' : ' <span style="opacity:.75">(' + extras + ')</span>') : '');
+        var _nLabel   = totalNights === 0 ? 'transit' : totalNights + ' night' + (totalNights !== 1 ? 's' : '');
         /* Clicking the date widget opens the exact-nights editor */
         return '<div onclick="_editStopDays(' + _sidAttr + ',' + nights + ')" title="Tap to edit nights" style="display:flex;align-items:stretch;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.22);border-radius:8px;overflow:hidden;font-size:.7rem;cursor:pointer;">'
           + '<div style="padding:3px 8px 3px;">'
