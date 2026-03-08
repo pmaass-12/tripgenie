@@ -2422,6 +2422,16 @@
   /* Agenda header: hide weather badge on narrow screens to keep buttons visible */
   @media (max-width:540px) { .ag-wx-badge { display:none !important; } }
 
+  /* ── iOS auto-zoom prevention ─────────────────────────────────────
+     iOS Safari zooms in when any input has font-size < 16px. This rule
+     forces a minimum of 16px on mobile so the viewport never jumps.
+     Desktop is unaffected (min-width:769px keeps compact sizes there). */
+  @media (max-width:768px) {
+    input, select, textarea {
+      font-size: max(16px, 1em) !important;
+    }
+  }
+
   /* ── Schedule: Phase Header controls — responsive ────────────────── */
   .ph-ctrls { display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:12px;flex-wrap:wrap;justify-content:flex-end; }
   @media (max-width:640px) {
@@ -8501,6 +8511,7 @@ function _mapAddStopSave(name, afterIdx, nights) {
   appState.activeTrip = 'custom';
   saveState(appState);
 
+  if (typeof _audit === 'function') _audit('Stop added to trip', name + ' (' + nights + ' night' + (nights !== 1 ? 's' : '') + ')');
   _mapAddStopClose();
   _refreshAll(true);
   showToast('📍 ' + name + ' added to your trip!', 2500);
@@ -9897,20 +9908,23 @@ function _toggleWaypoint(stopId) {
   if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
   var extras       = appState.phaseExtraDays[stopId] || 0;
   var totalNights  = Math.max(0, phaseDays.length + extras);
+  var _wpStopName = (function(){ var s = (typeof getStop === 'function') ? getStop(stopId) : null; return s ? _sn(s) : String(stopId); })();
   if (totalNights === 0) {
     /* Already a waypoint — restore by clearing the offset and waypoint override */
     delete appState.phaseExtraDays[stopId];
     if (appState.waypointOverrides) delete appState.waypointOverrides[stopId];
+    if (typeof _audit === 'function') _audit('Waypoint restored', _wpStopName + ' → overnight stop (' + phaseDays.length + ' night' + (phaseDays.length !== 1 ? 's' : '') + ')');
     showToast('✅ Restored to ' + phaseDays.length + ' night' + (phaseDays.length !== 1 ? 's' : ''), 2000);
   } else {
     /* Make waypoint — hide all nights and set override for gray card style */
     appState.phaseExtraDays[stopId] = -phaseDays.length;
     if (!appState.waypointOverrides) appState.waypointOverrides = {};
     appState.waypointOverrides[stopId] = true;
+    if (typeof _audit === 'function') _audit('Stop set as waypoint', _wpStopName + ' → drive-through, no overnight stay');
     showToast('📍 Waypoint — passing through, no overnight', 2200);
   }
   saveState(appState);
-  _refreshAll();
+  _refreshAll(true);
 }
 
 function addPhaseDay(stopId) {
@@ -10527,6 +10541,7 @@ function _doRemoveStop(stopId, phaseName) {
   if (!appState.removedStops)   appState.removedStops = {};
   appState.removedStops[stopId]    = true;
   appState.phaseExtraDays[stopId]  = -(phaseDays.length);
+  if (typeof _audit === 'function') _audit('Stop removed from schedule', phaseName + ' hidden (' + phaseDays.length + ' day' + (phaseDays.length !== 1 ? 's' : '') + ')');
   saveState(appState);
   _refreshAll(true);
   showToast('🗑️ ' + phaseName + ' removed. Use the + button to restore days.', 2800);
@@ -10541,6 +10556,11 @@ function _toggleTransitDay(dayNum) {
   if (!appState.dayOverrides[dayNum]) appState.dayOverrides[dayNum] = {};
   var cur = !!(appState.dayOverrides[dayNum].transitMode);
   appState.dayOverrides[dayNum].transitMode = !cur;
+  if (typeof _audit === 'function') {
+    var _tdDay = (typeof TRIP_DAYS !== 'undefined' ? TRIP_DAYS : []).find(function(d) { return d.day === dayNum; });
+    var _tdLabel = _tdDay ? (_tdDay.phase || 'Day ' + dayNum) + ' — Day ' + dayNum : 'Day ' + dayNum;
+    _audit(!cur ? 'Transit day set' : 'Transit day cleared', _tdLabel);
+  }
   saveState(appState);
   _refreshAll(true);
   showToast(cur ? '🏕️ Explore day restored' : '🚗 Marked as Transit Day — Drive & Sleep', 2000);
@@ -10565,6 +10585,8 @@ function restoreStopToTrip(stopId) {
   delete appState.removedStops[stopId];
   if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
   appState.phaseExtraDays[stopId] = 0;
+  var _rsName = (function(){ var s = (typeof getStop === 'function') ? getStop(stopId) : null; return s ? (s.name + (s.state ? ', '+s.state : '')) : String(stopId); })();
+  if (typeof _audit === 'function') _audit('Stop restored to schedule', _rsName + ' added back to trip');
   saveState(appState);
   _refreshAll(true);
   /* Re-render audit log if it's currently visible so the removed-stops section updates */
@@ -13852,6 +13874,19 @@ function _resetEditDayAgenda() {
    Renders into #agenda-content inside the Planner tab.
    ══════════════════════════════════════════════════════════════════ */
 function renderPlannerAgenda() {
+  /* ── Clean up orphaned Leaflet map instances from previous render ──
+     When renderPlannerAgenda replaces the DOM, old L.map() instances bound
+     to now-deleted canvas divs become unreachable memory leaks. Destroy
+     them here before clearing the DOM to prevent accumulation. */
+  try {
+    Object.keys(window).forEach(function(k) {
+      if (k.indexOf('_agMap_') === 0 && window[k] && typeof window[k].remove === 'function') {
+        try { window[k].remove(); } catch(e) {}
+        delete window[k];
+      }
+    });
+  } catch(e) {}
+
   var el = document.getElementById('agenda-content');
   if (!el) return;
 
@@ -23509,6 +23544,21 @@ function renderWhatsNew() {
     + '</div>';
 
   var releases = [
+    {
+      version: 'Today\'s Updates',
+      date: 'Mar 8, 2026',
+      badge: '🆕',
+      badgeColor: '#E8813A',
+      features: [
+        { icon: '🗺', title: 'Explore / Waypoint toggle', desc: 'The "Make Waypoint" button on each stop\'s blue header is now a clean segmented [🗺 Explore] [📍 Waypoint] toggle. Tap Waypoint to make any stop a drive-through; tap Explore to restore it. The grey waypoint card also shows the toggle with Waypoint active.' },
+        { icon: '📅', title: 'Agenda header overflow fix', desc: 'On iPad and narrow screens the date/weekday text now truncates with an ellipsis instead of pushing the Edit and Map buttons off the right edge. Weather info auto-hides on very small screens to keep buttons always accessible.' },
+        { icon: '🌤️', title: 'Weather showing on all agenda days', desc: 'Agenda day headers were missing weather for some days when trip dates had been offset by pause days or phaseExtraDays shifts. Fixed by trying the effective date first then falling back to the raw trip date — weather now shows consistently.' },
+        { icon: '🔄', title: 'All tabs sync on stop changes', desc: 'Adding a stop, removing a stop, restoring a stop, toggling waypoint, and marking transit days now all update every tab simultaneously — Schedule, Agenda, Day Planner, Dashboard, and Map. Previously only the Schedule refreshed.' },
+        { icon: '📋', title: 'Full change history coverage', desc: 'Stop removed, stop restored, waypoint set/cleared, transit day set/cleared, and stop added via map are now all recorded in the Audit Log → Change History with timestamps and details.' },
+        { icon: '📱', title: 'iOS input zoom fix', desc: 'All form inputs on mobile now meet the iOS 16px minimum font-size threshold, preventing the viewport from auto-zooming in whenever you tap a text field on iPhone or iPad.' },
+        { icon: '🗺️', title: 'Leaflet map memory leak fixed', desc: 'Agenda day maps (the 🗺 toggle in each day card) were leaving orphaned Leaflet instances in memory each time the view re-rendered. They\'re now cleanly destroyed before each render cycle.' },
+      ]
+    },
     {
       version: 'Latest Updates',
       date: 'Mar 2, 2026',

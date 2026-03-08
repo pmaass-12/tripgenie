@@ -908,3 +908,22 @@ Previously `fetchCampInfo` showed only "Error loading info" with no details, hid
 - Test voice chat on actual iPhone/iPad — may need microphone permission prompt handling
 - `_initDragDrop` is guarded but never implemented — drag-to-reorder time blocks in DDM could be a future feature
 - **Drive-home planning**: Help Paul figure out actual drive-time per day for the return trip (days 40–43). Currently 3 explore days + 1 drive day; likely needs 2–3 transit days with overnight hotel/campground stops.
+
+### Session 22 (continued) — 2026-03-08 (Production Hardening)
+
+**Full regression audit + production fixes.**
+
+- **Audit log coverage**: Added `_audit()` calls to all major state-change functions that were previously untracked: `_doRemoveStop` (stop removed), `restoreStopToTrip` (stop restored), `_toggleWaypoint` (waypoint set/cleared), `_toggleTransitDay` (transit day set/cleared), `_mapAddStopSave` (stop added via map). Every significant user action is now timestamped in the Change History log.
+- **iOS input auto-zoom fix**: Added `@media (max-width:768px) { input, select, textarea { font-size: max(16px, 1em) !important; } }` — prevents iOS Safari from zooming in when tapping any of the 74+ inline-styled inputs that were below the 16px zoom threshold.
+- **Leaflet memory leak fixed**: `renderPlannerAgenda()` now iterates `window._agMap_*` keys and calls `.remove()` on each Leaflet instance before replacing the DOM. Prevents orphaned map instances from accumulating on every `_refreshAll` call.
+- **What's New updated**: Added "Today's Updates" card (Mar 8, 2026) covering all 7 session changes.
+- **Regression audit confirmed**:
+  - Node.js `--check` syntax: ✅ clean (27,670 JS lines)
+  - 695 function definitions, all critical functions present
+  - All onclick references resolve to defined functions  
+  - No `eval()` usage, no `document.write()` to main doc
+  - `saveState()` has try/catch for localStorage quota errors
+  - `_isViewer` blocks all write operations for read-only links
+  - All 77 fetch() calls have `.catch()` handlers
+  - Supabase snapshot save/restore working with conflict detection
+  - Supabase saves a local backup BEFORE applying any cloud restore
