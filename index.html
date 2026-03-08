@@ -9727,8 +9727,10 @@ function phaseHeaderHtml(phase, firstDay) {
     + '<button onclick="_cycleStayType(' + _sidAttr + ')" title="Change accommodation type" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">'
     + _getStayMeta(firstDay.stopId).icon + '&thinsp;' + _getStayMeta(firstDay.stopId).label
     + '</button>'
-    + '' /* ideal stay badge moved to Area Info modal */
-    + ''
+    /* Make Waypoint / Restore toggle */
+    + (totalNights === 0
+        ? '<button onclick="_toggleWaypoint(' + _sidAttr + ')" title="Restore to overnight stop" style="background:rgba(255,215,0,.25);border:1px solid rgba(255,215,0,.5);color:#fff;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">📍 Waypoint — Restore?</button>'
+        : '<button onclick="_toggleWaypoint(' + _sidAttr + ')" title="Convert to pass-through waypoint (0 nights)" style="background:rgba(255,255,255,.08);border:1px dashed rgba(255,255,255,.3);color:rgba(255,255,255,.7);border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">📍 Make Waypoint</button>')
     + '</div>'
     + '</div>'
 
@@ -9846,6 +9848,28 @@ function _cycleToStayType(stopId, targetType) {
   }
   /* Also refresh the schedule phase header */
   renderSchedule();
+}
+
+/* ── WAYPOINT TOGGLE ─────────────────────────────────────────────────
+   One-tap: convert a normal stop to a 0-night pass-through waypoint,
+   or restore it back to its original number of nights.               */
+function _toggleWaypoint(stopId) {
+  var phaseDays = TRIP_DAYS.filter(function(d) { return d.stopId === stopId; });
+  if (!phaseDays.length) return;
+  if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
+  var extras       = appState.phaseExtraDays[stopId] || 0;
+  var totalNights  = Math.max(0, phaseDays.length + extras);
+  if (totalNights === 0) {
+    /* Already a waypoint — restore by clearing the offset */
+    delete appState.phaseExtraDays[stopId];
+    showToast('✅ Restored to ' + phaseDays.length + ' night' + (phaseDays.length !== 1 ? 's' : ''), 2000);
+  } else {
+    /* Make waypoint — hide all nights for this stop */
+    appState.phaseExtraDays[stopId] = -phaseDays.length;
+    showToast('📍 Waypoint — passing through, no overnight', 2200);
+  }
+  saveState(appState);
+  _refreshAll();
 }
 
 function addPhaseDay(stopId) {
