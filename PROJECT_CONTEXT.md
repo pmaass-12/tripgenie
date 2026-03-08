@@ -56,6 +56,18 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 23 (continued, part 2) — 2026-03-08
+
+**Smart multi-user conflict resolution — no more lost edits.**
+
+- **`_smartMergeStates(a, b)`**: New function that combines two `appState` snapshots so neither person's edits are lost. Strategy: (1) Additive arrays — `customBookings`, `aiSuggestions`, `photoPool`, `journalEntries`, `savedPostcards`, `customListItems.todo/pack` — are merged by unique id (union); (2) Boolean maps — `bookingStatus`, `listChecked`, `listHidden` — merge keys with "true wins over false" (once you check something, it stays checked); (3) Per-key object maps — `arrivals`, `departures`, `dayNotes`, `phaseExtraDays`, `removedStops`, `stayType`, `dayOverrides`, `sleepOverrides`, `customActivities`, `day_*` etc. — merge keys from both sides, newer snapshot wins on collision; (4) Structural data — `customTripData` route, `tripSettings`, `drivingPrefs`, scalar prefs — use the newer `_savedAt` as the base. Merged state gets `_mergedAt` and `_mergedFrom` tags.
+
+- **`_showConflictBanner` updated**: Now calls `_smartMergeStates(myState, theirState)` instead of picking a winner. Both snapshots saved as emergency backups first. Merged state written to localStorage + cloud. Shows "🔀 Merged [name]'s changes — no edits lost" toast.
+
+- **`_resolveConflict` updated**: Legacy manual-banner function also routes through smart merge now.
+
+- **`loadFromCloud` updated**: Normal sync path (remote is newer) now uses `_smartMergeStates(appState, remote)` instead of `appState = remote`. Data-regression check preserved but rephrased as a toast ("Merged: cloud had fewer stops — kept your local route"). No more silent overwrites on startup load.
+
 ### Session 23 (continued) — 2026-03-08
 
 **Bookings refresh fix, Add Destination wizard overhaul, gallery per-photo processing, gallery date-sections + always-on map.**

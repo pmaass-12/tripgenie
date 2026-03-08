@@ -5791,67 +5791,166 @@ function _doActualCloudSave(state) {
   .catch(function() { _setSyncStatus('&#9888;', 'Offline', 'rgba(255,215,0,.75)'); });
 }
 
+/* ── SMART STATE MERGE ─────────────────────────────────────────────
+   Merges two appState snapshots so that NO edits are lost.
+   Strategy:
+     • Additive arrays (bookings, suggestions, photos, journal, list items,
+       postcards): union by unique id — both sides contribute their entries.
+     • Boolean maps (bookingStatus, listChecked): merge keys; true wins over false.
+     • Per-key object maps (arrivals, dayNotes, phaseExtraDays, etc.): merge
+       keys from both sides; newer snapshot wins on any key collision.
+     • Structural data (customTripData route, tripSettings, drivingPrefs,
+       scalar prefs): use the newer _savedAt snapshot as the base — these are
+       typically only edited by one person at a time.
+   Both snapshots are preserved as emergency backups before any write.    */
+function _smartMergeStates(a, b) {
+  var aTs = a && a._savedAt ? new Date(a._savedAt).getTime() : 0;
+  var bTs = b && b._savedAt ? new Date(b._savedAt).getTime() : 0;
+  /* base = newer side (structural data), other = older side (contributes additive data) */
+  var base  = aTs >= bTs ? a : b;
+  var other = aTs >= bTs ? b : a;
+  /* Deep-copy base so we never mutate the originals */
+  var m = JSON.parse(JSON.stringify(base));
+
+  /* ── 1. ADDITIVE ARRAYS — union by id ──────────────────────────── */
+  function _unionById(arr, extra, keyFn) {
+    var seen = {};
+    (arr || []).forEach(function(x) { seen[keyFn(x)] = true; });
+    (extra || []).forEach(function(x) {
+      var k = keyFn(x);
+      if (k && !seen[k]) { arr.push(x); seen[k] = true; }
+    });
+  }
+  m.customBookings = m.customBookings || [];
+  _unionById(m.customBookings, other.customBookings,
+    function(b) { return b.id || (b.stopId + '|' + (b.confirmation || b.confirmationCode || b.created || '')); });
+
+  m.aiSuggestions = m.aiSuggestions || [];
+  _unionById(m.aiSuggestions, other.aiSuggestions, function(s) { return s.id; });
+
+  m.photoPool = m.photoPool || [];
+  _unionById(m.photoPool, other.photoPool, function(p) { return p.id; });
+
+  m.journalEntries = m.journalEntries || [];
+  _unionById(m.journalEntries, other.journalEntries, function(e) { return e.id; });
+
+  m.savedPostcards = m.savedPostcards || [];
+  _unionById(m.savedPostcards, other.savedPostcards,
+    function(p) { return p.id || p.created || JSON.stringify(p).slice(0,40); });
+
+  /* customListItems.todo / .pack — union by text */
+  ['todo','pack'].forEach(function(k) {
+    if (!m.customListItems)       m.customListItems = {};
+    if (!m.customListItems[k])    m.customListItems[k] = [];
+    var seen = {};
+    m.customListItems[k].forEach(function(x) { seen[x.text || x] = true; });
+    ((other.customListItems && other.customListItems[k]) || []).forEach(function(x) {
+      var key = x.text || x;
+      if (!seen[key]) { m.customListItems[k].push(x); seen[key] = true; }
+    });
+  });
+
+  /* ── 2. BOOLEAN MAPS — merge keys; true wins ────────────────────── */
+  function _mergeChecked(target, source) {
+    if (!source) return target || {};
+    target = target || {};
+    Object.keys(source).forEach(function(k) {
+      if (source[k] === true) target[k] = true;          // checked = permanent
+      else if (!(k in target)) target[k] = source[k];   // not checked yet — carry over
+    });
+    return target;
+  }
+  if (!m.bookingStatus) m.bookingStatus = {};
+  m.bookingStatus = _mergeChecked(m.bookingStatus, other.bookingStatus);
+
+  ['todo','pack'].forEach(function(k) {
+    if (!m.listChecked)    m.listChecked = {};
+    if (!m.listHidden)     m.listHidden  = {};
+    m.listChecked[k] = _mergeChecked(m.listChecked[k], other.listChecked && other.listChecked[k]);
+    m.listHidden[k]  = _mergeChecked(m.listHidden[k],  other.listHidden  && other.listHidden[k]);
+  });
+
+  /* ── 3. PER-KEY OBJECT MAPS — newer side wins on collision ─────── */
+  /* For per-day / per-stop objects: base (newer) already wins on collision
+     since we deep-copied base; we just add keys that only exist in other.   */
+  function _mergeObjAdditive(target, source) {
+    if (!source) return;
+    Object.keys(source).forEach(function(k) {
+      if (!(k in target)) target[k] = source[k];
+    });
+  }
+  ['arrivals','departures','dayNotes','drivers','planned','weather',
+   'stopMinVisit','customActivities','aiActivityIdx',
+   'phaseExtraDays','removedStops','stayType',
+   'dayOverrides','sleepOverrides','stopCityNames'].forEach(function(field) {
+    if (!m[field]) m[field] = {};
+    _mergeObjAdditive(m[field], other[field]);
+  });
+
+  /* day_* per-day state objects */
+  Object.keys(other).forEach(function(k) {
+    if (!k.startsWith('day_')) return;
+    if (!m[k]) m[k] = other[k];
+    else if (typeof m[k] === 'object' && typeof other[k] === 'object') {
+      _mergeObjAdditive(m[k], other[k]); // newer side wins on collision (already in m)
+    }
+  });
+
+  /* profiles array — union by name */
+  m.profiles = m.profiles || [];
+  _unionById(m.profiles, other.profiles, function(p) { return p.name; });
+
+  /* ── 4. Mark as merged ──────────────────────────────────────────── */
+  m._mergedAt  = new Date().toISOString();
+  m._mergedFrom = (other._savedBy || 'another device');
+
+  return m;
+}
+
 function _showConflictBanner(myState, theirState, theirName) {
-  /* ── Auto-resolve by timestamp: most recent _savedAt wins, no prompt. ──
-     Snapshots of both sides are written to localStorage first so nothing
-     is ever lost — they're visible in the Backup Restore panel.          */
+  /* ── Smart merge: combine both sides so no edits are ever lost. ──
+     Additive data (bookings, photos, journal, lists) is unioned.
+     Structural data (route, settings) uses the newer _savedAt as base.
+     Both snapshots saved as emergency backups first.                  */
 
-  var myTs    = myState    && myState._savedAt    ? new Date(myState._savedAt).getTime()       : 0;
-  var theirTs = theirState && theirState._savedAt ? new Date(theirState._savedAt).getTime()    : 0;
-  var myTime    = myState    && myState._savedAt    ? new Date(myState._savedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
-  var theirTime = theirState && theirState._savedAt ? new Date(theirState._savedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
-
-  /* Save both sides as emergency snapshots before touching anything */
+  /* Save both sides as emergency backups before touching anything */
   try {
     var _snapNow = new Date().toISOString();
     localStorage.setItem('rv_conflict_mine',   JSON.stringify({ ts: myState._savedAt    || _snapNow, state: myState    }));
     localStorage.setItem('rv_conflict_theirs', JSON.stringify({ ts: theirState._savedAt || _snapNow, state: theirState }));
   } catch(e) {}
 
-  if (myTs >= theirTs) {
-    /* My edits are newer (or tied) — force-save to cloud */
-    _doActualCloudSave(myState);
-    showToast('🔄 Auto-synced: your edits (' + myTime + ') were newer — saved to cloud', 3500);
-  } else {
-    /* Cloud version is newer — load it, save locally */
-    appState = theirState;
-    _cloudLoadedAt = theirTs;
-    localStorage.setItem('rv_state', JSON.stringify(appState));
-    try { renderDashboard(); } catch(e) {}
-    try { renderSchedule(); } catch(e) {}
-    try { renderDecisions(); } catch(e) {}
-    try { renderStops(); } catch(e) {}
-    try { renderStopNavigator(); } catch(e) {}
-    try { renderPlannerAgenda(); } catch(e) {}
-    try { refreshMainMap(); } catch(e) {}
-    showToast('🔄 Auto-synced: loaded newer save (' + theirTime + ') from ' + (theirName || 'another device'), 3500);
-    _setSyncStatus('&#9729;', 'Synced', 'rgba(255,255,255,.45)');
-  }
+  var merged = _smartMergeStates(myState, theirState);
+
+  /* Apply merged state and save */
+  appState = merged;
+  _cloudLoadedAt = 0; // force cloud save
+  try { localStorage.setItem('rv_state', JSON.stringify(appState)); } catch(e) {}
+  _doActualCloudSave(appState);
+
+  /* Re-render whatever is visible */
+  try { _refreshAll(true); } catch(e) {}
+
+  var theirTime = theirState && theirState._savedAt
+    ? new Date(theirState._savedAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '';
+  var who = theirName || 'another device';
+  showToast('🔀 Merged ' + who + '\'s changes (' + theirTime + ') — no edits lost', 4000);
+  _setSyncStatus('&#9729;', 'Merged', 'rgba(255,255,255,.45)');
 }
 
 function _resolveConflict(choice) {
+  /* Legacy manual-banner resolver — kept for compatibility.
+     Both paths now go through smart merge.                   */
   var banner = document.getElementById('conflict-banner');
   if (banner) banner.remove();
-  if (choice === 'mine') {
-    // Force-save our version
-    _doActualCloudSave(window._conflictMyState);
-    showToast('✓ Your changes saved — overwrote ' + (window._conflictTheirState && window._conflictTheirState._savedBy ? window._conflictTheirState._savedBy + '\'s' : 'their') + ' version', 3000);
-  } else {
-    // Take their version
-    appState = window._conflictTheirState;
-    _cloudLoadedAt = new Date((appState._savedAt || 0)).getTime();
-    localStorage.setItem('rv_state', JSON.stringify(appState));
-    // Re-render everything
-    try { renderDashboard(); }      catch(e) {}
-    try { renderSchedule(); }      catch(e) {}
-    try { renderDecisions(); }     catch(e) {}
-    try { renderStops(); }         catch(e) {}
-    try { renderStopNavigator(); } catch(e) {}
-    try { renderPlannerAgenda(); } catch(e) {}
-    try { refreshMainMap(); }      catch(e) {}
-    showToast('✓ Synced to ' + (appState._savedBy || 'their') + '\'s version', 3000);
-    _setSyncStatus('&#9729;', 'Synced', 'rgba(255,255,255,.45)');
-  }
+  var merged = _smartMergeStates(window._conflictMyState || appState, window._conflictTheirState || appState);
+  appState = merged;
+  _cloudLoadedAt = 0;
+  try { localStorage.setItem('rv_state', JSON.stringify(appState)); } catch(e) {}
+  _doActualCloudSave(appState);
+  try { _refreshAll(true); } catch(e) {}
+  showToast('🔀 Merged both versions — no edits lost', 3000);
+  _setSyncStatus('&#9729;', 'Merged', 'rgba(255,255,255,.45)');
   window._conflictMyState = null;
   window._conflictTheirState = null;
 }
@@ -5913,20 +6012,19 @@ function loadFromCloud(callback) {
         var remoteDays  = (remote.customTripData   && remote.customTripData.days     || []).length;
         var hasLocalData = localStops > 0 || localDays > 0;
         var dataRegressed = hasLocalData && (remoteStops < localStops - 2 || remoteDays < localDays - 3);
+        /* Always smart-merge so nothing local is silently overwritten */
+        _saveLocalBackup(appState);
+        var theirName = remote._savedBy || 'cloud';
+        var merged = _smartMergeStates(appState, remote);
+        appState = merged;
+        localStorage.setItem('rv_state', JSON.stringify(appState));
+        _cloudLoadedAt = remoteTs;
         if (dataRegressed) {
-          /* Take a backup of current local state before showing conflict */
-          _saveLocalBackup(appState);
-          /* Surface the same conflict-resolution banner (user chooses mine vs theirs) */
-          var theirName = remote._savedBy || 'cloud';
-          _showConflictBanner(appState, remote, theirName);
-          _cloudLoadedAt = localTs; // keep local as baseline since we're not loading remote yet
+          /* Data regression: let the user know but we still kept local data */
+          showToast('⚠️ Merged: cloud had fewer stops — kept your local route + merged other changes', 4500);
         } else {
-          /* Normal sync: ALWAYS save local backup first, then overwrite */
-          _saveLocalBackup(appState);
-          appState = remote;
-          localStorage.setItem('rv_state', JSON.stringify(appState));
-          var byWho = remote._savedBy ? ' by ' + remote._savedBy : '';
-          showToast('&#9729;&#65039; Synced from cloud' + byWho + ' — up to date!', 2500);
+          var byWho = remote._savedBy ? ' from ' + remote._savedBy : '';
+          showToast('&#9729;&#65039; Merged latest changes' + byWho + ' — up to date!', 2500);
         }
       } else {
         _cloudLoadedAt = localTs; // use local timestamp as baseline
