@@ -56,6 +56,23 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 21 — 2026-03-08
+
+**Day map feature + Schedule modal deprecation.**
+
+- **Day map in Agenda**: Each day card in Planner → Agenda now has a 🗺️ (FA `fa-map-location-dot`) button that toggles an inline Leaflet map. Numbered orange pins show agenda items in chronological order.
+  - LAT/LNG added to `_aaeExtractPrompt()`, `_agendaLookupInfo` prompt (5 lines now), `_aaeApplyExtracted`, hidden `aae-lat`/`aae-lng` inputs in modal, `_saveAgendaEvent` (record + `_agSched.push`).
+  - `_agGetMappableItems(eStr, dayNum)` collects all items with addresses/coords for a day.
+  - `_agInitDayMap(eStr, dayNum)` builds map canvas, geocodes items, plots numbered markers.
+  - `_agGeocodeItems(items, callback)` — sequential geocoder: uses stored lat/lng first, then Nominatim with in-memory `_agGeoCache` and 350ms inter-request delay (respects 1 req/sec limit).
+  - Map container `<div id="ag-day-map-{eStr}">` inserted at top of each day body (above items list).
+- **Schedule modal deprecated**: Clicking a day bar (ds-wrap) now calls `openAgendaDay(dayNum)` instead of `openDayDetail`. Navigates to Planner → Agenda, expands the day card, scrolls to it with an orange outline pulse. `_ddmDayNum` still set so long-press time-edit works.
+  - `_agDayNumToEStr(dayNum)` computes effective date string for a day (phase + pause offsets).
+  - DDM HTML retained for drive-mode dashboard and adjustments game-card mode.
+- **Arrived / Left on blue stop header**: Replaced the `+ nights −` button group with inline `arr-btn-{stopId}` and `dep-btn-{stopId}` buttons. Show time when set. Long-press calls `_barLongPress(type, dayNum)` → `startLongPress` → `openTimeEdit`.
+  - `_barArrived(dayNum)` / `_barDeparted(dayNum)` — mirror `recordArrival`/`recordDeparture` but target inline buttons; set `_ddmDayNum` for context.
+  - `confirmTimeEdit` updated to also refresh inline bar buttons (by stopId) when time is edited retroactively.
+
 ### Session 20 — 2026-03-08
 
 **Lookup, sort, dismiss-X, image upload, and Add Item modal fixes.**

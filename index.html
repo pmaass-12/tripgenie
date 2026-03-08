@@ -9753,12 +9753,30 @@ function phaseHeaderHtml(phase, firstDay) {
         return '<button onclick="openBookingModal(' + _sidAttr + ')" title="Booking confirmations" style="background:' + _bcBg + ';border:' + _bcBord + ';color:#fff;border-radius:8px;padding:5px 10px;font-size:.73rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">' + _bcLabel + '</button>';
       })()
 
-    /* − Days + (tap count to set exact) */
-    + '<div style="display:inline-flex;align-items:center;gap:0;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:8px;overflow:hidden;flex-shrink:0;">'
-    + '<button onclick="removePhaseDay(' + _sidAttr + ')" style="background:none;border:none;color:#fff;width:28px;height:28px;font-size:1rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s;" title="Remove a day">&#8722;</button>'
-    + '<span onclick="_editStopDays(' + _sidAttr + ',' + nights + ')" title="Tap to set exact nights" style="font-size:.72rem;font-weight:800;padding:0 6px;cursor:pointer;white-space:nowrap;line-height:28px;">' + totalNights + '&thinsp;nts</span>'
-    + '<button onclick="addPhaseDay(' + _sidAttr + ')" style="background:none;border:none;color:#fff;width:28px;height:28px;font-size:1rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s;" title="Add a day">&#43;</button>'
-    + '</div>'
+    /* ── We Arrived / We Left inline buttons ── */
+    + (function() {
+        var _arr = appState.arrivals && appState.arrivals[firstDay.stopId];
+        var _dep = appState.departures && appState.departures[firstDay.stopId];
+        var _arrLbl = _arr ? '\u2713\u00a0' + new Date(_arr.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '&#129001;\u00a0Arrived';
+        var _depLbl = _dep ? '\u2713\u00a0' + new Date(_dep.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '&#128666;\u00a0Left';
+        var _arrBg  = _arr ? 'rgba(58,138,92,.45)'    : 'rgba(255,255,255,.12)';
+        var _depBg  = _dep ? 'rgba(200,104,32,.45)'   : 'rgba(255,255,255,.12)';
+        var _arrBd  = _arr ? '1px solid rgba(58,138,92,.7)'   : '1px solid rgba(255,255,255,.2)';
+        var _depBd  = _dep ? '1px solid rgba(200,104,32,.7)'  : '1px solid rgba(255,255,255,.2)';
+        var _btnBase = 'color:#fff;border-radius:8px;padding:5px 10px;font-size:.7rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;user-select:none;-webkit-user-select:none;transition:background .15s;';
+        return '<button id="arr-btn-' + firstDay.stopId + '"'
+          + ' onclick="event.stopPropagation();_barArrived(' + firstDay.day + ')"'
+          + ' onmousedown="event.stopPropagation();_barLongPress(\'arrive\',' + firstDay.day + ')" onmouseup="cancelLongPress()" onmouseleave="cancelLongPress()"'
+          + ' ontouchstart="event.stopPropagation();_barLongPress(\'arrive\',' + firstDay.day + ')" ontouchend="cancelLongPress()"'
+          + ' title="Tap to record arrival · Hold to edit time"'
+          + ' style="background:' + _arrBg + ';border:' + _arrBd + ';' + _btnBase + '">' + _arrLbl + '</button>'
+          + '<button id="dep-btn-' + firstDay.stopId + '"'
+          + ' onclick="event.stopPropagation();_barDeparted(' + firstDay.day + ')"'
+          + ' onmousedown="event.stopPropagation();_barLongPress(\'depart\',' + firstDay.day + ')" onmouseup="cancelLongPress()" onmouseleave="cancelLongPress()"'
+          + ' ontouchstart="event.stopPropagation();_barDeparted(' + firstDay.day + ')" ontouchend="cancelLongPress()"'
+          + ' title="Tap to record departure · Hold to edit time"'
+          + ' style="background:' + _depBg + ';border:' + _depBd + ';' + _btnBase + '">' + _depLbl + '</button>';
+      })()
 
     /* Remove (destructive — pill style matching white-row trash) */
     + '<button onclick="removeStopFromTrip(' + _sidAttr + ',\'' + _safePhase + '\')" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:#fff;border-radius:8px;width:30px;height:30px;font-size:.82rem;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;" title="Remove this stop"><i class="fa-solid fa-trash-can"></i></button>'
@@ -13937,12 +13955,16 @@ function renderPlannerAgenda() {
     html += '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">';
     if (_wxStr) html += '<div style="font-size:.7rem;text-align:right;line-height:1.5;opacity:.9;">' + _wxStr + '</div>';
     html += '<button onclick="event.stopPropagation();showEditDayAgenda(\'' + _eStr + '\')" style="background:rgba(255,255,255,.2);border:none;border-radius:8px;color:#fff;font-size:.68rem;font-weight:800;padding:4px 8px;cursor:pointer;font-family:var(--font);white-space:nowrap;">✏️ Edit</button>'
+      + '<button onclick="event.stopPropagation();_agToggleDayMap(\'' + _eStr + '\',' + d.day + ')" style="background:rgba(255,255,255,.2);border:none;border-radius:10px;color:#fff;width:36px;height:30px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;" title="Show map of today\'s stops"><i class="fa-solid fa-map-location-dot" style="font-size:.82rem;"></i></button>'
       + '<span id="ag-arrow-' + _eStr + '" style="font-size:.9rem;transition:transform .2s;display:inline-block;' + (_isCollapsed ? 'transform:rotate(-90deg)' : '') + '">▾</span>'
       + '</div>';
     html += '</div>'; /* end header */
 
     /* Body: time blocks — collapsible */
     html += '<div id="ag-day-body-' + _eStr + '" style="background:var(--card);padding:8px 12px;' + (_isCollapsed ? 'display:none;' : '') + '">';
+
+    /* Inline map container (hidden until toggled) */
+    html += '<div id="ag-day-map-' + _eStr + '" style="display:none;margin:0 -12px 10px -12px;border-bottom:1px solid rgba(0,0,0,.07);"></div>';
 
     /* ── Pre-collect any agendaEvents for this effective date ── */
     var _dayManual = (appState.agendaEvents || []).filter(function(ev) { return ev.date === _eStr; });
@@ -14336,6 +14358,8 @@ function showAddAgendaEventModal(prefillDate, editId) {
     + '<input id="aae-address" type="hidden" value="' + (ev ? (ev.address||'').replace(/"/g,'&quot;') : '') + '">'
     + '<input id="aae-phone"   type="hidden" value="' + (ev ? (ev.phone||'').replace(/"/g,'&quot;')   : '') + '">'
     + '<input id="aae-hours"   type="hidden" value="' + (ev ? (ev.hours||'').replace(/"/g,'&quot;')   : '') + '">'
+    + '<input id="aae-lat"     type="hidden" value="' + (ev ? (ev.lat||'')   : '') + '">'
+    + '<input id="aae-lng"     type="hidden" value="' + (ev ? (ev.lng||'')   : '') + '">'
     /* Notes */
     + '<div style="margin-bottom:18px;">'
     + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Notes <span style="opacity:.6;font-weight:500;">(optional)</span></label>'
@@ -14416,6 +14440,8 @@ function _aaeExtractPrompt() {
     + 'DATE: [date of the reservation or visit, in YYYY-MM-DD format]\n'
     + 'START_TIME: [reservation or event start time, in HH:MM 24-hour format — e.g. "19:00" for 7 PM]\n'
     + 'END_TIME: [estimated end or departure time, in HH:MM 24-hour format — leave Not found if not stated]\n'
+    + 'LAT: [decimal latitude of the venue — e.g. 36.1382 — or "Not found"]\n'
+    + 'LNG: [decimal longitude of the venue — e.g. -86.8062 — or "Not found"]\n'
     + 'Do not include any other text. If a restaurant reservation says "7:00 PM for 2 guests", START_TIME should be "19:00".';
 }
 
@@ -14427,7 +14453,8 @@ function _aaeApplyExtracted(txt2) {
     return (v && v.toLowerCase() !== 'not found') ? v : '';
   };
   var eName = _g('NAME'), eAddr = _g('ADDRESS'), ePhone = _g('PHONE'),
-      eHours = _g('HOURS'), eDate = _g('DATE'), eStart = _g('START_TIME'), eEnd = _g('END_TIME');
+      eHours = _g('HOURS'), eDate = _g('DATE'), eStart = _g('START_TIME'), eEnd = _g('END_TIME'),
+      eLat = _g('LAT'), eLng = _g('LNG');
   var nameEl  = document.getElementById('aae-name');
   var addrEl  = document.getElementById('aae-address');
   var phoneEl = document.getElementById('aae-phone');
@@ -14435,11 +14462,15 @@ function _aaeApplyExtracted(txt2) {
   var startEl = document.getElementById('aae-start');
   var endEl   = document.getElementById('aae-end');
   var dateEl  = document.getElementById('aae-date');
+  var latEl   = document.getElementById('aae-lat');
+  var lngEl   = document.getElementById('aae-lng');
   var resEl   = document.getElementById('aae-ai-result');
   if (nameEl  && eName)  nameEl.value  = eName;
   if (addrEl  && eAddr)  addrEl.value  = eAddr;
   if (phoneEl && ePhone) phoneEl.value = ePhone;
   if (hoursEl && eHours) hoursEl.value = eHours;
+  if (latEl   && eLat)   latEl.value   = eLat;
+  if (lngEl   && eLng)   lngEl.value   = eLng;
   /* For select-based time pickers, set value and force re-render */
   if (startEl && eStart) { startEl.value = eStart; }
   if (endEl   && eEnd)   { endEl.value   = eEnd;   }
@@ -14536,6 +14567,156 @@ function _agendaFormatEnrich(address, phone, hours) {
   return out;
 }
 
+/* ══════════════════════════════════════════════════════════════════════
+   AGENDA DAY MAP — inline Leaflet map with numbered stop pins
+   ══════════════════════════════════════════════════════════════════════ */
+
+var _agGeoCache = {};   /* address string → {lat, lng}  */
+
+/* Toggle the map panel for a given day */
+function _agToggleDayMap(eStr, dayNum) {
+  var container = document.getElementById('ag-day-map-' + eStr);
+  if (!container) return;
+  if (container.style.display === 'none' || !container.style.display) {
+    container.style.display = 'block';
+    _agInitDayMap(eStr, dayNum);
+  } else {
+    container.style.display = 'none';
+  }
+}
+
+/* Collect all agenda items for a given day that have an address */
+function _agGetMappableItems(eStr, dayNum) {
+  var ovList = appState.agendaItemOverrides
+    ? (appState.agendaItemOverrides[dayNum] || appState.agendaItemOverrides[eStr])
+    : null;
+  var manualList = (appState.agendaEvents || []).filter(function(ev) { return ev.date === eStr; });
+
+  var items = [];
+  if (ovList) {
+    ovList.forEach(function(it) { items.push(it); });
+    manualList.forEach(function(ev) {
+      var already = items.some(function(it) { return it.id === ev.id; });
+      if (!already) items.push({
+        id: ev.id, time: ev.startTime||'', title: ev.name,
+        address: ev.address||'', lat: ev.lat||'', lng: ev.lng||''
+      });
+    });
+  } else {
+    manualList.forEach(function(ev) {
+      items.push({ id: ev.id, time: ev.startTime||'', title: ev.name,
+        address: ev.address||'', lat: ev.lat||'', lng: ev.lng||'' });
+    });
+  }
+  /* Sort by time, then keep only items with address or coords */
+  items.sort(function(a,b){ return (a.time||'23:59') < (b.time||'23:59') ? -1 : 1; });
+  return items.filter(function(it) { return it.address || (it.lat && it.lng); });
+}
+
+/* Initialise (or refresh) the day map */
+function _agInitDayMap(eStr, dayNum) {
+  var container = document.getElementById('ag-day-map-' + eStr);
+  if (!container) return;
+
+  /* Remove any existing Leaflet instance to avoid re-init errors */
+  var canvasId = 'ag-map-canvas-' + eStr;
+  var old = document.getElementById(canvasId);
+  if (old && old._leaflet_id) { try { window['_agMap_' + eStr] && window['_agMap_' + eStr].remove(); } catch(e) {} }
+
+  var mappable = _agGetMappableItems(eStr, dayNum);
+
+  if (mappable.length === 0) {
+    container.innerHTML = '<div style="padding:14px 16px;text-align:center;color:var(--text-3);font-size:.8rem;background:var(--bg);">📍 No agenda items with addresses yet — add events with addresses to see them mapped.</div>';
+    return;
+  }
+
+  container.innerHTML =
+    '<div id="' + canvasId + '" style="height:280px;"></div>'
+    + '<div id="ag-map-status-' + eStr + '" style="padding:5px 12px;font-size:.7rem;color:var(--text-3);text-align:center;background:var(--bg);">🔍 Locating stops…</div>';
+
+  /* Geocode all items then draw map */
+  _agGeocodeItems(mappable, function(geoItems) {
+    var valid = geoItems.filter(function(it) { return it.lat && it.lng; });
+    var statusEl = document.getElementById('ag-map-status-' + eStr);
+
+    if (valid.length === 0) {
+      if (statusEl) statusEl.textContent = '⚠️ Could not locate any stops — try adding full street addresses.';
+      return;
+    }
+    if (statusEl) {
+      statusEl.textContent = valid.length + ' stop' + (valid.length > 1 ? 's' : '') + ' mapped'
+        + (valid.length < geoItems.length ? ' (' + (geoItems.length - valid.length) + ' address not found)' : '');
+    }
+
+    if (typeof L === 'undefined') { if (statusEl) statusEl.textContent = '⚠️ Map library not loaded.'; return; }
+
+    var map = L.map(canvasId, { zoomControl: true, scrollWheelZoom: false });
+    window['_agMap_' + eStr] = map;
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+      maxZoom: 19
+    }).addTo(map);
+
+    var bounds = [];
+    valid.forEach(function(item, idx) {
+      var lat = parseFloat(item.lat), lng = parseFloat(item.lng);
+      bounds.push([lat, lng]);
+      var num  = idx + 1;
+      var icon = L.divIcon({
+        className: '',
+        html: '<div style="background:var(--orange,#E8813A);color:#fff;border-radius:50%;width:26px;height:26px;'
+            + 'display:flex;align-items:center;justify-content:center;font-weight:900;font-size:.78rem;'
+            + 'border:2.5px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.35);font-family:sans-serif;">' + num + '</div>',
+        iconSize: [26, 26], iconAnchor: [13, 13], popupAnchor: [0, -16]
+      });
+      var pop = '<strong>' + (item.title||'').replace(/</g,'&lt;') + '</strong>';
+      if (item.address) pop += '<br><span style="font-size:.75rem;color:#555;">📍 ' + item.address.replace(/</g,'&lt;') + '</span>';
+      L.marker([lat, lng], { icon: icon }).addTo(map).bindPopup(pop);
+    });
+
+    if (bounds.length === 1) { map.setView(bounds[0], 15); }
+    else { map.fitBounds(bounds, { padding: [24, 24] }); }
+  });
+}
+
+/* Sequential geocoder: uses stored lat/lng first, then Nominatim with cache + rate limit */
+function _agGeocodeItems(items, callback) {
+  var results = items.map(function(it) { return Object.assign ? Object.assign({}, it) : JSON.parse(JSON.stringify(it)); });
+  var pending  = results.filter(function(it) { return !it.lat || !it.lng; });
+  if (pending.length === 0) { callback(results); return; }
+
+  var idx = 0;
+  function next() {
+    if (idx >= pending.length) { callback(results); return; }
+    var item = pending[idx++];
+    var addr = (item.address || '').trim();
+    if (!addr) { setTimeout(next, 0); return; }
+
+    if (_agGeoCache[addr]) {
+      item.lat = _agGeoCache[addr].lat;
+      item.lng = _agGeoCache[addr].lng;
+      setTimeout(next, 0);
+      return;
+    }
+    var url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&q=' + encodeURIComponent(addr);
+    fetch(url, { headers: { 'Accept': 'application/json' } })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data && data[0]) {
+        item.lat = parseFloat(data[0].lat);
+        item.lng = parseFloat(data[0].lon);
+        _agGeoCache[addr] = { lat: item.lat, lng: item.lng };
+      }
+      setTimeout(next, 350); /* Nominatim: max ~1 req/sec */
+    })
+    .catch(function() { setTimeout(next, 350); });
+  }
+  next();
+}
+
+/* ══════════════════════════════════════════════════════════════════════ */
+
 function _agendaLookupInfo() {
   var name = (document.getElementById('aae-name') || {}).value || '';
   var url  = (document.getElementById('aae-url')  || {}).value || '';
@@ -14550,15 +14731,19 @@ function _agendaLookupInfo() {
   var prompt = hasUrl
     ? 'Fetch the page at this URL and extract the venue details for "' + name.trim() + '".\n'
       + 'URL: ' + url.trim() + '\n\n'
-      + 'From the page content, provide ONLY these 3 lines — no extra text:\n'
+      + 'From the page content, provide ONLY these 5 lines — no extra text:\n'
       + 'ADDRESS: [full street address with city, state, zip — or "Not found"]\n'
       + 'PHONE: [phone number — or "Not found"]\n'
       + 'HOURS: [opening hours or visit info — or "Not found"]\n'
+      + 'LAT: [decimal latitude of the venue — or "Not found"]\n'
+      + 'LNG: [decimal longitude of the venue — or "Not found"]\n'
       + 'Use ONLY what is on the page. Do not guess or use training data.'
-    : 'For the place: "' + name.trim() + '" — provide ONLY these 3 lines, no extra text:\n'
+    : 'For the place: "' + name.trim() + '" — provide ONLY these 5 lines, no extra text:\n'
       + 'ADDRESS: [full street address with city, state, zip — or "Not found"]\n'
       + 'PHONE: [phone number — or "Not found"]\n'
       + 'HOURS: [typical opening hours, e.g. "Open daily 9 AM – 5 PM" — or "Not found"]\n'
+      + 'LAT: [decimal latitude of the venue — or "Not found"]\n'
+      + 'LNG: [decimal longitude of the venue — or "Not found"]\n'
       + 'Give your best answer from training data.';
 
   var requestBody = {
@@ -14580,18 +14765,26 @@ function _agendaLookupInfo() {
     var address = ((text.match(/ADDRESS:\s*(.+)/i)||[])[1]||'').trim();
     var phone   = ((text.match(/PHONE:\s*(.+)/i)  ||[])[1]||'').trim();
     var hours   = ((text.match(/HOURS:\s*(.+)/i)  ||[])[1]||'').trim();
+    var lat     = ((text.match(/LAT:\s*(.+)/i)    ||[])[1]||'').trim();
+    var lng     = ((text.match(/LNG:\s*(.+)/i)    ||[])[1]||'').trim();
 
     /* Discard placeholder values */
     if (/not found|not available/i.test(address)) address = '';
     if (/not found|not available/i.test(phone))   phone   = '';
     if (/not found|not available|check website/i.test(hours)) hours = '';
+    if (/not found|not available/i.test(lat) || isNaN(parseFloat(lat))) lat = '';
+    if (/not found|not available/i.test(lng) || isNaN(parseFloat(lng))) lng = '';
 
     var fA = document.getElementById('aae-address');
     var fP = document.getElementById('aae-phone');
     var fH = document.getElementById('aae-hours');
-    if (fA) fA.value = address;
-    if (fP) fP.value = phone;
-    if (fH) fH.value = hours;
+    var fLat = document.getElementById('aae-lat');
+    var fLng = document.getElementById('aae-lng');
+    if (fA)   fA.value   = address;
+    if (fP)   fP.value   = phone;
+    if (fH)   fH.value   = hours;
+    if (fLat) fLat.value = lat;
+    if (fLng) fLng.value = lng;
 
     if (res) {
       var _ri = document.getElementById('aae-ai-result-inner');
@@ -14619,6 +14812,11 @@ function _saveAgendaEvent(editId) {
   var address = ((document.getElementById('aae-address') || {}).value || '').trim();
   var phone   = ((document.getElementById('aae-phone')   || {}).value || '').trim();
   var hours   = ((document.getElementById('aae-hours')   || {}).value || '').trim();
+  var lat     = ((document.getElementById('aae-lat')     || {}).value || '').trim();
+  var lng     = ((document.getElementById('aae-lng')     || {}).value || '').trim();
+  /* Validate coords */
+  if (lat && isNaN(parseFloat(lat))) lat = '';
+  if (lng && isNaN(parseFloat(lng))) lng = '';
 
   if (!name) { showToast('⚠️ Enter a place name', 2000); return; }
   if (!date) { showToast('⚠️ Select a date', 2000); return; }
@@ -14628,6 +14826,8 @@ function _saveAgendaEvent(editId) {
   var record = { id: editId || ('ag_' + Date.now()), date: date, name: name,
     startTime: start, endTime: end, url: url,
     address: address, phone: phone, hours: hours, notes: notes };
+  if (lat) record.lat = parseFloat(lat);
+  if (lng) record.lng = parseFloat(lng);
 
   /* ── "Add to schedule" path: save as a reorderable agendaItemOverride ──
      Always use this path when a specific date was prefilled (day-context add),
@@ -14671,11 +14871,14 @@ function _saveAgendaEvent(editId) {
     }
     /* Build rich schedule item — subtitle = address · hours */
     var _schedSub = [address, hours].filter(Boolean).join(' · ');
-    _agSched.push({
+    var _schedItem = {
       id: record.id, time: start || '10:00', endTime: end, icon: '🎯',
       title: name, subtitle: _schedSub,
       address: address, phone: phone, hours: hours, url: url, notes: notes
-    });
+    };
+    if (lat) _schedItem.lat = parseFloat(lat);
+    if (lng) _schedItem.lng = parseFloat(lng);
+    _agSched.push(_schedItem);
     /* Auto-sort the day's items chronologically */
     _agSched.sort(function(a, b) {
       var at = a.time || '23:59', bt = b.time || '23:59';
@@ -18542,44 +18745,139 @@ function _openMusicForStop(stopId) {
 /* ── DAY DETAIL MODAL ───────────────────────────────────────────── */
 var _ddmDayNum = null;
 
+/* ── openDayDetail: redirects to Agenda subtab and expands the day ──
+   The orange DDM modal is deprecated for Schedule-view click use.
+   The modal HTML is kept so drive-mode dashboard and game-card adjustments
+   still work (they open it directly via their own code paths).              */
 function openDayDetail(dayNum) {
+  openAgendaDay(dayNum);
+}
+
+/* Navigate to Planner → Agenda, expand and scroll to a specific day */
+function openAgendaDay(dayNum) {
   var d = getDay(dayNum);
   if (!d) return;
-  var stop = getStop(d.stopId);
   _ddmDayNum = dayNum;
-  window._ddmCurrentStop = stop;
-  try {
-    document.getElementById('ddm-phase').textContent = d.phase || '';
-    document.getElementById('ddm-title').textContent = d.driveDay ? _getDriveDayTitle(d) : d.title;
-    var metaParts = [];
-    if (d.driveDay && d.miles > 0) metaParts.push('&#128665; ' + d.miles + ' mi &middot; ~' + d.driveHours + 'h drive');
-    else {
-      var _sleepMeta = _getStayMeta(d.stopId);
-      metaParts.push(_sleepMeta.icon + ' ' + _sleepMeta.label);
+  window._ddmCurrentStop = getStop(d.stopId);
+
+  /* Compute effective date string for this day (mirrors renderPlannerAgenda logic) */
+  var eStr = _agDayNumToEStr(dayNum);
+  if (!eStr) return;
+
+  /* Un-collapse this day */
+  if (!_agCollapsed) _agCollapsed = {};
+  _agCollapsed[eStr] = false;
+
+  /* Switch to Planner tab then Agenda subtab */
+  switchTab('planner');
+  _mainSeg('agenda');
+
+  /* Scroll to the day card after render */
+  setTimeout(function() {
+    var target = document.getElementById('ag-day-body-' + eStr)
+               || document.getElementById('ag-day-map-' + eStr);
+    if (!target) return;
+    /* Walk up to the day card wrapper */
+    var card = target.parentElement;
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      /* Brief highlight pulse */
+      card.style.outline = '2.5px solid var(--orange)';
+      card.style.borderRadius = '10px';
+      setTimeout(function() { card.style.outline = ''; }, 1800);
     }
-    document.getElementById('ddm-meta').innerHTML = metaParts.join('&nbsp;&nbsp;&middot;&nbsp;&nbsp;');
-    try {
-      document.getElementById('ddm-blocks').innerHTML = renderDayTimeBlocks(d, stop);
-    } catch(blockErr) {
-      document.getElementById('ddm-blocks').innerHTML = '<div style="padding:16px;color:var(--text-3);">Day ' + d.day + ' — ' + (d.title || 'Schedule') + '</div>';
-      console.warn('renderDayTimeBlocks error:', blockErr);
+  }, 120);
+}
+
+/* Compute effective date string for a day number (for Agenda navigation) */
+function _agDayNumToEStr(dayNum) {
+  var d = getDay(dayNum);
+  if (!d) return null;
+
+  var _sorted = TRIP_DAYS.slice().sort(function(a,b){
+    if (a.date < b.date) return -1; if (a.date > b.date) return 1; return (a.day||0)-(b.day||0);
+  });
+
+  /* Phase offset for this stop */
+  var phaseOff = 0, cumPhase = 0, seenS = [];
+  _sorted.forEach(function(td) {
+    if (seenS.indexOf(td.stopId) === -1) {
+      seenS.push(td.stopId);
+      if (td.stopId === d.stopId) phaseOff = cumPhase;
+      cumPhase += (appState.phaseExtraDays && appState.phaseExtraDays[td.stopId]) || 0;
     }
-    var arrBtn = document.getElementById('ddm-arrive-btn');
-    var depBtn = document.getElementById('ddm-leave-btn');
-    if (arrBtn) {
-      var arr = appState.arrivals && appState.arrivals[d.stopId];
-      arrBtn.innerHTML = arr ? '&#10003; Arrived ' + new Date(arr.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '&#129001; We Arrived!';
+  });
+
+  /* Pause offset for this day's base date */
+  var pauses = (appState.pauseDays || []).filter(function(p){return p.startDate&&p.endDate;})
+    .sort(function(a,b){return a.startDate<b.startDate?-1:1;});
+  var pauseOff = 0;
+  pauses.forEach(function(p) {
+    if (p.startDate <= d.date) {
+      pauseOff += Math.max(0, Math.round((new Date(p.endDate+'T00:00:00') - new Date(p.startDate+'T00:00:00')) / 86400000));
     }
-    if (depBtn) {
-      var dep = appState.departures && appState.departures[d.stopId];
-      depBtn.innerHTML = dep ? '&#10003; Left ' + new Date(dep.time).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}) : '&#128666; We Left';
-    }
-  } catch(e) {
-    console.error('openDayDetail error:', e);
+  });
+
+  return new Date(new Date(d.date+'T00:00:00').getTime() + (pauseOff + phaseOff) * 86400000).toISOString().slice(0,10);
+}
+
+/* ── Inline Arrived / Left buttons on the schedule blue stop header ──
+   These set _ddmDayNum so long-press time-edit (openTimeEdit) still works. */
+
+function _barArrived(dayNum) {
+  if (_longPressTimer) return;
+  _ddmDayNum = dayNum;
+  var d = getDay(dayNum); if (!d) return;
+  var stop = getStop(d.stopId);
+  var btn  = document.getElementById('arr-btn-' + d.stopId);
+  if (!appState.arrivals) appState.arrivals = {};
+  if (appState.arrivals[d.stopId]) {
+    delete appState.arrivals[d.stopId]; saveState(appState);
+    if (btn) { btn.innerHTML = '&#129001; Arrived'; btn.style.background = 'rgba(255,255,255,.12)'; btn.style.borderColor = 'rgba(255,255,255,.22)'; }
+    showToast('Arrival cleared', 1800); return;
   }
-  /* Always show the modal — even if content failed to render */
-  document.getElementById('day-detail-modal').classList.remove('hidden');
-  document.body.style.overflow = 'hidden';
+  var now = new Date();
+  appState.arrivals[d.stopId] = { dayNum: dayNum, time: now.toISOString() };
+  saveState(appState);
+  var ts = now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  if (btn) { btn.innerHTML = '\u2713 ' + ts; btn.style.background = 'rgba(58,138,92,.45)'; btn.style.borderColor = 'rgba(58,138,92,.7)'; }
+  showToast('Arrival recorded \u2014 checking pace\u2026', 2400);
+  geminiAdjustSchedule(dayNum, 'arrive', stop, (new Date(d.date+'T12:00:00') - now) / 3600000);
+}
+
+function _barDeparted(dayNum) {
+  if (_longPressTimer) return;
+  _ddmDayNum = dayNum;
+  var d = getDay(dayNum); if (!d) return;
+  var stop = getStop(d.stopId);
+  var btn  = document.getElementById('dep-btn-' + d.stopId);
+  if (!appState.departures) appState.departures = {};
+  if (appState.departures[d.stopId]) {
+    delete appState.departures[d.stopId];
+    if (appState.aiSuggestions) {
+      appState.aiSuggestions = appState.aiSuggestions.filter(function(s) {
+        return !(s.sourceDay === dayNum && s.status !== 'accepted');
+      });
+    }
+    if (appState.dayNotes) delete appState.dayNotes[dayNum];
+    saveState(appState);
+    if (btn) { btn.innerHTML = '&#128666; Left'; btn.style.background = 'rgba(255,255,255,.12)'; btn.style.borderColor = 'rgba(255,255,255,.22)'; }
+    renderSchedule(); renderAdjustments(); updateAdjBadge();
+    showToast('Departure cleared \u2014 suggestions reverted', 2200); return;
+  }
+  var now = new Date();
+  appState.departures[d.stopId] = { dayNum: dayNum, time: now.toISOString() };
+  saveState(appState);
+  var ts2 = now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
+  if (btn) { btn.innerHTML = '\u2713 ' + ts2; btn.style.background = 'rgba(200,104,32,.45)'; btn.style.borderColor = 'rgba(200,104,32,.7)'; }
+  showToast('Departure recorded \u2014 adjusting schedule\u2026', 2400);
+  geminiAdjustSchedule(dayNum, 'depart', stop, (new Date(d.date+'T19:00:00') - now) / 3600000);
+}
+
+/* Long-press shim for inline bar buttons — sets context before opening time editor */
+function _barLongPress(type, dayNum) {
+  _ddmDayNum = dayNum;
+  startLongPress(type);
 }
 
 function closeDayDetail() {
@@ -27257,6 +27555,9 @@ function confirmTimeEdit() {
     saveState(appState);
     var ab = document.getElementById('ddm-arrive-btn');
     if (ab) { ab.innerHTML = '\u2713 Arrived ' + ts; ab.style.background = 'rgba(58,138,92,.35)'; }
+    /* Also update inline bar button if present */
+    var abBar = document.getElementById('arr-btn-' + d.stopId);
+    if (abBar) { abBar.innerHTML = '\u2713 ' + ts; abBar.style.background = 'rgba(58,138,92,.45)'; abBar.style.borderColor = 'rgba(58,138,92,.7)'; }
     showToast('Arrival time updated \u2014 rechecking\u2026', 2200);
     geminiAdjustSchedule(_ddmDayNum, 'arrive', stop, (new Date(d.date+'T12:00:00') - edited) / 3600000);
   } else {
@@ -27265,6 +27566,9 @@ function confirmTimeEdit() {
     saveState(appState);
     var db2 = document.getElementById('ddm-leave-btn');
     if (db2) { db2.innerHTML = '\u2713 Left ' + ts; db2.style.background = 'rgba(200,104,32,.35)'; }
+    /* Also update inline bar button if present */
+    var dbBar = document.getElementById('dep-btn-' + d.stopId);
+    if (dbBar) { dbBar.innerHTML = '\u2713 ' + ts; dbBar.style.background = 'rgba(200,104,32,.45)'; dbBar.style.borderColor = 'rgba(200,104,32,.7)'; }
     showToast('Departure time updated \u2014 adjusting\u2026', 2200);
     geminiAdjustSchedule(_ddmDayNum, 'depart', stop, (new Date(d.date+'T19:00:00') - edited) / 3600000);
   }
