@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-08 (Session 25)
+2026-03-08 (Session 26)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -55,6 +55,25 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 26 — 2026-03-08
+
+**Gallery share button in Suggestions tab; fix gallery photos disappearing after cloud sync.**
+
+- **Gallery share button in Suggestions tab**: The "Friends & Family Suggestions" tab now has two share buttons: **Share Route** (purple, calls `_copyShareLink()`) and **Share Gallery** (orange, calls `_copyGalleryLink()`). These sit side-by-side in the tab header. The "How it works" description updated to explain both. The Route Map tab retains its original "Share Route" button unchanged.
+
+- **Gallery photos disappearing after cloud round-trip (root cause fix)**: Photos uploaded on the main device were disappearing after a page reload. Root cause: `syncToCloud` → `_makeCloudSafeState` strips `dataUrl` from every photoPool entry before pushing to Supabase (correct, to avoid large payloads). On reload, `loadFromCloud` calls `_smartMergeStates(local, cloud)`. Since the cloud save timestamp is newer than the local save, the cloud version becomes the `base`. Its photoPool entries have no `dataUrl`. `_unionById` sees each photo ID already in the base and skips adding the local entry (which had the `dataUrl`). Result: merged state has photos without `dataUrl` → photos appear as broken/invisible. Fix: after `_unionById` for `photoPool`, added a pass that restores `dataUrl` (and `thumb`) from the "other" (local) side for any merged entry that is missing them:
+  ```javascript
+  var _otherPhotoMap = {};
+  (other.photoPool || []).forEach(function(p) { if (p.id) _otherPhotoMap[p.id] = p; });
+  m.photoPool.forEach(function(p) {
+    if (!p.dataUrl && _otherPhotoMap[p.id] && _otherPhotoMap[p.id].dataUrl)
+      p.dataUrl = _otherPhotoMap[p.id].dataUrl;
+    if (!p.thumb && _otherPhotoMap[p.id] && _otherPhotoMap[p.id].thumb)
+      p.thumb = _otherPhotoMap[p.id].thumb;
+  });
+  ```
+  This ensures the full-resolution image is always restored from whichever state copy has it.
 
 ### Session 25 — 2026-03-08
 
