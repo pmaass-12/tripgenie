@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-08 (Session 23)
+2026-03-08 (Session 25)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -55,6 +55,16 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 25 — 2026-03-08
+
+**Waypoint UI consistency, login date fix, gallery share link.**
+
+- **Waypoint UI consistency**: All stops reduced to 0 nights now render as the grey dashed "Waypoint" card regardless of how they reached 0 nights. Previously, stops reduced via the `−` nights button (which set `phaseExtraDays` but NOT `waypointOverrides`) fell through to the full blue stop card showing "Waypoint active" in the toggle — inconsistent with stops set via `_toggleWaypoint`. Two-part fix: (1) `phaseHeaderHtml` now checks for `totalNights === 0` early (before the waypoint branch), setting `_isWpOverride = true` to route to the grey card; (2) `removePhaseDay` now auto-sets `waypointOverrides[stopId] = true` when reducing a stop to 0 nights, so future loads are consistent.
+
+- **Login page effective end date**: The login screen previously showed the raw last TRIP_DAYS date (April 19) regardless of schedule modifications. Fixed: the pre-login init code now reads `phaseExtraDays` from localStorage and applies the total adjustment to the displayed end date and day count. If phaseExtraDays collectively shorten the trip by 5 days, the login screen now correctly shows "Apr 14" as the end date. This means the displayed date always reflects the actual planned schedule.
+
+- **Gallery share link (`?gallery=1`)**: Family friends can now view the photo gallery without logging in. Added `?gallery=1` URL parameter mode: (1) bypasses login screen; (2) loads latest state from Supabase cloud; (3) boots app in viewer/read-only mode; (4) hides all nav tabs except Gallery; (5) shows "📷 Gallery View" badge in header. Share button added to gallery tab header — clicking `🔗 Share` copies the shareable URL (`[base]?gallery=1`) to clipboard. In gallery share mode the "Add Photos" and "Share" buttons are hidden. New functions: `_initGalleryShareMode()`, `_applyGalleryMode()`, `_copyGalleryLink()`, `_copyGalleryLinkFallback()`.
 
 ### Session 24 — 2026-03-08
 

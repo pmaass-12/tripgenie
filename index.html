@@ -7251,6 +7251,20 @@ function _initVersionCheck() {
           totalDays = ts.totalDays || totalDays;
           if (ts.tripName) name = ts.tripName;
         }
+        /* Apply phaseExtraDays to show the actual effective schedule end date.
+           Waypoints, removed days, and extra nights all shift the real end date. */
+        var _ped = saved.phaseExtraDays;
+        if (_ped && end) {
+          var _totalAdj = 0;
+          Object.keys(_ped).forEach(function(k) { _totalAdj += (_ped[k] || 0); });
+          if (_totalAdj !== 0) {
+            var _adjEndD = new Date(new Date(end + 'T00:00:00').getTime() + _totalAdj * 86400000);
+            end = _adjEndD.getFullYear() + '-'
+              + String(_adjEndD.getMonth() + 1).padStart(2, '0') + '-'
+              + String(_adjEndD.getDate()).padStart(2, '0');
+            totalDays = Math.max(1, totalDays + _totalAdj);
+          }
+        }
       } catch(e2) {}
 
       if (start && end) {
@@ -7273,6 +7287,15 @@ function _initVersionCheck() {
     // guest-overlay div lives AFTER this script block in the HTML, so defer until DOM is fully parsed
     document.addEventListener('DOMContentLoaded', function() {
       _initGuestMode(_guestTripId);
+    });
+    return; // skip normal auto-login flow
+  }
+  /* ── Gallery share mode: ?gallery=1 bypasses login, shows photo gallery only ── */
+  if (_galleryShareMode) {
+    var _lsG = document.getElementById('login-screen');
+    if (_lsG) _lsG.classList.add('hidden');
+    document.addEventListener('DOMContentLoaded', function() {
+      _initGalleryShareMode();
     });
     return; // skip normal auto-login flow
   }
@@ -9754,6 +9777,13 @@ function phaseHeaderHtml(phase, firstDay) {
   var _sidAttr = _sid.replace(/"/g, '&quot;');
   /* ── Waypoint: lightweight header, no nights/days controls ── */
   var _isWpOverride = appState.waypointOverrides && appState.waypointOverrides[firstDay.stopId];
+  /* Also treat as waypoint if phaseExtraDays reduced stop to 0 nights (e.g. via minus button)
+     without going through _toggleWaypoint — ensures consistent grey-card UI in all cases. */
+  if (!_isWpOverride && !firstDay.waypoint) {
+    var _wpEarlyDays   = TRIP_DAYS.filter(function(d) { return d.stopId === firstDay.stopId; });
+    var _wpEarlyNights = Math.max(0, _wpEarlyDays.length + ((appState.phaseExtraDays && appState.phaseExtraDays[firstDay.stopId]) || 0));
+    if (_wpEarlyNights === 0) _isWpOverride = true;
+  }
   if (firstDay.waypoint || _isWpOverride) {
     var _wpStop = getStop(firstDay.stopId);
     var _wpName = _wpStop ? (_wpStop.name || phase) : phase;
@@ -10081,11 +10111,17 @@ function removePhaseDay(stopId) {
   var minAllowed = -(phaseDays.length); // allow 0-day waypoint stops
   var cur = appState.phaseExtraDays[stopId] || 0;
   if (cur <= minAllowed) { showToast('Stop is already a 0-day waypoint!', 1800); return; }
-  appState.phaseExtraDays[stopId] = cur - 1;
+  var _rpNewVal = cur - 1;
+  appState.phaseExtraDays[stopId] = _rpNewVal;
+  /* When reduced to 0 nights, mark waypointOverrides for consistent grey-card UI */
+  if (Math.max(0, phaseDays.length + _rpNewVal) === 0) {
+    if (!appState.waypointOverrides) appState.waypointOverrides = {};
+    appState.waypointOverrides[stopId] = true;
+  }
   saveState(appState);
   _refreshAll();
   var newVal = appState.phaseExtraDays[stopId];
-  showToast(newVal < 0 ? 'Day hidden from schedule' : 'Extra day removed', 1600);
+  showToast(newVal < 0 ? '📍 Waypoint — passing through, no overnight' : 'Extra day removed', 1600);
 }
 
 /* ── EDIT STOP DAYS — tap the blue phase bar to set exact nights ────────
@@ -13395,6 +13431,29 @@ function _renderPlateGallery(results) {
   grid.innerHTML = html;
 }
 
+function _copyGalleryLink() {
+  var url = window.location.origin + window.location.pathname + '?gallery=1';
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(url).then(function() {
+      showToast('🔗 Gallery link copied! Share it with friends and family.', 4000);
+    }).catch(function() {
+      _copyGalleryLinkFallback(url);
+    });
+  } else {
+    _copyGalleryLinkFallback(url);
+  }
+}
+function _copyGalleryLinkFallback(url) {
+  var ta = document.createElement('textarea');
+  ta.value = url;
+  ta.style.cssText = 'position:fixed;top:-999px;left:-999px;opacity:0;';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); showToast('🔗 Gallery link copied!', 3500); }
+  catch(e) { showToast('Gallery link: ' + url, 8000); }
+  document.body.removeChild(ta);
+}
+
 function renderGalleryTab() {
   var el = document.getElementById('gallery-tab-content');
   if (!el) return;
@@ -13493,7 +13552,12 @@ function renderGalleryTab() {
     + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-images"></i> Photo Gallery</h2>'
     + '<div style="display:flex;align-items:center;gap:8px;">'
     + '<span style="font-size:.8rem;color:var(--text-3);">' + allPhotos.length + ' photo' + (allPhotos.length !== 1 ? 's' : '') + '</span>'
-    + '<button onclick="_openGalleryFilePicker()" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);">📤 Add Photos</button>'
+    + (!_galleryShareMode
+        ? '<button onclick="_copyGalleryLink()" title="Share gallery with friends" style="background:rgba(44,95,138,.12);color:var(--blue);border:1px solid rgba(44,95,138,.25);border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:var(--font);">🔗 Share</button>'
+        : '')
+    + (!_galleryShareMode
+        ? '<button onclick="_openGalleryFilePicker()" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);">📤 Add Photos</button>'
+        : '')
     + '</div></div>';
 
   if (allPhotos.length === 0) {
@@ -15782,9 +15846,10 @@ function switchTab(tabId) {
    • Family view: Planner > Friends tab → see all tips by stop
    ══════════════════════════════════════════════════════════════════ */
 
-var _guestTripId  = null;   // set from URL param before initApp
-var _guestMapInst = null;   // Leaflet instance for guest map
-var _guestStops   = [];     // stops loaded from Supabase for this guest session
+var _guestTripId      = null;   // set from URL param before initApp
+var _galleryShareMode = false;  // set from ?gallery=1 URL param
+var _guestMapInst     = null;   // Leaflet instance for guest map
+var _guestStops       = [];     // stops loaded from Supabase for this guest session
 
 /* ── 1. Detect guest mode from URL ──────────────────────────────── */
 /* Supports two entry points:
@@ -15793,7 +15858,8 @@ var _guestStops   = [];     // stops loaded from Supabase for this guest session
 function _detectGuestMode() {
   try {
     var p = new URLSearchParams(window.location.search);
-    _guestTripId = p.get('guest') || (p.get('friends') ? 'local' : null);
+    _guestTripId      = p.get('guest') || (p.get('friends') ? 'local' : null);
+    _galleryShareMode = !!p.get('gallery');
   } catch(e) {}
 }
 
@@ -15880,6 +15946,50 @@ async function _initGuestMode(tripId) {
 
   _renderGuestStopsList(stops, tripId);
   setTimeout(function() { _initGuestMapInst(stops, guestArrivals, guestDepartures); }, 300);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   GALLERY SHARE MODE  (?gallery=1)
+   Read-only photo gallery for friends — no login required.
+   Loads photoPool from Supabase and shows the gallery tab only.
+   ══════════════════════════════════════════════════════════════════ */
+
+function _initGalleryShareMode() {
+  /* Boot the full app in viewer mode, then collapse it to gallery-only */
+  _authed   = true;
+  _isViewer = true;
+  _isFriend = false;
+  var appEl = document.getElementById('app');
+  if (appEl) appEl.classList.remove('hidden');
+  /* Load latest state from cloud so photos are fresh */
+  loadFromCloud(function() {
+    initApp();
+    _applyGalleryMode();
+  });
+}
+
+function _applyGalleryMode() {
+  /* Hide every nav tab except gallery */
+  document.querySelectorAll('.nav-tab').forEach(function(t) {
+    if (t.getAttribute('data-tab') !== 'gallery') t.style.display = 'none';
+  });
+  /* Activate the gallery panel */
+  document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+  var gTab = document.getElementById('tab-gallery');
+  if (gTab) { gTab.classList.remove('hidden'); gTab.classList.add('active'); }
+  /* Add a "Gallery View" badge next to the logo */
+  var hdr = document.querySelector('.app-header');
+  if (hdr && !document.getElementById('gallery-view-badge')) {
+    var badge = document.createElement('div');
+    badge.id = 'gallery-view-badge';
+    badge.style.cssText = 'background:rgba(255,255,255,.2);color:#fff;font-size:.7rem;font-weight:800;'
+      + 'padding:3px 10px;border-radius:100px;margin-left:8px;border:1px solid rgba(255,255,255,.4);flex-shrink:0;';
+    badge.textContent = '📷 Gallery View';
+    var title = hdr.querySelector('.header-logo');
+    if (title) title.appendChild(badge);
+  }
+  renderGalleryTab();
+  showToast('📷 Maass Family Gallery — read-only view', 3500);
 }
 
 /* ── "Where are they now?" logic ─────────────────────────────────── */
