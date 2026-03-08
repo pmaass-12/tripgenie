@@ -14326,8 +14326,6 @@ function _showMoveItemSheet(item, fromDayNum, fromEffDate) {
     var eStr4 = new Date(new Date(td.date+'T00:00:00').getTime()+(_cn4+(_ph4[td.stopId]||0))*86400000).toISOString().slice(0,10);
     var dObj4 = new Date(eStr4+'T12:00:00');
     var lbl4  = dObj4.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
-    var stop4 = getStop(td.stopId);
-    if (stop4) lbl4 += ' — ' + stop4.name;
     var sel4  = (td.day === fromDayNum) ? ' selected' : '';
     dateOptions4 += '<option value="' + td.day + '"' + sel4 + '>' + lbl4 + '</option>';
   });
