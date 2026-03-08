@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-08 (Session 20)
+2026-03-08 (Session 22)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -55,6 +55,18 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 22 — 2026-03-08
+
+**Explore/Waypoint toggle, agenda header overflow fix, weather lookup fix, cross-tab sync fix.**
+
+- **Explore/Waypoint segmented toggle**: Replaced the single "Make Waypoint" / "📍 Waypoint — Restore?" button in the Schedule phase header with a proper `[🗺 Explore] [📍 Waypoint]` segmented control. The active option is highlighted white; the inactive option is dim and clickable. Clicking "Waypoint" calls `_toggleWaypoint(stopId)`; clicking "Explore" when in waypoint state also calls `_toggleWaypoint` to restore. In the grey waypoint card (`_isWpOverride = true`), the toggle shows with "Waypoint" active; clicking "Explore" restores the stop. Built-in waypoints (not user-toggled) keep the existing remove button.
+
+- **Agenda header overflow on narrow/tablet screens**: The agenda day card header left side (date pill + weekday + location) was pushing the right-side buttons (✏️ Edit, 🗺 Map, ▾) off the screen edge on iPad/narrow desktop. Fixed by adding `min-width:0; overflow:hidden` to the left container and `white-space:nowrap; overflow:hidden; text-overflow:ellipsis` to the day/location text. Added CSS class `ag-wx-badge` to weather display and a `@media (max-width:540px)` rule to hide it on mobile (so buttons always stay visible).
+
+- **Weather missing on TODAY's agenda card**: The agenda weather lookup used `_eStr` (effective date after pause/phaseExtraDays offsets) but weather is stored by `d.date` (raw trip date). If these differ, no weather was shown. Fixed by using `_wxStore[_eStr] || _wxStore[d.date]` as fallback. Also applied same fix in the calendar view (second weather lookup around line 23279).
+
+- **Stop changes not updating all tabs**: `_doRemoveStop`, `restoreStopToTrip`, and `_mapAddStopSave` only called `renderSchedule()` — they skipped Agenda, Day Planner, Dashboard, and Stop Navigator. Fixed by replacing those individual render calls with `_refreshAll(true)` in all three functions. Also fixed `_toggleTransitDay` which only called `renderSchedule()`. Now ALL tab views stay in sync when stops are added, removed, restored, or toggled.
 
 ### Session 21 — 2026-03-08
 

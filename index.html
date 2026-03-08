@@ -2400,6 +2400,28 @@
     .ds-r3 { width:100%;gap:5px;margin:8px 0 0; }
   }
 
+  /* ── Agenda day card: side-by-side map layout on desktop ──────────── */
+  .ag-day-body   { display:flex; flex-direction:column; background:var(--card); }
+  .ag-items-col  { flex:1; min-width:0; padding:8px 12px; }
+  .ag-day-map    { display:none; }
+  /* Desktop: map appears on the RIGHT alongside the items column */
+  @media (min-width:700px) {
+    .ag-day-body.ag-map-open { flex-direction:row; align-items:stretch; }
+    .ag-day-body.ag-map-open .ag-items-col { flex:1; overflow-y:auto; max-height:420px; border-right:1px solid rgba(0,0,0,.07); }
+    .ag-day-body.ag-map-open .ag-day-map   { display:block !important; width:42%; min-width:260px; min-height:340px; border-bottom:none; margin:0 !important; }
+  }
+  /* Mobile: map slides in ABOVE the items */
+  @media (max-width:699px) {
+    .ag-day-body.ag-map-open { flex-direction:column; }
+    .ag-day-body.ag-map-open .ag-day-map { display:block !important; margin:0 0 0 0 !important; border-bottom:1px solid rgba(0,0,0,.07); }
+    /* Larger text in agenda items on mobile */
+    .ag-items-col .ag-row-time { font-size:.8rem !important; }
+    .ag-items-col .ag-row-title { font-size:.9rem !important; }
+    .ag-items-col .ag-row-sub   { font-size:.76rem !important; }
+  }
+  /* Agenda header: hide weather badge on narrow screens to keep buttons visible */
+  @media (max-width:540px) { .ag-wx-badge { display:none !important; } }
+
   /* ── Schedule: Phase Header controls — responsive ────────────────── */
   .ph-ctrls { display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:12px;flex-wrap:wrap;justify-content:flex-end; }
   @media (max-width:640px) {
@@ -8468,14 +8490,19 @@ function _mapAddStopSave(name, afterIdx, nights) {
     d.date = dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
   });
 
-  /* Save as custom trip data */
-  appState.customTripData = { stops: TRIP_STOPS.slice(), days: TRIP_DAYS.slice() };
+  /* Save as custom trip data — also set activeTrip so the stop survives a page reload */
+  appState.customTripData = {
+    stops: TRIP_STOPS.slice(),
+    days: TRIP_DAYS.slice(),
+    startDate: CONFIG.startDate,
+    endDate: CONFIG.endDate,
+    totalMiles: CONFIG.totalMiles
+  };
+  appState.activeTrip = 'custom';
   saveState(appState);
 
   _mapAddStopClose();
-  renderStopNavigator();
-  renderSchedule();
-  if (mainMap) _clearAndRebuildMapMarkers(mainMap);
+  _refreshAll(true);
   showToast('📍 ' + name + ' added to your trip!', 2500);
 }
 /* ── SIDEBAR RESIZE ──────────────────────────────────────────────── */
@@ -9587,7 +9614,12 @@ function phaseHeaderHtml(phase, firstDay) {
       + '<div style="font-size:.7rem;opacity:.7;font-weight:600;">Waypoint — drive-through, no overnight stay</div>'
       + '</div>'
       + (_isWpOverride
-        ? '<button onclick="toggleWaypointOverride(' + _sidAttr + ')" style="background:rgba(44,95,138,.18);border:1px solid rgba(44,95,138,.3);color:var(--blue);border-radius:6px;padding:3px 8px;font-size:.68rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Make this a regular stop again">↩ Stop</button>'
+        /* User-toggled waypoint: show Explore/Waypoint segmented toggle with Waypoint active */
+        ? '<div style="display:inline-flex;border-radius:7px;overflow:hidden;border:1px solid rgba(44,95,138,.4);flex-shrink:0;">'
+          + '<button onclick="_toggleWaypoint(' + _sidAttr + ')" style="padding:3px 9px;font-size:.68rem;font-weight:600;border:none;background:transparent;color:var(--blue);white-space:nowrap;font-family:var(--font);cursor:pointer;opacity:.55;">🗺 Explore</button>'
+          + '<button style="padding:3px 9px;font-size:.68rem;font-weight:800;border:none;background:rgba(44,95,138,.35);color:var(--blue);white-space:nowrap;font-family:var(--font);cursor:default;border-left:1px solid rgba(44,95,138,.3);">📍 Waypoint</button>'
+          + '</div>'
+        /* Built-in waypoint: keep the remove button */
         : '<button onclick="removeStopFromTrip(' + _sidAttr + ',\'' + _wpSafe + '\')" style="background:rgba(220,60,50,.12);border:1px solid rgba(220,60,50,.2);color:#c53030;border-radius:6px;padding:3px 8px;font-size:.68rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Remove waypoint">&#128465;&#65039;</button>')
       + '</div>';
   }
@@ -9727,10 +9759,16 @@ function phaseHeaderHtml(phase, firstDay) {
     + '<button onclick="_cycleStayType(' + _sidAttr + ')" title="Change accommodation type" style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.9);border-radius:6px;padding:2px 7px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">'
     + _getStayMeta(firstDay.stopId).icon + '&thinsp;' + _getStayMeta(firstDay.stopId).label
     + '</button>'
-    /* Make Waypoint / Restore toggle */
+    /* Explore / Waypoint segmented toggle */
+    + '<div style="display:inline-flex;border-radius:7px;overflow:hidden;border:1px solid rgba(255,255,255,.28);flex-shrink:0;">'
     + (totalNights === 0
-        ? '<button onclick="_toggleWaypoint(' + _sidAttr + ')" title="Restore to overnight stop" style="background:rgba(255,215,0,.25);border:1px solid rgba(255,215,0,.5);color:#fff;border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">📍 Waypoint — Restore?</button>'
-        : '<button onclick="_toggleWaypoint(' + _sidAttr + ')" title="Convert to pass-through waypoint (0 nights)" style="background:rgba(255,255,255,.08);border:1px dashed rgba(255,255,255,.3);color:rgba(255,255,255,.7);border-radius:6px;padding:2px 8px;font-size:.7rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap;transition:background .15s;">📍 Make Waypoint</button>')
+        /* Waypoint is ACTIVE — Explore pill is clickable, Waypoint pill is highlighted */
+        ? '<button onclick="_toggleWaypoint(' + _sidAttr + ')" style="padding:2px 9px;font-size:.7rem;font-weight:600;border:none;background:rgba(255,255,255,.12);color:rgba(255,255,255,.6);white-space:nowrap;font-family:var(--font);cursor:pointer;">🗺 Explore</button>'
+          + '<button style="padding:2px 9px;font-size:.7rem;font-weight:800;border:none;background:rgba(255,255,255,.88);color:#2a2a2a;white-space:nowrap;font-family:var(--font);cursor:default;border-left:1px solid rgba(255,255,255,.2);">📍 Waypoint</button>'
+        /* Explore is ACTIVE — Explore pill is highlighted, Waypoint pill is clickable */
+        : '<button style="padding:2px 9px;font-size:.7rem;font-weight:800;border:none;background:rgba(255,255,255,.88);color:#2a2a2a;white-space:nowrap;font-family:var(--font);cursor:default;">🗺 Explore</button>'
+          + '<button onclick="_toggleWaypoint(' + _sidAttr + ')" style="padding:2px 9px;font-size:.7rem;font-weight:600;border:none;background:rgba(255,255,255,.12);color:rgba(255,255,255,.6);white-space:nowrap;font-family:var(--font);cursor:pointer;border-left:1px solid rgba(255,255,255,.2);">📍 Waypoint</button>')
+    + '</div>'
     + '</div>'
     + '</div>'
 
@@ -9860,12 +9898,15 @@ function _toggleWaypoint(stopId) {
   var extras       = appState.phaseExtraDays[stopId] || 0;
   var totalNights  = Math.max(0, phaseDays.length + extras);
   if (totalNights === 0) {
-    /* Already a waypoint — restore by clearing the offset */
+    /* Already a waypoint — restore by clearing the offset and waypoint override */
     delete appState.phaseExtraDays[stopId];
+    if (appState.waypointOverrides) delete appState.waypointOverrides[stopId];
     showToast('✅ Restored to ' + phaseDays.length + ' night' + (phaseDays.length !== 1 ? 's' : ''), 2000);
   } else {
-    /* Make waypoint — hide all nights for this stop */
+    /* Make waypoint — hide all nights and set override for gray card style */
     appState.phaseExtraDays[stopId] = -phaseDays.length;
+    if (!appState.waypointOverrides) appState.waypointOverrides = {};
+    appState.waypointOverrides[stopId] = true;
     showToast('📍 Waypoint — passing through, no overnight', 2200);
   }
   saveState(appState);
@@ -10487,7 +10528,7 @@ function _doRemoveStop(stopId, phaseName) {
   appState.removedStops[stopId]    = true;
   appState.phaseExtraDays[stopId]  = -(phaseDays.length);
   saveState(appState);
-  renderSchedule(); refreshMainMap();
+  _refreshAll(true);
   showToast('🗑️ ' + phaseName + ' removed. Use the + button to restore days.', 2800);
 }
 
@@ -10501,7 +10542,7 @@ function _toggleTransitDay(dayNum) {
   var cur = !!(appState.dayOverrides[dayNum].transitMode);
   appState.dayOverrides[dayNum].transitMode = !cur;
   saveState(appState);
-  renderSchedule();
+  _refreshAll(true);
   showToast(cur ? '🏕️ Explore day restored' : '🚗 Marked as Transit Day — Drive & Sleep', 2000);
 }
 
@@ -10525,7 +10566,7 @@ function restoreStopToTrip(stopId) {
   if (!appState.phaseExtraDays) appState.phaseExtraDays = {};
   appState.phaseExtraDays[stopId] = 0;
   saveState(appState);
-  renderSchedule(); refreshMainMap();
+  _refreshAll(true);
   /* Re-render audit log if it's currently visible so the removed-stops section updates */
   var toolsSub = document.getElementById('tools-sub-content');
   if (toolsSub && toolsSub.innerHTML.indexOf('Removed from Schedule') !== -1) renderAuditLog();
@@ -11251,6 +11292,8 @@ function renderSchedule() {
          (handles AI-generated trips where a non-driveDay appears at a stop before the
          explicit driveDay entry that drives TO that stop).                             */
       if (_preRenderedDriveDays[d.day]) continue;
+      /* Skip drive bars whose destination stop has been removed — avoids orphaned bars */
+      if (removedStopIds[d.stopId]) continue;
       var _dispNum = _dayDisplayNum[d.day] || d.day;
       html += _renderDriveSepA(d, stop, _effectiveDate, _dispNum, _isOverflow);
       /* Now render destination phase header AFTER the separator */
@@ -13901,12 +13944,12 @@ function renderPlannerAgenda() {
     _agInitCollapsed(todayStr, _allEffDates);
   }
 
-  /* ── Shared micro-styles ── */
-  var _row  = 'display:flex;align-items:flex-start;gap:0;padding:6px 0;border-bottom:1px solid rgba(0,0,0,.05);';
-  var _time = 'min-width:72px;font-size:.68rem;font-weight:700;color:var(--text-3);padding-top:2px;flex-shrink:0;line-height:1.35;white-space:normal;';
-  var _ico  = 'width:24px;font-size:.9rem;flex-shrink:0;text-align:center;line-height:1.6;';
-  var _txt  = 'flex:1;font-size:.8rem;color:var(--text);line-height:1.35;';
-  var _sub  = 'font-size:.68rem;color:var(--text-3);margin-top:1px;';
+  /* ── Shared micro-styles (slightly larger for readability) ── */
+  var _row  = 'display:flex;align-items:flex-start;gap:0;padding:7px 0;border-bottom:1px solid rgba(0,0,0,.05);';
+  var _time = 'min-width:72px;font-size:.76rem;font-weight:700;color:var(--text-3);padding-top:2px;flex-shrink:0;line-height:1.35;white-space:normal;';
+  var _ico  = 'width:26px;font-size:1rem;flex-shrink:0;text-align:center;line-height:1.6;';
+  var _txt  = 'flex:1;font-size:.86rem;color:var(--text);line-height:1.35;';
+  var _sub  = 'font-size:.74rem;color:var(--text-3);margin-top:2px;';
 
   var html = '<div style="padding:0 0 80px 0;">'
     + '<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;">'
@@ -13954,7 +13997,11 @@ function renderPlannerAgenda() {
     var _wdayFull = _eObj.toLocaleDateString('en-US', { weekday:'long' });
 
     /* Weather */
-    var _wx = (appState.weather && appState.weather[d.stopId] && appState.weather[d.stopId][_eStr]) || null;
+    /* Look up weather by effective date first, then fall back to raw trip date (d.date).
+       Weather is stored using raw trip dates, but effective dates may differ due to
+       pause offsets or phaseExtraDays shifts — the fallback catches those cases. */
+    var _wxStore = (appState.weather && appState.weather[d.stopId]) || null;
+    var _wx = _wxStore ? (_wxStore[_eStr] || _wxStore[d.date] || null) : null;
     var _wxStr = _wx && _wx.high != null
       ? wxIcon(_wx.code) + ' ' + _wx.high + '&#176;/' + _wx.low + '&#176;' + (_wx.type==='typical'?'<span style="opacity:.65;font-size:.6rem;"> (typical)</span>':'')
       : '';
@@ -13965,30 +14012,39 @@ function renderPlannerAgenda() {
     /* Header row — collapsible; _isCollapsed used by body wrapper below */
     var _isCollapsed = !!(_agCollapsed && _agCollapsed[_eStr]);
     html += '<div onclick="_agToggleDay(\'' + _eStr + '\')" style="background:' + _hdrBg + ';color:#fff;padding:9px 12px;display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;user-select:none;">';
-    html += '<div style="display:flex;align-items:center;gap:10px;">'
-      + '<div style="background:rgba(255,255,255,.22);border-radius:7px;padding:4px 9px;text-align:center;min-width:40px;">'
+    html += '<div style="display:flex;align-items:center;gap:10px;min-width:0;overflow:hidden;">'
+      + '<div style="background:rgba(255,255,255,.22);border-radius:7px;padding:4px 9px;text-align:center;min-width:40px;flex-shrink:0;">'
       + '<div style="font-size:.68rem;font-weight:700;opacity:.9;line-height:1.3;">' + _mday + '</div>'
       + '</div>'
-      + '<div>'
-      + '<div style="font-weight:900;font-size:.92rem;line-height:1.2;">' + _wdayFull
+      + '<div style="min-width:0;overflow:hidden;">'
+      + '<div style="font-weight:900;font-size:.92rem;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + _wdayFull
         + (_isToday ? ' <span style="background:rgba(255,255,255,.3);font-size:.58rem;padding:1px 7px;border-radius:100px;vertical-align:middle;font-weight:800;">TODAY</span>' : '')
       + '</div>'
-      + '<div style="font-size:.72rem;opacity:.85;margin-top:2px;">'
+      + '<div style="font-size:.72rem;opacity:.85;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
         + (_isDrive ? '🚗 Drive Day' : _isSB ? '🌟 Spring Break' : _isHome ? '🏠 Home' : (_stop ? (_stop.emoji||'') + ' ' : '') + (d.phase||''))
       + '</div></div></div>';
     html += '<div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">';
-    if (_wxStr) html += '<div style="font-size:.7rem;text-align:right;line-height:1.5;opacity:.9;">' + _wxStr + '</div>';
+    if (_wxStr) html += '<div class="ag-wx-badge" style="font-size:.7rem;text-align:right;line-height:1.5;opacity:.9;">' + _wxStr + '</div>';
     html += '<button onclick="event.stopPropagation();showEditDayAgenda(\'' + _eStr + '\')" style="background:rgba(255,255,255,.2);border:none;border-radius:8px;color:#fff;font-size:.68rem;font-weight:800;padding:4px 8px;cursor:pointer;font-family:var(--font);white-space:nowrap;">✏️ Edit</button>'
       + '<button onclick="event.stopPropagation();_agToggleDayMap(\'' + _eStr + '\',' + d.day + ')" style="background:rgba(255,255,255,.2);border:none;border-radius:10px;color:#fff;width:36px;height:30px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;transition:background .15s;" title="Show map of today\'s stops"><i class="fa-solid fa-map-location-dot" style="font-size:.82rem;"></i></button>'
       + '<span id="ag-arrow-' + _eStr + '" style="font-size:.9rem;transition:transform .2s;display:inline-block;' + (_isCollapsed ? 'transform:rotate(-90deg)' : '') + '">▾</span>'
       + '</div>';
     html += '</div>'; /* end header */
 
-    /* Body: time blocks — collapsible */
-    html += '<div id="ag-day-body-' + _eStr + '" style="background:var(--card);padding:8px 12px;' + (_isCollapsed ? 'display:none;' : '') + '">';
+    /* Body: time blocks — collapsible. Flex container for desktop side-by-side map. */
+    html += '<div id="ag-day-body-' + _eStr + '" class="ag-day-body"' + (_isCollapsed ? ' style="display:none;"' : '') + '>';
 
-    /* Inline map container (hidden until toggled) */
-    html += '<div id="ag-day-map-' + _eStr + '" style="display:none;margin:0 -12px 10px -12px;border-bottom:1px solid rgba(0,0,0,.07);"></div>';
+    /* Inline map container — desktop: right column; mobile: above items */
+    html += '<div id="ag-day-map-' + _eStr + '" class="ag-day-map"></div>';
+
+    /* Items column — wraps all time-block rows */
+    html += '<div class="ag-items-col">';
+
+    /* ── Pre-compute map-pin numbers (same sequential order as _agGetMappableItems) ──
+       Items that have an address or lat/lng get a numbered badge matching the map pins. */
+    var _mapNums = {};
+    var _mappable = _agGetMappableItems(_eStr, d.day);
+    _mappable.forEach(function(it, idx) { if (it.id) _mapNums[it.id] = idx + 1; });
 
     /* ── Pre-collect any agendaEvents for this effective date ── */
     var _dayManual = (appState.agendaEvents || []).filter(function(ev) { return ev.date === _eStr; });
@@ -14017,16 +14073,23 @@ function renderPlannerAgenda() {
         var _tLabel = item.time ? _tFmt(item.time) : '';
         /* Show end time on second line when available: "9:00 AM\n9:45 AM" */
         if (item.endTime && _tLabel) _tLabel += '<br><span style="opacity:.75">' + _tFmt(item.endTime) + '</span>';
-        var _hasRich = item.address || item.phone || item.hours || item.url;
+        var _hasRich = item.address || item.phone || item.hours || item.url || item.notes;
+        var _pinNum  = item.id && _mapNums[item.id];
+        var _icoHtml = _pinNum
+          ? '<div style="width:26px;flex-shrink:0;text-align:center;line-height:1;">'
+            + '<div style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;background:var(--orange);color:#fff;border-radius:50%;font-size:.65rem;font-weight:900;margin-top:2px;">' + _pinNum + '</div>'
+            + '</div>'
+          : '<div style="' + _ico + '">' + (item.icon||'📌') + '</div>';
         html += '<div style="' + _row + (_hasRich ? 'padding-bottom:8px;' : '') + '">'
           + '<div style="' + _time + '">' + _tLabel + '</div>'
-          + '<div style="' + _ico  + '">' + (item.icon||'📌') + '</div>'
+          + _icoHtml
           + '<div style="' + _txt  + '"><strong>' + (item.title||'').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</strong>'
           + (item.subtitle ? '<div style="' + _sub + '">' + (item.subtitle||'').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</div>' : '')
           + (item.address  ? '<div style="' + _sub + '">📍 ' + item.address.replace(/</g,'&lt;') + '</div>' : '')
           + (item.phone    ? '<div style="' + _sub + '">📞 ' + item.phone + '</div>' : '')
           + (item.hours    ? '<div style="' + _sub + '">🕐 ' + item.hours.replace(/</g,'&lt;') + '</div>' : '')
-          + (item.url      ? '<a href="' + item.url.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" style="font-size:.7rem;color:var(--blue);font-weight:600;text-decoration:none;" onclick="event.stopPropagation()">🔗 Website</a>' : '')
+          + (item.notes    ? '<div style="' + _sub + ';font-style:italic;">💬 ' + item.notes.replace(/</g,'&lt;') + '</div>' : '')
+          + (item.url      ? '<a href="' + item.url.replace(/"/g,'&quot;') + '" target="_blank" rel="noopener" style="font-size:.74rem;color:var(--blue);font-weight:600;text-decoration:none;" onclick="event.stopPropagation()">🔗 Website</a>' : '')
           + '</div></div>';
       });
     } else {
@@ -14207,7 +14270,8 @@ function renderPlannerAgenda() {
       + 'onmouseover="this.style.background=\'rgba(123,94,167,.07)\'" onmouseout="this.style.background=\'none\'">📌 + Add event this day</button>'
       + '</div>';
 
-    html += '</div>'; /* end body */
+    html += '</div>'; /* end ag-items-col */
+    html += '</div>'; /* end ag-day-body */
     html += '</div>'; /* end day card */
   }
 
@@ -14316,13 +14380,13 @@ function showAddAgendaEventModal(prefillDate, editId) {
     + '<div style="width:38px;height:4px;background:var(--border);border-radius:4px;margin:0 auto 16px;"></div>'
     /* Title row */
     + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">'
-    + '<div style="font-weight:900;font-size:1.05rem;color:var(--text);">' + (editId ? '✏️ Edit Event' : '📅 Add Event') + '</div>'
+    + '<div style="font-weight:900;font-size:1.05rem;color:var(--text);">' + (editId ? '✏️ Edit Activity' : '🎯 Add Activity') + '</div>'
     + '<button onclick="document.getElementById(\'add-agenda-event-modal\').remove()" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-3);line-height:1;padding:0 4px;">×</button>'
     + '</div>'
     /* Place name */
     + '<div style="margin-bottom:12px;">'
-    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Place Name *</label>'
-    + '<input id="aae-name" type="text" placeholder="e.g. Dollywood, Zipline Adventures…" value="' + (ev ? ev.name.replace(/"/g,'&quot;') : '') + '" style="' + _fld + '">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Activity Name *</label>'
+    + '<input id="aae-name" type="text" placeholder="e.g. Dollywood, Back at Camp, Campground check-in…" value="' + (ev ? ev.name.replace(/"/g,'&quot;') : '') + '" style="' + _fld + '">'
     + '</div>'
     /* Date — fixed label when opened from a specific day, full dropdown otherwise */
     + '<div style="margin-bottom:12px;">'
@@ -14340,18 +14404,46 @@ function showAddAgendaEventModal(prefillDate, editId) {
     + '<div><label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">End Time</label>'
     + _timeSelectHtml('aae-end', ev ? (ev.endTime||'12:00') : '12:00', '', _fld) + '</div>'
     + '</div>'
+    /* Address (editable) */
+    + '<div style="margin-bottom:12px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Address <span style="opacity:.6;font-weight:500;">(optional — shows on map)</span></label>'
+    + '<input id="aae-address" type="text" placeholder="e.g. 1234 Camp Rd, Gatlinburg, TN 37738" value="' + (ev ? (ev.address||'').replace(/"/g,'&quot;') : '') + '" style="' + _fld + '">'
+    + '</div>'
+    /* Phone */
+    + '<div style="margin-bottom:12px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Phone <span style="opacity:.6;font-weight:500;">(optional)</span></label>'
+    + '<input id="aae-phone" type="tel" placeholder="e.g. (555) 867-5309" value="' + (ev ? (ev.phone||'').replace(/"/g,'&quot;') : '') + '" style="' + _fld + '">'
+    + '</div>'
+    /* Hours */
+    + '<div style="margin-bottom:12px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Hours <span style="opacity:.6;font-weight:500;">(optional)</span></label>'
+    + '<input id="aae-hours" type="text" placeholder="e.g. Open daily 9 AM – 5 PM" value="' + (ev ? (ev.hours||'').replace(/"/g,'&quot;') : '') + '" style="' + _fld + '">'
+    + '</div>'
+    /* Notes */
+    + '<div style="margin-bottom:12px;">'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Notes <span style="opacity:.6;font-weight:500;">(optional)</span></label>'
+    + '<textarea id="aae-notes" rows="2" placeholder="Camp address, tips, reservation notes, what to bring…" style="' + _fld + 'resize:vertical;">' + (ev ? (ev.notes||'') : '') + '</textarea>'
+    + '</div>'
     /* URL */
     + '<div style="margin-bottom:12px;">'
-    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Website URL <span style="opacity:.6;font-weight:500;">(optional — helps Gemini find address &amp; hours)</span></label>'
+    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Website URL <span style="opacity:.6;font-weight:500;">(optional — helps Gemini auto-fill address &amp; hours)</span></label>'
     + '<input id="aae-url" type="url" placeholder="https://www.dollywood.com" value="' + (ev ? (ev.url||'').replace(/"/g,'&quot;') : '') + '" style="' + _fld + '">'
     + '</div>'
-    /* ── Extract from confirmation section ── */
-    + '<div style="margin-bottom:10px;border:1.5px solid rgba(44,95,138,.22);border-radius:10px;overflow:hidden;">'
-    /* Header row */
-    + '<div style="background:rgba(44,95,138,.07);padding:9px 13px;display:flex;align-items:center;gap:6px;">'
-    + '<span style="font-size:.78rem;font-weight:700;color:var(--blue);">✨ Auto-fill from confirmation</span>'
-    + '<span style="font-size:.7rem;color:var(--text-3);margin-left:auto;">Gemini reads text or images</span>'
+    /* Gemini Lookup button — right below URL */
+    + '<button id="aae-lookup-btn" onclick="_agendaLookupInfo()" style="display:flex;align-items:center;justify-content:center;gap:7px;background:var(--blue);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);width:100%;margin-bottom:14px;box-sizing:border-box;">🔍 Look Up Address &amp; Hours with Gemini</button>'
+    /* AI result display */
+    + '<div id="aae-ai-result" style="display:' + (_hasEnrich ? 'block' : 'none') + ';position:relative;background:#f0faf5;border:1.5px solid #a8d8c8;border-radius:9px;padding:10px 34px 10px 12px;margin-bottom:12px;font-size:.81rem;color:var(--text);line-height:1.6;">'
+    + '<button type="button" onclick="document.getElementById(\'aae-ai-result\').style.display=\'none\'" title="Dismiss" style="position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;font-size:.9rem;color:var(--text-3);line-height:1;padding:2px 4px;">✕</button>'
+    + '<div id="aae-ai-result-inner">' + (_hasEnrich ? _agendaFormatEnrich(ev.address, ev.phone, ev.hours) : '') + '</div>'
     + '</div>'
+    /* Hidden lat/lng storage only */
+    + '<input id="aae-lat" type="hidden" value="' + (ev ? (ev.lat||'')   : '') + '">'
+    + '<input id="aae-lng" type="hidden" value="' + (ev ? (ev.lng||'')   : '') + '">'
+    /* ── Confirmation / Booking Details (collapsible) ── */
+    + '<details style="margin-bottom:14px;border:1.5px solid rgba(44,95,138,.22);border-radius:10px;overflow:hidden;">'
+    + '<summary style="background:rgba(44,95,138,.07);padding:9px 13px;font-size:.78rem;font-weight:700;color:var(--blue);cursor:pointer;list-style:none;display:flex;align-items:center;gap:6px;">'
+    + '📋 Confirmation / Booking Details <span style="font-size:.7rem;color:var(--text-3);margin-left:auto;font-weight:500;">Gemini reads text or images</span>'
+    + '</summary>'
     /* Tab row */
     + '<div style="display:flex;border-bottom:1.5px solid rgba(44,95,138,.13);background:var(--bg);">'
     + '<button type="button" id="aae-tab-text" onclick="_aaeTab(\'text\')" style="flex:1;padding:8px 4px;border:none;background:var(--blue);color:#fff;font-size:.76rem;font-weight:700;cursor:pointer;font-family:var(--font);border-radius:0;">📋 Paste Text</button>'
@@ -14370,25 +14462,7 @@ function showAddAgendaEventModal(prefillDate, editId) {
     + '</label>'
     + '<button id="aae-img-extract-btn" type="button" onclick="_agendaExtractFromImage()" disabled style="width:100%;background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px;font-size:.78rem;font-weight:800;cursor:pointer;font-family:var(--font);opacity:.5;">✨ Extract with Gemini</button>'
     + '</div>'
-    + '</div>'
-    /* Lookup button */
-    + '<button id="aae-lookup-btn" onclick="_agendaLookupInfo()" style="display:flex;align-items:center;justify-content:center;gap:7px;background:var(--blue);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);width:100%;margin-bottom:12px;box-sizing:border-box;">🔍 Look Up Address &amp; Hours with Gemini</button>'
-    /* AI result display */
-    + '<div id="aae-ai-result" style="display:' + (_hasEnrich ? 'block' : 'none') + ';position:relative;background:#f0faf5;border:1.5px solid #a8d8c8;border-radius:9px;padding:10px 34px 10px 12px;margin-bottom:12px;font-size:.81rem;color:var(--text);line-height:1.6;">'
-    + '<button type="button" onclick="document.getElementById(\'aae-ai-result\').style.display=\'none\'" title="Dismiss" style="position:absolute;top:6px;right:8px;background:none;border:none;cursor:pointer;font-size:.9rem;color:var(--text-3);line-height:1;padding:2px 4px;">✕</button>'
-    + '<div id="aae-ai-result-inner">' + (_hasEnrich ? _agendaFormatEnrich(ev.address, ev.phone, ev.hours) : '') + '</div>'
-    + '</div>'
-    /* Hidden enrichment storage */
-    + '<input id="aae-address" type="hidden" value="' + (ev ? (ev.address||'').replace(/"/g,'&quot;') : '') + '">'
-    + '<input id="aae-phone"   type="hidden" value="' + (ev ? (ev.phone||'').replace(/"/g,'&quot;')   : '') + '">'
-    + '<input id="aae-hours"   type="hidden" value="' + (ev ? (ev.hours||'').replace(/"/g,'&quot;')   : '') + '">'
-    + '<input id="aae-lat"     type="hidden" value="' + (ev ? (ev.lat||'')   : '') + '">'
-    + '<input id="aae-lng"     type="hidden" value="' + (ev ? (ev.lng||'')   : '') + '">'
-    /* Notes */
-    + '<div style="margin-bottom:18px;">'
-    + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Notes <span style="opacity:.6;font-weight:500;">(optional)</span></label>'
-    + '<textarea id="aae-notes" rows="2" placeholder="Tip: bring bug spray · reserve tickets in advance…" style="' + _fld + 'resize:vertical;">' + (ev ? (ev.notes||'') : '') + '</textarea>'
-    + '</div>'
+    + '</details>'
     /* ── "Add to schedule" toggle — only shown for new events WITHOUT a prefilled date ── */
     + (editId || prefillDate ? '' :
         '<div style="margin-bottom:14px;">'
@@ -14600,12 +14674,23 @@ var _agGeoCache = {};   /* address string → {lat, lng}  */
 /* Toggle the map panel for a given day */
 function _agToggleDayMap(eStr, dayNum) {
   var container = document.getElementById('ag-day-map-' + eStr);
+  var bodyDiv   = document.getElementById('ag-day-body-' + eStr);
   if (!container) return;
-  if (container.style.display === 'none' || !container.style.display) {
-    container.style.display = 'block';
+  var isOpen = container.classList ? container.classList.contains('ag-map-visible') : (container.style.display === 'block');
+  if (!isOpen) {
+    /* Show map */
+    if (container.classList) container.classList.add('ag-map-visible');
+    container.style.display = 'block'; /* also set inline so CSS .ag-day-body.ag-map-open rule sees it */
+    if (bodyDiv && bodyDiv.classList) bodyDiv.classList.add('ag-map-open');
     _agInitDayMap(eStr, dayNum);
   } else {
+    /* Hide map */
+    if (container.classList) container.classList.remove('ag-map-visible');
     container.style.display = 'none';
+    if (bodyDiv && bodyDiv.classList) bodyDiv.classList.remove('ag-map-open');
+    /* Remove scroll limit from items column */
+    var itemsCol = bodyDiv && bodyDiv.querySelector('.ag-items-col');
+    if (itemsCol) itemsCol.style.maxHeight = '';
   }
 }
 
@@ -14654,9 +14739,12 @@ function _agInitDayMap(eStr, dayNum) {
     return;
   }
 
+  /* Desktop: taller map fills the right column; mobile: compact top-panel */
+  var _mapH = window.innerWidth >= 700 ? 'calc(100% - 28px)' : '260px';
+  var _mapMinH = window.innerWidth >= 700 ? '320px' : '260px';
   container.innerHTML =
-    '<div id="' + canvasId + '" style="height:280px;"></div>'
-    + '<div id="ag-map-status-' + eStr + '" style="padding:5px 12px;font-size:.7rem;color:var(--text-3);text-align:center;background:var(--bg);">🔍 Locating stops…</div>';
+    '<div id="' + canvasId + '" style="height:' + _mapH + ';min-height:' + _mapMinH + ';"></div>'
+    + '<div id="ag-map-status-' + eStr + '" style="padding:5px 12px;font-size:.7rem;color:var(--text-3);text-align:center;background:var(--bg);height:28px;box-sizing:border-box;">🔍 Locating stops…</div>';
 
   /* Geocode all items then draw map */
   _agGeocodeItems(mappable, function(geoItems) {
@@ -23185,8 +23273,9 @@ function renderCalendar() {
     var _wday = _eObj.toLocaleDateString('en-US', { weekday:'long' });
     var _mday = _eObj.toLocaleDateString('en-US', { month:'short', day:'numeric' });
 
-    /* Weather */
-    var _wx = (appState.weather && appState.weather[d.stopId] && appState.weather[d.stopId][_eStr]) || null;
+    /* Weather — fall back to raw trip date if effective date lookup misses */
+    var _wxStore2 = (appState.weather && appState.weather[d.stopId]) || null;
+    var _wx = _wxStore2 ? (_wxStore2[_eStr] || _wxStore2[d.date] || null) : null;
     var _wxStr = _wx && _wx.high != null
       ? wxIcon(_wx.code) + ' ' + _wx.high + '&#176;/' + _wx.low + '&#176;' + (_wx.type === 'typical' ? ' <span style="opacity:.7;font-size:.6rem;">(typical)</span>' : '')
       : '';
