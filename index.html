@@ -13692,9 +13692,9 @@ function _refreshEditDayItemsList() {
       /* Row 2: start + end time pickers (indented to align under title) */
       + '<div style="display:flex;align-items:center;gap:6px;padding:4px 0 4px 48px;">'
       + '<span style="font-size:.67rem;color:var(--text-3);white-space:nowrap;">Start</span>'
-      + '<input type="time" value="' + (item.time||'') + '" style="' + _tFld + '" oninput="window._editDayItems[' + idx + '].time=this.value" />'
+      + _timeSelectHtml('', item.time||'', 'window._editDayItems[' + idx + '].time=this.value', 'border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:.78rem;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;width:120px;')
       + '<span style="font-size:.67rem;color:var(--text-3);white-space:nowrap;">End</span>'
-      + '<input type="time" value="' + (item.endTime||'') + '" style="' + _tFld + '" oninput="window._editDayItems[' + idx + '].endTime=this.value" />'
+      + _timeSelectHtml('', item.endTime||'', 'window._editDayItems[' + idx + '].endTime=this.value', 'border:1px solid var(--border);border-radius:6px;padding:4px 6px;font-size:.78rem;font-family:var(--font);background:var(--bg);color:var(--text);outline:none;width:120px;')
       + '</div>';
     /* Rich-fields sub-row (read-only; preserved on save) */
     if (_hasRich) {
@@ -13861,7 +13861,7 @@ function renderPlannerAgenda() {
 
   /* ── Shared micro-styles ── */
   var _row  = 'display:flex;align-items:flex-start;gap:0;padding:6px 0;border-bottom:1px solid rgba(0,0,0,.05);';
-  var _time = 'min-width:54px;font-size:.68rem;font-weight:700;color:var(--text-3);padding-top:2px;flex-shrink:0;line-height:1.2;';
+  var _time = 'min-width:72px;font-size:.68rem;font-weight:700;color:var(--text-3);padding-top:2px;flex-shrink:0;line-height:1.35;white-space:normal;';
   var _ico  = 'width:24px;font-size:.9rem;flex-shrink:0;text-align:center;line-height:1.6;';
   var _txt  = 'flex:1;font-size:.8rem;color:var(--text);line-height:1.35;';
   var _sub  = 'font-size:.68rem;color:var(--text-3);margin-top:1px;';
@@ -13950,7 +13950,10 @@ function renderPlannerAgenda() {
     if (appState.agendaItemOverrides && (appState.agendaItemOverrides[d.day] || appState.agendaItemOverrides[_eStr])) {
       var _ovItems = appState.agendaItemOverrides[d.day] || appState.agendaItemOverrides[_eStr];
       _ovItems.forEach(function(item) {
-        var _tLabel = item.time ? (function(t){var p=t.split(':');return _calFmtTime(parseInt(p[0],10),parseInt(p[1]||'0',10));})(item.time) : '';
+        var _tFmt = function(t) { var p=t.split(':'); return _calFmtTime(parseInt(p[0],10),parseInt(p[1]||'0',10)); };
+        var _tLabel = item.time ? _tFmt(item.time) : '';
+        /* Show end time on second line when available: "9:00 AM\n9:45 AM" */
+        if (item.endTime && _tLabel) _tLabel += '<br><span style="opacity:.75">' + _tFmt(item.endTime) + '</span>';
         var _hasRich = item.address || item.phone || item.hours || item.url;
         html += '<div style="' + _row + (_hasRich ? 'padding-bottom:8px;' : '') + '">'
           + '<div style="' + _time + '">' + _tLabel + '</div>'
@@ -14164,6 +14167,56 @@ function _agEvFmt(t) {
   return _calFmtTime(parseInt(p[0], 10), parseInt(p[1] || '0', 10));
 }
 
+/* ── Custom time select helper ───────────────────────────────────────────
+   Replaces native type="time" inputs with a styled <select> using 15-minute
+   increments in 12-hour format. Values are stored as "HH:MM" (24h).
+   id: element id string (or '' for no id)
+   val24h: current value like "17:45" (or '' for the blank/-- option)
+   onchange: JS expression string to run on change (this.value = "HH:MM")
+   style: extra CSS override string (optional)                              */
+function _timeSelectHtml(id, val24h, onchange, style) {
+  var _st = (style ||
+    'border:1.5px solid var(--border);border-radius:8px;padding:6px 8px;' +
+    'font-size:.8rem;font-family:var(--font);color:var(--text);background:var(--bg);' +
+    'cursor:pointer;outline:none;width:100%;box-sizing:border-box;');
+  var opts = '<option value="">--:--</option>';
+  for (var h = 0; h < 24; h++) {
+    for (var m = 0; m < 60; m += 15) {
+      var v    = (h < 10 ? '0' + h : h) + ':' + (m < 10 ? '0' + m : m);
+      var ampm = h < 12 ? 'AM' : 'PM';
+      var h12  = h === 0 ? 12 : (h > 12 ? h - 12 : h);
+      var lbl  = h12 + ':' + (m < 10 ? '0' + m : m) + '\u00a0' + ampm;
+      /* If val24h doesn't sit on a 15-min boundary, snap to nearest for highlight */
+      var sel  = (v === val24h) ? ' selected' : '';
+      opts    += '<option value="' + v + '"' + sel + '>' + lbl + '</option>';
+    }
+  }
+  /* If val24h isn't on a 15-min boundary (e.g. "17:45" IS, but "17:42" wouldn't be),
+     add it as the selected option so the stored value is preserved exactly. */
+  if (val24h && val24h !== '--:--') {
+    var parts = val24h.split(':');
+    var vh = parseInt(parts[0]||'0',10), vm = parseInt(parts[1]||'0',10);
+    var vmRound = Math.round(vm/15)*15;
+    if (vmRound !== vm) {
+      /* Non-standard minute — re-scan and inject at correct sorted position */
+      var vAmpm = vh < 12 ? 'AM' : 'PM';
+      var vh12  = vh === 0 ? 12 : (vh > 12 ? vh - 12 : vh);
+      var vLbl  = vh12 + ':' + (vm < 10 ? '0' + vm : vm) + '\u00a0' + vAmpm;
+      opts = opts.replace(
+        '<option value="' + val24h + '"',
+        '<option value="' + val24h + '" selected'
+      );
+      if (opts.indexOf('value="' + val24h + '"') === -1) {
+        /* Not in list yet — append */
+        opts += '<option value="' + val24h + '" selected>' + vLbl + '</option>';
+      }
+    }
+  }
+  var _idAttr = id ? ' id="' + id + '"' : '';
+  var _onch   = onchange ? ' onchange="' + onchange + '"' : '';
+  return '<select' + _idAttr + _onch + ' style="' + _st + '">' + opts + '</select>';
+}
+
 /* ══════════════════════════════════════════════════════════════════
    MANUAL AGENDA EVENTS — add/edit/delete custom events per day
    Stored in appState.agendaEvents = [{id, date, name, startTime,
@@ -14228,22 +14281,41 @@ function showAddAgendaEventModal(prefillDate, editId) {
     /* Start + End time */
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'
     + '<div><label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Start Time</label>'
-    + '<input id="aae-start" type="time" value="' + (ev ? (ev.startTime||'09:00') : '09:00') + '" style="' + _fld + '"></div>'
+    + _timeSelectHtml('aae-start', ev ? (ev.startTime||'09:00') : '09:00', '', _fld) + '</div>'
     + '<div><label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">End Time</label>'
-    + '<input id="aae-end" type="time" value="' + (ev ? (ev.endTime||'12:00') : '12:00') + '" style="' + _fld + '"></div>'
+    + _timeSelectHtml('aae-end', ev ? (ev.endTime||'12:00') : '12:00', '', _fld) + '</div>'
     + '</div>'
     /* URL */
     + '<div style="margin-bottom:12px;">'
     + '<label style="font-size:.75rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:4px;">Website URL <span style="opacity:.6;font-weight:500;">(optional — helps Gemini find address &amp; hours)</span></label>'
     + '<input id="aae-url" type="url" placeholder="https://www.dollywood.com" value="' + (ev ? (ev.url||'').replace(/"/g,'&quot;') : '') + '" style="' + _fld + '">'
     + '</div>'
-    /* Email paste section */
-    + '<div style="margin-bottom:10px;border:1.5px solid rgba(44,95,138,.18);border-radius:9px;overflow:hidden;">'
-    + '<button type="button" onclick="_aaeToggleEmail()" id="aae-email-toggle" style="width:100%;background:rgba(44,95,138,.05);border:none;color:var(--blue);font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);padding:9px 13px;display:flex;align-items:center;justify-content:space-between;">📧 Auto-fill from confirmation email<span id="aae-email-arrow">▸</span></button>'
-    + '<div id="aae-email-body" style="display:none;padding:10px 12px;background:var(--bg);">'
-    + '<textarea id="aae-email-text" rows="4" placeholder="Paste your booking or confirmation email here. Gemini will extract the name, address, phone, hours, and date…" style="' + _fld + 'resize:vertical;margin-bottom:7px;font-size:.78rem;"></textarea>'
-    + '<button id="aae-email-extract-btn" type="button" onclick="_agendaExtractFromEmail()" style="width:100%;background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px;font-size:.78rem;font-weight:800;cursor:pointer;font-family:var(--font);">✨ Extract Info with Gemini</button>'
-    + '</div></div>'
+    /* ── Extract from confirmation section ── */
+    + '<div style="margin-bottom:10px;border:1.5px solid rgba(44,95,138,.22);border-radius:10px;overflow:hidden;">'
+    /* Header row */
+    + '<div style="background:rgba(44,95,138,.07);padding:9px 13px;display:flex;align-items:center;gap:6px;">'
+    + '<span style="font-size:.78rem;font-weight:700;color:var(--blue);">✨ Auto-fill from confirmation</span>'
+    + '<span style="font-size:.7rem;color:var(--text-3);margin-left:auto;">Gemini reads text or images</span>'
+    + '</div>'
+    /* Tab row */
+    + '<div style="display:flex;border-bottom:1.5px solid rgba(44,95,138,.13);background:var(--bg);">'
+    + '<button type="button" id="aae-tab-text" onclick="_aaeTab(\'text\')" style="flex:1;padding:8px 4px;border:none;background:var(--blue);color:#fff;font-size:.76rem;font-weight:700;cursor:pointer;font-family:var(--font);border-radius:0;">📋 Paste Text</button>'
+    + '<button type="button" id="aae-tab-image" onclick="_aaeTab(\'image\')" style="flex:1;padding:8px 4px;border:none;background:none;color:var(--blue);font-size:.76rem;font-weight:700;cursor:pointer;font-family:var(--font);border-radius:0;">📸 Upload Image</button>'
+    + '</div>'
+    /* Text panel */
+    + '<div id="aae-panel-text" style="padding:10px 12px;background:var(--bg);">'
+    + '<textarea id="aae-email-text" rows="4" placeholder="Paste a booking confirmation, OpenTable email, hotel receipt, etc. Gemini will extract the name, date, time, address…" style="' + _fld + 'resize:vertical;margin-bottom:7px;font-size:.78rem;"></textarea>'
+    + '<button id="aae-email-extract-btn" type="button" onclick="_agendaExtractFromEmail()" style="width:100%;background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px;font-size:.78rem;font-weight:800;cursor:pointer;font-family:var(--font);">✨ Extract with Gemini</button>'
+    + '</div>'
+    /* Image panel */
+    + '<div id="aae-panel-image" style="display:none;padding:10px 12px;background:var(--bg);">'
+    + '<label style="display:block;border:2px dashed rgba(44,95,138,.3);border-radius:8px;padding:18px 12px;text-align:center;cursor:pointer;margin-bottom:8px;color:var(--text-2);font-size:.8rem;" id="aae-img-label">'
+    + '<input type="file" id="aae-img-input" accept="image/*,.heic,.heif,application/pdf" style="display:none;" onchange="_aaeImageSelected(this)">'
+    + '<div id="aae-img-preview" style="font-size:.78rem;color:var(--text-3);">Tap to choose a photo, screenshot, or PDF<br><span style="font-size:.7rem;opacity:.7;">JPG · PNG · PDF · HEIC · HEIF</span></div>'
+    + '</label>'
+    + '<button id="aae-img-extract-btn" type="button" onclick="_agendaExtractFromImage()" disabled style="width:100%;background:var(--green);color:#fff;border:none;border-radius:8px;padding:8px;font-size:.78rem;font-weight:800;cursor:pointer;font-family:var(--font);opacity:.5;">✨ Extract with Gemini</button>'
+    + '</div>'
+    + '</div>'
     /* Lookup button */
     + '<button id="aae-lookup-btn" onclick="_agendaLookupInfo()" style="display:flex;align-items:center;justify-content:center;gap:7px;background:var(--blue);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);width:100%;margin-bottom:12px;box-sizing:border-box;">🔍 Look Up Address &amp; Hours with Gemini</button>'
     /* AI result display */
@@ -14291,32 +14363,91 @@ function showAddAgendaEventModal(prefillDate, editId) {
   if (_nameEl && !editId) setTimeout(function() { _nameEl.focus(); }, 60);
 }
 
-/* Toggle email paste section */
+/* Switch between Paste Text / Upload Image tabs */
+function _aaeTab(tab) {
+  var txtPanel = document.getElementById('aae-panel-text');
+  var imgPanel = document.getElementById('aae-panel-image');
+  var txtBtn   = document.getElementById('aae-tab-text');
+  var imgBtn   = document.getElementById('aae-tab-image');
+  if (!txtPanel) return;
+  var isText = (tab === 'text');
+  txtPanel.style.display = isText ? 'block' : 'none';
+  imgPanel.style.display = isText ? 'none'  : 'block';
+  if (txtBtn) { txtBtn.style.background = isText ? 'var(--blue)' : 'none'; txtBtn.style.color = isText ? '#fff' : 'var(--blue)'; }
+  if (imgBtn) { imgBtn.style.background = isText ? 'none' : 'var(--blue)'; imgBtn.style.color = isText ? 'var(--blue)' : '#fff'; }
+}
+
+/* Handle image file selection preview */
+function _aaeImageSelected(input) {
+  var preview = document.getElementById('aae-img-preview');
+  var btn = document.getElementById('aae-img-extract-btn');
+  var file = input && input.files && input.files[0];
+  if (!file) return;
+  var name = file.name || 'image';
+  var sizeMB = (file.size / 1048576).toFixed(1);
+  if (preview) preview.innerHTML = '✅ <strong>' + name.replace(/</g,'&lt;') + '</strong><br><span style="font-size:.7rem;opacity:.7;">' + sizeMB + ' MB · tap to change</span>';
+  if (btn) { btn.disabled = false; btn.style.opacity = '1'; }
+}
+
+/* Legacy toggle (kept for any existing callers) */
 function _aaeToggleEmail() {
-  var body  = document.getElementById('aae-email-body');
-  var arrow = document.getElementById('aae-email-arrow');
-  if (!body) return;
-  var open = body.style.display !== 'none';
-  body.style.display  = open ? 'none' : 'block';
-  if (arrow) arrow.textContent = open ? '▸' : '▾';
+  _aaeTab('text');
+}
+
+/* Shared extraction prompt builder */
+function _aaeExtractPrompt() {
+  return 'You are extracting details from a booking or event confirmation (restaurant, hotel, attraction, tour, etc.).\n'
+    + 'Respond ONLY with these labeled lines. Use "Not found" for any field you cannot determine:\n'
+    + 'NAME: [restaurant, hotel, or venue name — NOT the booking platform like OpenTable or Expedia]\n'
+    + 'ADDRESS: [full street address with city, state, zip — look for the venue location]\n'
+    + 'PHONE: [venue phone number]\n'
+    + 'HOURS: [reservation time or operating hours, e.g. "Reservation at 7:00 PM" or "Open daily 9 AM – 5 PM"]\n'
+    + 'DATE: [date of the reservation or visit, in YYYY-MM-DD format]\n'
+    + 'START_TIME: [reservation or event start time, in HH:MM 24-hour format — e.g. "19:00" for 7 PM]\n'
+    + 'END_TIME: [estimated end or departure time, in HH:MM 24-hour format — leave Not found if not stated]\n'
+    + 'Do not include any other text. If a restaurant reservation says "7:00 PM for 2 guests", START_TIME should be "19:00".';
+}
+
+/* Apply extracted fields to the Add Event form */
+function _aaeApplyExtracted(txt2) {
+  var _g = function(label) {
+    var m = txt2.match(new RegExp('^' + label + ':\\s*(.+)', 'im'));
+    var v = m ? m[1].trim() : '';
+    return (v && v.toLowerCase() !== 'not found') ? v : '';
+  };
+  var eName = _g('NAME'), eAddr = _g('ADDRESS'), ePhone = _g('PHONE'),
+      eHours = _g('HOURS'), eDate = _g('DATE'), eStart = _g('START_TIME'), eEnd = _g('END_TIME');
+  var nameEl  = document.getElementById('aae-name');
+  var addrEl  = document.getElementById('aae-address');
+  var phoneEl = document.getElementById('aae-phone');
+  var hoursEl = document.getElementById('aae-hours');
+  var startEl = document.getElementById('aae-start');
+  var endEl   = document.getElementById('aae-end');
+  var dateEl  = document.getElementById('aae-date');
+  var resEl   = document.getElementById('aae-ai-result');
+  if (nameEl  && eName)  nameEl.value  = eName;
+  if (addrEl  && eAddr)  addrEl.value  = eAddr;
+  if (phoneEl && ePhone) phoneEl.value = ePhone;
+  if (hoursEl && eHours) hoursEl.value = eHours;
+  /* For select-based time pickers, set value and force re-render */
+  if (startEl && eStart) { startEl.value = eStart; }
+  if (endEl   && eEnd)   { endEl.value   = eEnd;   }
+  if (dateEl && eDate && dateEl.tagName === 'SELECT') { dateEl.value = eDate; }
+  if (resEl && (eAddr || ePhone || eHours)) {
+    resEl.innerHTML = _agendaFormatEnrich(eAddr, ePhone, eHours);
+    resEl.style.display = 'block';
+  }
+  showToast('✅ Info extracted!', 2000);
 }
 
 /* Extract event info from pasted confirmation email text via Gemini */
 function _agendaExtractFromEmail() {
   var txt = (document.getElementById('aae-email-text') || {}).value || '';
   var btn = document.getElementById('aae-email-extract-btn');
-  if (!txt.trim()) { showToast('⚠️ Paste some email text first', 2000); return; }
+  if (!txt.trim()) { showToast('⚠️ Paste some confirmation text first', 2000); return; }
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Extracting…'; }
 
-  var prompt = 'From the following email text, extract event/booking details and respond ONLY with these labeled lines (use "Not found" if unknown):\n'
-    + 'NAME: [place or event name]\n'
-    + 'ADDRESS: [full street address with city, state, zip]\n'
-    + 'PHONE: [phone number]\n'
-    + 'HOURS: [hours, e.g. "Open daily 9 AM – 5 PM"]\n'
-    + 'DATE: [date of visit or check-in, in YYYY-MM-DD format]\n'
-    + 'START_TIME: [start or check-in time, in HH:MM 24h format]\n'
-    + 'END_TIME: [end or check-out time, in HH:MM 24h format]\n\n'
-    + 'EMAIL TEXT:\n' + txt.slice(0, 3000);
+  var prompt = _aaeExtractPrompt() + '\n\nCONFIRMATION TEXT:\n' + txt.slice(0, 4000);
 
   var body = JSON.stringify({
     contents: [{ role:'user', parts:[{ text: prompt }] }],
@@ -14329,45 +14460,60 @@ function _agendaExtractFromEmail() {
   .then(function(j) {
     var raw = ((j.candidates||[])[0]||{});
     var txt2 = ((raw.content||{}).parts||[]).map(function(p){return p.text||'';}).join('');
-    var _g = function(label) {
-      var m = txt2.match(new RegExp(label + ':\\s*(.+)', 'i'));
-      return (m && m[1].trim() !== 'Not found') ? m[1].trim() : '';
-    };
-    var eName = _g('NAME'), eAddr = _g('ADDRESS'), ePhone = _g('PHONE'),
-        eHours = _g('HOURS'), eDate = _g('DATE'), eStart = _g('START_TIME'), eEnd = _g('END_TIME');
-    /* Fill in the form fields */
-    var nameEl  = document.getElementById('aae-name');
-    var addrEl  = document.getElementById('aae-address');
-    var phoneEl = document.getElementById('aae-phone');
-    var hoursEl = document.getElementById('aae-hours');
-    var startEl = document.getElementById('aae-start');
-    var endEl   = document.getElementById('aae-end');
-    var dateEl  = document.getElementById('aae-date');
-    var resEl   = document.getElementById('aae-ai-result');
-    if (nameEl  && eName)  nameEl.value  = eName;
-    if (addrEl  && eAddr)  addrEl.value  = eAddr;
-    if (phoneEl && ePhone) phoneEl.value = ePhone;
-    if (hoursEl && eHours) hoursEl.value = eHours;
-    if (startEl && eStart) startEl.value = eStart;
-    if (endEl   && eEnd)   endEl.value   = eEnd;
-    /* Date field: only fill if it's a select (multi-day choice) */
-    if (dateEl && eDate && dateEl.tagName === 'SELECT') {
-      dateEl.value = eDate;
-    }
-    /* Show enrichment result */
-    if (resEl && (eAddr || ePhone || eHours)) {
-      resEl.innerHTML = _agendaFormatEnrich(eAddr, ePhone, eHours);
-      resEl.style.display = 'block';
-    }
-    /* Collapse the email section */
-    _aaeToggleEmail();
-    if (btn) { btn.disabled = false; btn.textContent = '✨ Extract Info with Gemini'; }
-    showToast('✅ Info extracted!', 2000);
+    _aaeApplyExtracted(txt2);
+    if (btn) { btn.disabled = false; btn.textContent = '✨ Extract with Gemini'; }
   })
   .catch(function() {
-    if (btn) { btn.disabled = false; btn.textContent = '✨ Extract Info with Gemini'; }
+    if (btn) { btn.disabled = false; btn.textContent = '✨ Extract with Gemini'; }
     showToast('❌ Extraction failed', 2200);
   });
+}
+
+/* Extract event info from an uploaded image/PDF via Gemini vision */
+function _agendaExtractFromImage() {
+  var input = document.getElementById('aae-img-input');
+  var btn   = document.getElementById('aae-img-extract-btn');
+  var file  = input && input.files && input.files[0];
+  if (!file) { showToast('⚠️ Choose an image or PDF first', 2000); return; }
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Reading image…'; }
+
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var dataUrl  = e.target.result;                    /* data:image/jpeg;base64,AAAA... */
+    var comma    = dataUrl.indexOf(',');
+    var b64data  = dataUrl.slice(comma + 1);
+    var mimeType = dataUrl.slice(5, comma).split(';')[0] || 'image/jpeg';
+    /* Gemini vision: inline image part */
+    var body = JSON.stringify({
+      contents: [{
+        role: 'user',
+        parts: [
+          { inline_data: { mime_type: mimeType, data: b64data } },
+          { text: _aaeExtractPrompt() }
+        ]
+      }],
+      generationConfig: { maxOutputTokens: 300, temperature: 0 }
+    });
+    fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=' + GEMINI_KEY, {
+      method: 'POST', headers: { 'Content-Type':'application/json' }, body: body
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(j) {
+      var raw  = ((j.candidates||[])[0]||{});
+      var txt2 = ((raw.content||{}).parts||[]).map(function(p){return p.text||'';}).join('');
+      _aaeApplyExtracted(txt2);
+      if (btn) { btn.disabled = false; btn.textContent = '✨ Extract with Gemini'; }
+    })
+    .catch(function() {
+      if (btn) { btn.disabled = false; btn.textContent = '✨ Extract with Gemini'; }
+      showToast('❌ Image extraction failed', 2200);
+    });
+  };
+  reader.onerror = function() {
+    if (btn) { btn.disabled = false; btn.textContent = '✨ Extract with Gemini'; }
+    showToast('❌ Could not read file', 2200);
+  };
+  reader.readAsDataURL(file);
 }
 
 function _agendaFormatEnrich(address, phone, hours) {
@@ -22588,7 +22734,8 @@ function _calFmtTime(h, m) {
   m = m || 0;
   var ampm = h >= 12 ? 'PM' : 'AM';
   var hh = h % 12 || 12;
-  return hh + (m ? ':' + (m < 10 ? '0' + m : m) : '') + '\u00a0' + ampm;
+  /* Always show :MM so times are consistent (9:00 AM not 9 AM) */
+  return hh + ':' + (m < 10 ? '0' + m : m) + '\u00a0' + ampm;
 }
 /* Helper: add fractional hours to H,M → {h, m} (clamps at midnight) */
 function _calAddHours(startH, startM, hoursFloat) {

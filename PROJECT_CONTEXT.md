@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-07 (Session 19, fifty-fourth context)
+2026-03-07 (Session 19, fifty-fifth context)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -55,6 +55,24 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 19 (fifty-eighth context) — 2026-03-07
+
+**Time selector overhaul + Extract section redesigned with image upload.**
+
+- **Custom time selects in Edit Day list**: Replaced the two native `<input type="time">` fields in `_refreshEditDayItemsList` with `_timeSelectHtml(...)` calls. No more truncated "03:3" display — shows clean "3:30 AM" in a styled select.
+- **Custom time selects in Add Event modal**: Replaced `<input id="aae-start" type="time">` and `<input id="aae-end" type="time">` in `showAddAgendaEventModal` with `_timeSelectHtml('aae-start', ...)` and `_timeSelectHtml('aae-end', ...)`. Values still stored as 24h "HH:MM" internally.
+- **`_calFmtTime` fixed**: Always shows `:MM` (e.g. "9:00 AM" not "9 AM").
+- **Agenda items show start–end time range**: Override item time label now shows start + end on two lines with a faded second line.
+- **Extract section redesigned**: "📧 Auto-fill from confirmation email" collapsed section replaced with always-visible "✨ Auto-fill from confirmation" panel with two tabs:
+  - **📋 Paste Text** — paste any confirmation text (OpenTable, email, etc.)
+  - **📸 Upload Image** — upload a photo, screenshot, or PDF; Gemini reads it via vision API
+- **`_aaeExtractPrompt()`**: Shared extraction prompt builder; explicitly instructs Gemini to extract the venue name (not the booking platform), convert times to 24h format, and return "Not found" for unknowns.
+- **`_aaeApplyExtracted(txt2)`**: Shared field-filler called by both text and image extraction paths.
+- **`_agendaExtractFromImage()`**: New function — reads the selected file as a base64 DataURL, sends it to Gemini 1.5 Flash as an inline_data vision request, then calls `_aaeApplyExtracted`.
+- **`_aaeImageSelected(input)`**: Shows file name + size preview in the image panel and enables the extract button.
+- **`_aaeTab(tab)`**: Switches between text/image panels and styles tabs accordingly.
+- **Improved extraction prompt**: Now correctly handles restaurant confirmations (e.g. OpenTable) — extracts venue name (not "OpenTable"), converts "7:00 PM" → "19:00", etc.
 
 ### Session 19 (fifty-seventh context) — 2026-03-07
 
