@@ -56,6 +56,18 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 26 (continued 2) — 2026-03-08
+
+**IndexedDB photo storage — remove the ~5 photo localStorage limit.**
+
+- **Root cause of "only 2-3 photos" limit**: full-res dataUrls (200–500 KB each base64) were stored in `appState.photoPool` → `localStorage`. Hit the 5 MB quota after ~3–5 photos. Fix: use IndexedDB (device disk, no practical quota) for full-res.
+- **New IDB helpers**: `_idbOpen`, `_idbSave`, `_idbGet`, `_idbDelete` — wrappers over `indexedDB.open('rv_photos', 1)` with `photos` object store keyed by photo ID.
+- **`_afterCompress` new sequence**: compress → generate 200px thumb → save full-res to IDB → read EXIF → save metadata (no dataUrl) to localStorage. `entry.dataUrl` is always `null`.
+- **`renderGalleryTab`**: pool entries carry `photoId`. Grid shows `thumb`. Tiles have `data-photo-id` attribute passed to lightbox.
+- **`_openMediaLightbox(src, type, caption, photoId)`**: if `photoId` provided, loads full-res from IDB on demand. Falls back to thumbnail. Inner logic in `_doOpenMediaLightbox`.
+- **`_idbMigratePool`**: called once at gallery open — moves any legacy `dataUrl` pool entries to IDB, clears from localStorage. Shows toast.
+- **Capacity**: localStorage now holds only thumbs (~5–10 KB each). ~300+ photos can now be stored in localStorage/cloud. Full-res limited only by device disk.
+
 ### Session 26 (continued) — 2026-03-08
 
 **Fix gallery photo upload pipeline: dates, thumbnails, map, and empty-state.**
