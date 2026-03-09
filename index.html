@@ -13740,6 +13740,39 @@ function _copyGalleryLinkFallback(url) {
   document.body.removeChild(ta);
 }
 
+/* ── GALLERY PROGRESSIVE QUALITY UPGRADE ────────────────────────────────
+   After the gallery renders with small 200px thumbnails, asynchronously
+   load full-resolution images from IndexedDB for every tile that has a
+   photoId. Swaps the blurry thumbnail src → full-res once IDB responds.
+   Runs in staggered batches (5 at a time) so it doesn't block the UI.  */
+function _galleryUpgradeFromIDB(container) {
+  if (typeof _idbGet !== 'function') return;
+  var tiles = Array.prototype.slice.call((container || document).querySelectorAll('[data-photo-id][data-media-type="image"]'));
+  if (!tiles.length) return;
+  var BATCH = 5, idx = 0;
+  function runBatch() {
+    var batch = tiles.slice(idx, idx + BATCH);
+    if (!batch.length) return;
+    idx += BATCH;
+    batch.forEach(function(tile) {
+      var photoId = tile.dataset.photoId;
+      if (!photoId) return;
+      _idbGet(photoId, function(fullSrc) {
+        if (!fullSrc) return; /* not in IDB on this device (cloud-only photo) */
+        var img = tile.querySelector('img');
+        if (img && img.src !== fullSrc) {
+          /* Swap in full-res — creates crisp, large-viewport gallery images */
+          img.src = fullSrc;
+        }
+      });
+    });
+    /* Stagger next batch to avoid flooding IDB reads */
+    setTimeout(runBatch, 120);
+  }
+  /* Brief delay so the gallery has finished painting first */
+  setTimeout(runBatch, 200);
+}
+
 function renderGalleryTab() {
   var el = document.getElementById('gallery-tab-content');
   if (!el) return;
@@ -13961,6 +13994,12 @@ function renderGalleryTab() {
     });
   });
 
+  /* ── 9b. Progressive quality upgrade ──────────────────────────────
+     Replace blurry 200px thumbnails in the grid with full-res images
+     loaded from IndexedDB. Runs async in the background so the gallery
+     appears instantly and upgrades smoothly once IDB responds.       */
+  _galleryUpgradeFromIDB(el);
+
   /* ── 9. Init Leaflet map (deferred so DOM is ready) ──────────────── */
   if (!hasGPS) return;
   requestAnimationFrame(function() {
@@ -14141,7 +14180,8 @@ function _doOpenMediaLightbox(src, type, caption) {
 
   var overlay = document.createElement('div');
   overlay.id = '_media-lightbox';
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;';
+  /* Full-screen dark overlay — click outside image to close */
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 16px 32px;box-sizing:border-box;overflow:hidden;';
 
   var mediaEl;
   if (type === 'video') {
@@ -14149,26 +14189,40 @@ function _doOpenMediaLightbox(src, type, caption) {
     mediaEl.src = src;
     mediaEl.controls = true;
     mediaEl.autoplay = true;
-    mediaEl.style.cssText = 'max-width:100%;max-height:80vh;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6);';
+    /* Fill as much of the viewport as possible while preserving aspect ratio */
+    mediaEl.style.cssText = 'width:min(96vw,1400px);max-height:85vh;object-fit:contain;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6);flex-shrink:1;';
   } else {
     mediaEl = document.createElement('img');
     mediaEl.src = src;
-    mediaEl.style.cssText = 'max-width:100%;max-height:80vh;object-fit:contain;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6);';
+    /* Fill the viewport — width is the dominant axis so portrait photos also fill well.
+       object-fit:contain ensures the full image is visible without cropping.            */
+    mediaEl.style.cssText = 'width:min(96vw,1400px);max-height:85vh;object-fit:contain;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6);flex-shrink:1;display:block;';
+    /* Show a faint loading shimmer until image loads */
+    mediaEl.style.background = '#222';
+    mediaEl.onload = function() { mediaEl.style.background = ''; };
   }
 
+  /* Close button — top-right */
   var closeBtn = document.createElement('button');
   closeBtn.textContent = '✕';
-  closeBtn.style.cssText = 'position:absolute;top:16px;right:20px;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:1.4rem;width:40px;height:40px;border-radius:50%;cursor:pointer;line-height:1;';
+  closeBtn.style.cssText = 'position:absolute;top:14px;right:16px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:1.3rem;width:42px;height:42px;border-radius:50%;cursor:pointer;line-height:1;backdrop-filter:blur(4px);flex-shrink:0;';
   closeBtn.onclick = function() { overlay.remove(); };
 
+  /* Caption */
   var capEl = document.createElement('div');
   capEl.textContent = caption || '';
-  capEl.style.cssText = 'color:rgba(255,255,255,.75);font-size:.8rem;margin-top:12px;text-align:center;max-width:600px;';
+  capEl.style.cssText = 'color:rgba(255,255,255,.7);font-size:.8rem;margin-top:12px;text-align:center;max-width:min(96vw,800px);line-height:1.4;flex-shrink:0;';
 
   overlay.appendChild(closeBtn);
   overlay.appendChild(mediaEl);
-  overlay.appendChild(capEl);
+  if (caption) overlay.appendChild(capEl);
   overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
+
+  /* Keyboard: Escape to close */
+  var _kbClose = function(e) { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', _kbClose); } };
+  document.addEventListener('keydown', _kbClose);
+  overlay.addEventListener('remove', function() { document.removeEventListener('keydown', _kbClose); });
+
   document.body.appendChild(overlay);
 }
 
