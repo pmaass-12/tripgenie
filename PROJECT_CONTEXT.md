@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-08 (Session 26 continued)
+2026-03-08 (Session 26 continued 8)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -55,6 +55,18 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 26 (continued 8) — 2026-03-08
+
+**Gallery progressive thumbnail upgrade + full-screen lightbox; schedule scroll-to-today date fix; Drive agenda item synced to OSRM cache.**
+
+- **`_galleryUpgradeFromIDB(container)`** (commit `0d8f9f5`): After the gallery grid renders, this new function progressively replaces blurry 200px thumbnails with full-res images from IndexedDB. Processes 5 tiles per 120ms batch to avoid frame drops. Finds tiles by `[data-photo-id][data-media-type="image"]` selector, calls `_idbGet(photoId)` for each, and swaps `img.src` if a different full-res URL is found in IDB.
+
+- **`_doOpenMediaLightbox` rewrite** (commit `0d8f9f5`): Full-screen overlay now uses `width:min(96vw,1400px)` and `max-height:85vh` on the image element with `object-fit:contain`. Overlay fills the entire viewport (`position:fixed;inset:0`). Added a loading shimmer shown while IDB loads full-res image, Escape key to close (via `_lbEscHandler`), and a more prominent close button. Previously images displayed at ~300px regardless of screen size.
+
+- **Schedule `isToday` / `isBefore` date-string fix** (commit `e037383`): `isToday` was computed as `d.day === tripDay()` — comparing day numbers. This breaks after an AI trip rebuild because day numbers no longer align with ordinal date positions from the original start date. Fixed: added `_todayMidnight` (midnight today) and `_todayDateStr` (YYYY-MM-DD string) at the top of `renderSchedule`. In the loop, `_effDateStr` is built from `_effectiveDate` (already computed for each day). `isToday = _effDateStr === _todayDateStr` and `isBefore = _effectiveDate < _todayMidnight`. Schedule now reliably scrolls to today's card via the `id="sch-today"` target.
+
+- **Drive agenda item synced to OSRM cache** (commit `e037383`): The agenda's `drv` item in `_buildDayItems` was reading `d.miles` and `d.driveHours` — placeholder values hardcoded in `trip_data.js` as 200 mi / 4h for every drive day. The orange drive separator (`_renderDriveSepA`) already reads real values from `appState.osrmDriveCache[d.day]`. Fixed `_buildDayItems` to read the same cache first: `var _osrmHit = appState.osrmDriveCache && appState.osrmDriveCache[d.day]; var _drH = (_osrmHit && _osrmHit.driveHours) || d.driveHours || 0; var _drMi = (_osrmHit && _osrmHit.miles) || d.miles || 0;`. Now when the orange separator shows "247 mi · 4.5h", the agenda Drive item shows the same values.
 
 ### Session 26 (continued 7) — 2026-03-08
 
