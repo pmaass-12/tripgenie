@@ -56,6 +56,24 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 26 (continued 6) — 2026-03-08
+
+**Drive time accuracy (OSRM caching); fuel budget on dashboard; schedule auto-scroll to today.**
+
+- **Drive time accuracy fixed with `osrmDriveCache` + `osrmVirtualCache`**: The root cause was that `trip_data.js` has every drive day hardcoded as `miles: 200, driveHours: 4` (placeholder values). The existing `_recalcDriveMiles` function already calls OSRM correctly, but only saved results to `appState.customTripData.days` — meaning builtin trip users lost the corrections on page reload. Fixed by:
+  - `_recalcDriveMiles` now ALSO saves each leg's result to `appState.osrmDriveCache[dayNum]` (day-number keyed) and `appState.osrmVirtualCache["fromId_toId"]` (stop-pair keyed). Both persist via `saveState`.
+  - `_renderDriveSepA` now reads `appState.osrmDriveCache[d.day]` first, falling back to `d.miles`/`d.driveHours` only if no cached value exists. All mileage/hours/arrival calculations use the cached real values.
+  - New `_prefetchVirtualRoutes()` async function: finds all stop-to-stop transitions that render as virtual separators, filters to uncached legs, calls OSRM for each, saves to `appState.osrmVirtualCache`, then calls `_refreshAll(true)` so the schedule re-renders with real times.
+  - `_renderVirtualDriveSep` now checks `appState.osrmVirtualCache["fromId_toId"]` first — uses those real OSRM distances/times if cached; falls back to Haversine × 1.3 ÷ 55 mph estimate if not yet cached.
+  - Auto-trigger in `initApp()`: 5 seconds after init, checks for drive days still at placeholder values (`miles === 200 && driveHours === 4` and no cache entry) and fires `_recalcDriveMiles(true)` + `_prefetchVirtualRoutes(true)` silently in the background.
+  - Health check condition updated: now also detects placeholder values (200/4), not just 0-mile days, so the Trip Settings → Health Check auto-fix fires correctly for trips using builtin data.
+
+- **Dashboard fuel estimate now pulls from budget**: Changed `fuelEst` in `renderDashboard` to use `appState.catBudgets.fuel` (the value entered in Tools → Budget → Fuel category) when set. Before trip: shows "X budgeted". During trip: shows "current spend estimate / total budget" scaled by trip progress %. Falls back to the mileage-based formula only if no fuel budget has been entered.
+
+- **Schedule tab auto-scrolls to today's card**: Added `id="sch-today"` to the day card div when `isToday === true` (also to `_renderDriveSepA` when `_isToday === true`). New `_schedScrollToToday()` function calls `scrollIntoView({ behavior: 'smooth', block: 'start' })` on that element. Called when the user taps the Schedule tab. No-ops if trip hasn't started yet.
+
+- **Dashboard 0 miles / 0 days on road (user question)**: These show 0 because `appState.tripStarted` hasn't been set yet. The user needs to tap the orange **Start Trip** button on the dashboard's blue Day card to activate live progress tracking. The trip started March 2, 2026 — `tripIsLive()` is true but the app waits for the explicit Start Trip action before counting miles/days on road.
+
 ### Session 26 (continued 5) — 2026-03-08
 
 **Agenda "yesterday" fix; Suggestions tab current-stop jump + past-stop hiding.**

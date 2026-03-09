@@ -7344,7 +7344,7 @@ document.querySelectorAll('.nav-tab').forEach(btn => {
     if (tab === 'tools')       { renderTools(); }
     if (tab === 'whatsnew')    { renderWhatsNew(); document.getElementById('whatsnew-dot') && (document.getElementById('whatsnew-dot').style.display='none'); }
     if (tab === 'ideas')       { renderIdeas(); }
-    if (tab === 'planner')     { _mainSeg('schedule'); renderSchedule(); }
+    if (tab === 'planner')     { _mainSeg('schedule'); renderSchedule(); _schedScrollToToday(); }
     if (tab === 'dashboard')   renderDashboard();
     if (tab === 'journal')     renderJournal();
     if (tab === 'school')      renderSchool();
@@ -7957,9 +7957,20 @@ function renderDashboard() {
       visitedSet[sid] = true; stopsVisited++;
     }
   }
-  var fuelEst = appState.tripStarted
-    ? ('$' + Math.round(milesCompleted / 12 * 3.5).toLocaleString())
-    : '$0';
+  /* Fuel estimate: prefer the budget the user entered in Tools → Budget (catBudgets.fuel),
+     falling back to a mileage-based estimate if no budget has been set.
+     On a live trip, scale the budget by progress percentage so it shows "estimated spend so far". */
+  var _fuelBudgeted = appState.catBudgets && appState.catBudgets.fuel;
+  var fuelEst;
+  if (!appState.tripStarted) {
+    fuelEst = _fuelBudgeted ? ('$' + Math.round(_fuelBudgeted).toLocaleString() + '\u00a0budgeted') : '$0';
+  } else if (_fuelBudgeted) {
+    /* Scale budget by trip progress: show estimated spend so far */
+    var _fuelSpent = Math.round(_fuelBudgeted * (pct() / 100));
+    fuelEst = '$' + _fuelSpent.toLocaleString() + '\u00a0/ $' + Math.round(_fuelBudgeted).toLocaleString();
+  } else {
+    fuelEst = '$' + Math.round(milesCompleted / 12 * 3.5).toLocaleString();
+  }
 
   // Photos taken
   var photosCount = 0;
@@ -10655,6 +10666,15 @@ async function _recalcDriveMiles(silent) {
         var hrs    = Math.round(secs / 3600 * 4) / 4; /* nearest ¼ hour */
         days[leg.dayIdx].miles      = miles;
         days[leg.dayIdx].driveHours = hrs;
+        /* Also persist in osrmDriveCache keyed by day number so builtin trips
+           (where TRIP_DAYS can't be mutated persistently) benefit across reloads */
+        if (!appState.osrmDriveCache) appState.osrmDriveCache = {};
+        var _dayNum = days[leg.dayIdx].day;
+        appState.osrmDriveCache[_dayNum] = { miles: miles, driveHours: hrs };
+        /* Also cache by stop-pair key so virtual separators on the same leg use it */
+        if (!appState.osrmVirtualCache) appState.osrmVirtualCache = {};
+        var _vcKey = String(leg.fromId) + '_' + String(leg.toId);
+        appState.osrmVirtualCache[_vcKey] = { miles: miles, driveHours: hrs };
         updated++;
       } else { failed++; }
     } catch(e) { failed++; }
@@ -10676,6 +10696,67 @@ async function _recalcDriveMiles(silent) {
     showToast('✅ Updated ' + updated + ' drive legs — ' + _newTotal.toLocaleString() + ' mi total' + (failed ? ' (' + failed + ' failed)' : ''), 3500);
   } else {
     showToast('⚠️ Could not reach routing service — try again later', 2500);
+  }
+}
+
+/* ── PREFETCH VIRTUAL ROUTE CACHE ────────────────────────────────────────
+   Called on init (and after plan changes) to pre-populate osrmVirtualCache
+   for every stop-to-stop transition that uses a virtual separator.
+   Results persist in appState so the schedule renders with real drive times
+   instead of Haversine estimates even on first load.                      */
+async function _prefetchVirtualRoutes(silent) {
+  var stops = TRIP_STOPS;
+  var days  = TRIP_DAYS;
+  if (!stops || !days || stops.length < 2) return;
+
+  /* Build list of unique stop-to-stop legs that appear in the schedule as
+     virtual separators: transitions between consecutive different stops     */
+  var seenKeys = {};
+  var legs = [];
+  var prevSid = null;
+  days.forEach(function(d) {
+    if (!d.driveDay && prevSid && String(d.stopId) !== String(prevSid)) {
+      var key = String(prevSid) + '_' + String(d.stopId);
+      if (!seenKeys[key]) {
+        seenKeys[key] = true;
+        legs.push({ fromId: prevSid, toId: d.stopId, key: key });
+      }
+    }
+    prevSid = d.stopId;
+  });
+
+  /* Filter to only legs not already in the cache */
+  var cache = appState.osrmVirtualCache || {};
+  var needed = legs.filter(function(l) { return !cache[l.key]; });
+  if (needed.length === 0) return;
+
+  if (!appState.osrmVirtualCache) appState.osrmVirtualCache = {};
+  var updated = 0;
+  for (var li = 0; li < needed.length; li++) {
+    var leg    = needed[li];
+    var fromSt = stops.find(function(s) { return String(s.id) === String(leg.fromId); });
+    var toSt   = stops.find(function(s) { return String(s.id) === String(leg.toId); });
+    if (!fromSt || !toSt || !fromSt.lat || !fromSt.lng || !toSt.lat || !toSt.lng) continue;
+    try {
+      var osrmUrl = 'https://router.project-osrm.org/route/v1/driving/'
+        + fromSt.lng.toFixed(5) + ',' + fromSt.lat.toFixed(5) + ';'
+        + toSt.lng.toFixed(5)   + ',' + toSt.lat.toFixed(5)
+        + '?overview=false';
+      var resp = await fetch(osrmUrl);
+      var data = await resp.json();
+      if (data.routes && data.routes[0]) {
+        var miles = Math.round(data.routes[0].distance / 1609.344);
+        var hrs   = Math.round(data.routes[0].duration / 3600 * 4) / 4;
+        appState.osrmVirtualCache[leg.key] = { miles: miles, driveHours: hrs };
+        updated++;
+      }
+    } catch(e) { /* skip on error — will retry next init */ }
+    if (li < needed.length - 1) await new Promise(function(res) { setTimeout(res, 180); });
+  }
+
+  if (updated > 0) {
+    saveState(appState);
+    _refreshAll(true); /* re-render schedule with real drive times */
   }
 }
 
@@ -10903,10 +10984,15 @@ function _renderPauseScheduleBlock(pd, nights) {
    Tappable → opens day detail modal. No driver shown (user preference).
 ───────────────────────────────────────────────────────────────────────────── */
 function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
+  /* Prefer osrmDriveCache (real road data from OSRM) over the hardcoded trip_data values,
+     which may be placeholder 200 mi / 4h until _recalcDriveMiles has run. */
+  var _cachedDrive = appState.osrmDriveCache && appState.osrmDriveCache[d.day];
+  var _dMiles = (_cachedDrive && _cachedDrive.miles)      || d.miles;
+  var _dHours = (_cachedDrive && _cachedDrive.driveHours) || d.driveHours;
   var _maxDriveH    = (appState.drivingPrefs && appState.drivingPrefs.maxHours) || 4;
   var _splitResolved = !!(appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].splitResolved);
-  var _splitHours   = _splitResolved ? (appState.dayOverrides[d.day].splitHours || Math.round(d.driveHours / 2 * 10) / 10) : 0;
-  var _isLongDrive  = !_splitResolved && d.driveHours > _maxDriveH;
+  var _splitHours   = _splitResolved ? (appState.dayOverrides[d.day].splitHours || Math.round(_dHours / 2 * 10) / 10) : 0;
+  var _isLongDrive  = !_splitResolved && _dHours > _maxDriveH;
   var _live = tripIsLive();
   var _isToday  = _live && d.day === tripDay();
   var _isBefore = _live && d.day < tripDay();
@@ -10930,7 +11016,7 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
   /* Stop-break time */
   var _sbEvery = (appState.drivingPrefs && appState.drivingPrefs.stopBreakEvery) || 0;
   var _sbMins  = (appState.drivingPrefs && appState.drivingPrefs.stopBreakMins)  || 30;
-  var _driveH  = _splitResolved ? _splitHours : (d.driveHours || 0);
+  var _driveH  = _splitResolved ? _splitHours : (_dHours || 0);
   var _sbStops = (_sbEvery > 0 && _driveH > 0) ? Math.floor(_driveH / _sbEvery) : 0;
   var _sbTotalH = _sbStops > 0 ? Math.round((_sbStops * _sbMins) / 60 * 10) / 10 : 0;
 
@@ -10943,14 +11029,14 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
 
   /* Meta line */
   var metaParts = ['Day\u00a0' + displayNum, dWday + '\u00a0' + dMDay];
-  if (d.miles > 0) metaParts.push(d.miles + '\u00a0mi');
+  if (_dMiles > 0) metaParts.push(_dMiles + '\u00a0mi');
   /* Only show "ea" (each leg) if the drive was actually split into 2 overnight segments.
      Short drives ≤ maxDriveH should never say "ea" even if splitResolved is stored. */
-  var _driveLabel = (_splitResolved && d.driveHours > _maxDriveH)
+  var _driveLabel = (_splitResolved && _dHours > _maxDriveH)
     ? (_splitHours + 'h\u00a0ea')
-    : ((d.driveHours || 0) + 'h\u00a0drive');
+    : (_dHours + 'h\u00a0drive');
   if (_sbTotalH > 0) _driveLabel += '\u00a0+\u00a0' + _sbTotalH + 'h\u00a0stops';
-  if (d.driveHours > 0) metaParts.push(_driveLabel);
+  if (_dHours > 0) metaParts.push(_driveLabel);
 
   /* Depart chip */
   var _chipBg = _isBefore ? 'rgba(0,0,0,.15)' : 'rgba(255,255,255,.2)';
@@ -10995,7 +11081,7 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
 
   /* Responsive: dashed-line + pill on desktop; full-width stacked card on mobile */
   var _lineSt = 'background:repeating-linear-gradient(90deg,' + _clr + ' 0,' + _clr + ' 8px,transparent 8px,transparent 16px);';
-  return '<div class="ds-wrap" onclick="openDayDetail(' + d.day + ')" title="' + _title.replace(/'/g, "&#39;") + ' — tap for detail">'
+  return '<div class="ds-wrap" ' + (_isToday ? 'id="sch-today" ' : '') + 'onclick="openDayDetail(' + d.day + ')" title="' + _title.replace(/'/g, "&#39;") + ' — tap for detail">'
     + '<div class="ds-line" style="' + _lineSt + '"></div>'
     + '<div class="ds-pill" style="background:' + _pillBg + ';color:#fff;box-shadow:' + _shadow + ';">'
     + '<div class="ds-r1"><i class="fa-solid fa-rv" style="font-size:.85rem;flex-shrink:0;"></i><span>' + _title + '</span></div>'
@@ -11242,15 +11328,26 @@ function _doSplitDriveRequest(encodedOrigin, encodedDest, dayNum) {
 function _renderVirtualDriveSep(prevStop, destStop, d, effectiveDate, displayNum) {
   if (!prevStop || !destStop || !prevStop.lat || !prevStop.lng || !destStop.lat || !destStop.lng) return '';
   var _vsMaxDriveH = (appState.drivingPrefs && appState.drivingPrefs.maxHours) || 4;
-  /* Haversine distance in miles */
-  var R = 3958.8;
-  var lat1 = prevStop.lat * Math.PI / 180, lat2 = destStop.lat * Math.PI / 180;
-  var dLat = (destStop.lat - prevStop.lat) * Math.PI / 180;
-  var dLng = (destStop.lng - prevStop.lng) * Math.PI / 180;
-  var a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)*Math.sin(dLng/2);
-  var _straight = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  var _estMiles = Math.round(_straight * 1.3); /* road distance ~30% more than straight-line */
-  var _estHours = Math.round(_estMiles / 55 * 10) / 10; /* ~55 mph average with RV */
+
+  /* Check osrmVirtualCache (populated by _prefetchVirtualRoutes / _recalcDriveMiles) first.
+     Fall back to Haversine estimate if not yet cached.  */
+  var _vcKey = String(prevStop.id) + '_' + String(destStop.id);
+  var _vcHit = appState.osrmVirtualCache && appState.osrmVirtualCache[_vcKey];
+  var _estMiles, _estHours;
+  if (_vcHit) {
+    _estMiles = _vcHit.miles;
+    _estHours = _vcHit.driveHours;
+  } else {
+    /* Haversine distance in miles (fallback until OSRM data is fetched) */
+    var R = 3958.8;
+    var lat1 = prevStop.lat * Math.PI / 180, lat2 = destStop.lat * Math.PI / 180;
+    var dLat = (destStop.lat - prevStop.lat) * Math.PI / 180;
+    var dLng = (destStop.lng - prevStop.lng) * Math.PI / 180;
+    var a = Math.sin(dLat/2)*Math.sin(dLat/2) + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLng/2)*Math.sin(dLng/2);
+    var _straight = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    _estMiles = Math.round(_straight * 1.3); /* road distance ~30% more than straight-line */
+    _estHours = Math.round(_estMiles / 55 * 10) / 10; /* ~55 mph average with RV */
+  }
   if (_estHours < 1) return ''; /* skip separators for <1 h hops */
 
   var _title = _sn(prevStop) + ' \u2192 ' + _sn(destStop);
@@ -11311,6 +11408,17 @@ function _renderVirtualDriveSep(prevStop, destStop, d, effectiveDate, displayNum
     + '</div>'
     + '<div class="ds-line" style="' + _lineSt2 + '"></div>'
     + '</div>';
+}
+
+/* Scroll the schedule panel so today's card is near the top of the viewport.
+   Called when the schedule tab is opened. Safe to call even before trip starts — no-ops. */
+function _schedScrollToToday() {
+  if (!tripIsLive()) return; /* trip hasn't started yet — nothing to scroll to */
+  setTimeout(function() {
+    var el = document.getElementById('sch-today');
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 80); /* brief delay so the DOM has finished painting after tab switch */
 }
 
 function renderSchedule() {
@@ -11539,7 +11647,7 @@ function renderSchedule() {
                : isBefore     ? 'background:#fafaf8;opacity:.75;box-shadow:none;'
                : 'background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.04),0 3px 10px rgba(0,0,0,.06);';
 
-    html += '<div style="' + cardBg + 'border-radius:var(--radius-s);margin-bottom:8px;overflow:hidden;">';
+    html += '<div ' + (isToday ? 'id="sch-today" ' : '') + 'style="' + cardBg + 'border-radius:var(--radius-s);margin-bottom:8px;overflow:hidden;">';
 
     // Main row
     html += '<div style="display:grid;grid-template-columns:76px 1fr auto;align-items:center;gap:0;">';
@@ -19470,6 +19578,23 @@ function initApp() {
   setTimeout(function() {
     if (typeof loadAllWeatherSilent === 'function') loadAllWeatherSilent();
   }, 4000);
+
+  // Auto-fetch real OSRM drive times — fires 5s after init so it doesn't
+  // compete with initial render. Skipped if cache already populated.
+  setTimeout(function() {
+    /* Recalc real drive day bars if osrmDriveCache is absent or all drive days
+       still have the default placeholder value (200 mi / 4h from trip_data.js) */
+    var _drivedays = TRIP_DAYS.filter(function(d) { return d.driveDay; });
+    var _placeholders = _drivedays.filter(function(d) {
+      if (appState.osrmDriveCache && appState.osrmDriveCache[d.day]) return false; /* already cached */
+      return d.miles === 200 && d.driveHours === 4;
+    });
+    if (_placeholders.length > 0) {
+      _recalcDriveMiles(true);
+    }
+    /* Always prefetch virtual separator routes not yet in cache */
+    _prefetchVirtualRoutes(true);
+  }, 5000);
 }
 
 /* ── CHANGE THE PLAN MODAL ────────────────────────────────────────────── */
@@ -26007,15 +26132,21 @@ function refreshTripPlan() {
     issues.push({ type:'info', msg: 'Total miles \u2713 ' + _computedMiles.toLocaleString() + ' mi across ' + days.filter(function(d){return d.driveDay && d.miles;}).length + ' drive days' });
   }
 
-  /* ── 12c. Drive days with 0 miles — auto-trigger real routing recalc ──── */
-  var _zeroDriveDays = days.filter(function(d) { return d.driveDay && (!d.miles || d.miles === 0); });
-  if (_zeroDriveDays.length > 2) {
-    issues.push({ type:'fix', msg: _zeroDriveDays.length + ' drive days have 0 miles — running real road distance calculation via OSRM to fix mileage accuracy. This may take 30–60 seconds.' });
+  /* ── 12c. Drive days with placeholder or missing miles — auto-trigger recalc ── */
+  /* Detect: 0-mile days OR days still at the hardcoded placeholder (200 mi / 4h) that
+     haven't been overridden by the osrmDriveCache yet.                                */
+  var _placeholderDriveDays = days.filter(function(d) {
+    if (!d.driveDay) return false;
+    if (appState.osrmDriveCache && appState.osrmDriveCache[d.day]) return false; /* already cached */
+    return (!d.miles || d.miles === 0) || (d.miles === 200 && d.driveHours === 4);
+  });
+  if (_placeholderDriveDays.length > 2) {
+    issues.push({ type:'fix', msg: _placeholderDriveDays.length + ' drive legs have placeholder or uncalculated distances — running real road distance calculation via OSRM to fix mileage accuracy. This may take 30–60 seconds.' });
     fixCount++;
     /* Kick off async recalc — runs in background while health check report renders */
-    setTimeout(function() { _recalcDriveMiles(true); }, 500);
-  } else if (_zeroDriveDays.length > 0) {
-    issues.push({ type:'warn', msg: _zeroDriveDays.length + ' drive day(s) have 0 miles recorded. Go to Trip Settings → Health Check → Recalculate Drive Miles to fix.' });
+    setTimeout(function() { _recalcDriveMiles(true); _prefetchVirtualRoutes(true); }, 500);
+  } else if (_placeholderDriveDays.length > 0) {
+    issues.push({ type:'warn', msg: _placeholderDriveDays.length + ' drive day(s) have placeholder distances. Go to Trip Settings → Recalculate Drive Miles to fix.' });
   }
 
   /* ── 12d. Schedule date gaps — verify no calendar holes in visible schedule ── */
