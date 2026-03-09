@@ -56,6 +56,20 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 26 (continued 7) — 2026-03-08
+
+**Drive day "bookend" cards showing departure morning and arrival evening on same date.**
+
+- **Drive day bookend cards in `renderSchedule`**: For every drive day entry, the schedule now shows:
+  1. A compact "departure morning" card (before the orange drive separator) — shows the origin stop name, the departure time, and a "📦 Morning departure" subtitle. Clicking it opens the Day Detail for that day.
+  2. The orange drive separator (unchanged visual).
+  3. The destination phase header (unchanged).
+  4. A compact "arrival evening" card (after the phase header) — shows the destination stop name, campground/booking name if available, and estimated arrival time. Clicking it opens the Day Detail for that same day.
+
+  Both bookend cards share the same Day Detail when tapped — so they both open the Agenda for the drive day's date. This achieves the "Nashville morning / drive / Memphis evening all on March 9" layout the user wanted.
+
+- **Duplicate `id="sch-today"` prevention**: Added `_schTodayIdAssigned` flag in `renderSchedule`. When the departure morning bookend card assigns `id="sch-today"`, the flag is set and `_renderDriveSepA` + regular day cards skip emitting the same id. `_renderDriveSepA` now takes an optional `skipTodayId` parameter.
+
 ### Session 26 (continued 6) — 2026-03-08
 
 **Drive time accuracy (OSRM caching); fuel budget on dashboard; schedule auto-scroll to today.**

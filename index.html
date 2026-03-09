@@ -10983,7 +10983,7 @@ function _renderPauseScheduleBlock(pd, nights) {
    Shows: 🚐  City A → City B  |  Day X · Day Date · Miles · Hours
    Tappable → opens day detail modal. No driver shown (user preference).
 ───────────────────────────────────────────────────────────────────────────── */
-function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
+function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow, skipTodayId) {
   /* Prefer osrmDriveCache (real road data from OSRM) over the hardcoded trip_data values,
      which may be placeholder 200 mi / 4h until _recalcDriveMiles has run. */
   var _cachedDrive = appState.osrmDriveCache && appState.osrmDriveCache[d.day];
@@ -11081,7 +11081,7 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow) {
 
   /* Responsive: dashed-line + pill on desktop; full-width stacked card on mobile */
   var _lineSt = 'background:repeating-linear-gradient(90deg,' + _clr + ' 0,' + _clr + ' 8px,transparent 8px,transparent 16px);';
-  return '<div class="ds-wrap" ' + (_isToday ? 'id="sch-today" ' : '') + 'onclick="openDayDetail(' + d.day + ')" title="' + _title.replace(/'/g, "&#39;") + ' — tap for detail">'
+  return '<div class="ds-wrap" ' + (_isToday && !skipTodayId ? 'id="sch-today" ' : '') + 'onclick="openDayDetail(' + d.day + ')" title="' + _title.replace(/'/g, "&#39;") + ' — tap for detail">'
     + '<div class="ds-line" style="' + _lineSt + '"></div>'
     + '<div class="ds-pill" style="background:' + _pillBg + ';color:#fff;box-shadow:' + _shadow + ';">'
     + '<div class="ds-r1"><i class="fa-solid fa-rv" style="font-size:.85rem;flex-shrink:0;"></i><span>' + _title + '</span></div>'
@@ -11521,6 +11521,9 @@ function renderSchedule() {
      avoid showing them a second time when the iteration reaches them normally.
      Keyed by day number.                                                         */
   var _preRenderedDriveDays = {};
+  /* Track whether id="sch-today" has already been assigned to a departure bookend card
+     so _renderDriveSepA doesn't emit a duplicate id for the same drive day.           */
+  var _schTodayIdAssigned = false;
 
   for (var i = 0; i < _sortedDays.length; i++) {
     var d        = _sortedDays[i];
@@ -11580,7 +11583,7 @@ function renderSchedule() {
           if (_realDriveAhead) {
             /* Use the real drive entry's miles/hours instead of a haversine estimate */
             var _rdDispNum = _dayDisplayNum[_realDriveAhead.day] || _realDriveAhead.day;
-            html += _renderDriveSepA(_realDriveAhead, stop, _effectiveDate, _rdDispNum, _isOverflow);
+            html += _renderDriveSepA(_realDriveAhead, stop, _effectiveDate, _rdDispNum, _isOverflow, false);
             _preRenderedDriveDays[_realDriveAhead.day] = true;
           } else {
             var _prevStopForSep = getStop(lastStopId);
@@ -11625,7 +11628,38 @@ function renderSchedule() {
       /* Skip drive bars whose destination stop has been removed — avoids orphaned bars */
       if (removedStopIds[d.stopId]) continue;
       var _dispNum = _dayDisplayNum[d.day] || d.day;
-      html += _renderDriveSepA(d, stop, _effectiveDate, _dispNum, _isOverflow);
+
+      /* ── "Departure morning" bookend card ──────────────────────────────────
+         Shows before the drive separator: the origin stop for the departure morning.
+         Gives the traveller visibility into "I'm leaving Nashville this morning."   */
+      var _originStop = lastStopId ? getStop(lastStopId) : null;
+      if (_originStop && !removedStopIds[lastStopId] && _originStop.sleepType !== 'home') {
+        var _dBkg = isToday ? 'background:var(--orange-l);border-left:4px solid var(--orange);' : isBefore ? 'background:#fafaf8;opacity:.75;' : 'background:var(--card);';
+        var _depTime = (appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].departTime)
+          || (appState.drivingPrefs && appState.drivingPrefs.departureTime) || '08:00';
+        var _depH = parseInt(_depTime.split(':')[0],10), _depM = parseInt(_depTime.split(':')[1]||'0',10);
+        var _depDisp = (function(h,m){ var a=h>=12?'PM':'AM'; h=h%12||12; return h+(m?':'+String(m).padStart(2,'0'):'')+' '+a; })(_depH,_depM);
+        if (isToday) _schTodayIdAssigned = true;
+        html += '<div ' + (isToday ? 'id="sch-today" ' : '') + 'onclick="openDayDetail(' + d.day + ')" style="' + _dBkg + 'border-radius:var(--radius-s);margin-bottom:4px;overflow:hidden;cursor:pointer;display:grid;grid-template-columns:76px 1fr;align-items:center;gap:0;">'
+          + '<div style="display:flex;flex-direction:column;align-self:stretch;min-width:76px;">'
+          + '<div style="background:' + (isToday?'var(--orange)':isBefore?'#aaa':'var(--blue)') + ';color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:1px;padding:6px 8px;">'
+          + '<span style="font-size:.65rem;font-weight:700;opacity:.85;">' + _effectiveDate.toLocaleDateString('en-US',{weekday:'short'}) + '</span>'
+          + '<span style="font-size:.82rem;font-weight:900;line-height:1.2;">' + _effectiveDate.toLocaleDateString('en-US',{month:'short'}) + '\u00a0' + _effectiveDate.getDate() + '</span>'
+          + '</div>'
+          + '<div style="background:#f0ece6;text-align:center;padding:3px 4px;font-size:.6rem;font-weight:800;color:var(--text-3);letter-spacing:.04em;text-transform:uppercase;border-top:1px solid var(--border);">Day ' + _dispNum + '</div>'
+          + '</div>'
+          + '<div style="padding:8px 14px;">'
+          + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap;">'
+          + (_originStop.emoji ? '<span style="font-size:.9rem">' + _originStop.emoji + '</span>' : '')
+          + '<span style="font-weight:700;font-size:.9rem;color:var(--text);">' + _sn(_originStop) + '</span>'
+          + (isToday ? '<span style="background:var(--orange);color:#fff;font-size:.65rem;font-weight:800;padding:2px 7px;border-radius:100px;text-transform:uppercase;">Today</span>' : '')
+          + '</div>'
+          + '<div style="font-size:.75rem;color:var(--text-2);">📦 Morning departure &thinsp;·&thinsp; Departs ' + _depDisp + '</div>'
+          + '</div>'
+          + '</div>';
+      }
+
+      html += _renderDriveSepA(d, stop, _effectiveDate, _dispNum, _isOverflow, _schTodayIdAssigned);
       /* Now render destination phase header AFTER the separator */
       if (_phaseJustChanged && stop && !removedStopIds[d.stopId]) {
         var _sepDestIsHome = (d.sleepType === 'home');
@@ -11634,6 +11668,41 @@ function renderSchedule() {
           _lastHeaderWasHome = _sepDestIsHome;
         }
       }
+
+      /* ── "Arrival evening" bookend card ────────────────────────────────────
+         Shows after the drive separator and phase header: destination stop arrival.
+         Lets the traveller see "I'm arriving at Memphis this evening."           */
+      if (stop && !removedStopIds[d.stopId] && d.sleepType !== 'home') {
+        var _arrBkg = isToday ? 'background:var(--orange-l);border-left:4px solid var(--orange);' : isBefore ? 'background:#fafaf8;opacity:.75;' : 'background:var(--card);';
+        /* Look up booking for arrival night info */
+        var _arrBkgs = (appState.bookingConfirmations && appState.bookingConfirmations[d.stopId]) || [];
+        var _arrBkg1 = _arrBkgs.length > 0 ? _arrBkgs[0] : null;
+        var _arrPropName = _arrBkg1 && _arrBkg1.propertyName ? _arrBkg1.propertyName : null;
+        var _arrSite = _arrBkg1 && _arrBkg1.siteOrRoom ? ' · Site ' + _arrBkg1.siteOrRoom : '';
+        /* Arrival time estimate */
+        var _cachedD2 = appState.osrmDriveCache && appState.osrmDriveCache[d.day];
+        var _driveDur = (_cachedD2 && _cachedD2.driveHours) || (d.driveHours || 4);
+        var _depH2 = parseInt(((appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].departTime) || (appState.drivingPrefs && appState.drivingPrefs.departureTime) || '08:00').split(':')[0], 10);
+        var _arrRaw = _depH2 + _driveDur;
+        var _arrFmt = (function(h){ h=Math.floor(h)%24; var a=h>=12?'PM':'AM'; h=h%12||12; return h+' '+a; })(_arrRaw);
+        html += '<div onclick="openDayDetail(' + d.day + ')" style="' + _arrBkg + 'border-radius:var(--radius-s);margin-bottom:8px;overflow:hidden;cursor:pointer;display:grid;grid-template-columns:76px 1fr;align-items:center;gap:0;">'
+          + '<div style="display:flex;flex-direction:column;align-self:stretch;min-width:76px;">'
+          + '<div style="background:' + (isToday?'var(--orange)':isBefore?'#aaa':'var(--blue)') + ';color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:1px;padding:6px 8px;">'
+          + '<span style="font-size:.65rem;font-weight:700;opacity:.85;">' + _effectiveDate.toLocaleDateString('en-US',{weekday:'short'}) + '</span>'
+          + '<span style="font-size:.82rem;font-weight:900;line-height:1.2;">' + _effectiveDate.toLocaleDateString('en-US',{month:'short'}) + '\u00a0' + _effectiveDate.getDate() + '</span>'
+          + '</div>'
+          + '<div style="background:#f0ece6;text-align:center;padding:3px 4px;font-size:.6rem;font-weight:800;color:var(--text-3);letter-spacing:.04em;text-transform:uppercase;border-top:1px solid var(--border);">Day ' + _dispNum + '</div>'
+          + '</div>'
+          + '<div style="padding:8px 14px;">'
+          + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;flex-wrap:wrap;">'
+          + (stop.emoji ? '<span style="font-size:.9rem">' + stop.emoji + '</span>' : '')
+          + '<span style="font-weight:700;font-size:.9rem;color:var(--text);">' + _sn(stop) + '</span>'
+          + '</div>'
+          + '<div style="font-size:.75rem;color:var(--text-2);">' + (_arrPropName ? '🏕 ' + _arrPropName + _arrSite : '🏕 Check in &amp; settle in') + ' &thinsp;·&thinsp; ~' + _arrFmt + '</div>'
+          + '</div>'
+          + '</div>';
+      }
+
       continue; // skip the full card for drive days
     }
 
@@ -11647,7 +11716,7 @@ function renderSchedule() {
                : isBefore     ? 'background:#fafaf8;opacity:.75;box-shadow:none;'
                : 'background:var(--card);box-shadow:0 1px 3px rgba(0,0,0,.04),0 3px 10px rgba(0,0,0,.06);';
 
-    html += '<div ' + (isToday ? 'id="sch-today" ' : '') + 'style="' + cardBg + 'border-radius:var(--radius-s);margin-bottom:8px;overflow:hidden;">';
+    html += '<div ' + (isToday && !_schTodayIdAssigned ? 'id="sch-today" ' : '') + 'style="' + cardBg + 'border-radius:var(--radius-s);margin-bottom:8px;overflow:hidden;">';
 
     // Main row
     html += '<div style="display:grid;grid-template-columns:76px 1fr auto;align-items:center;gap:0;">';
