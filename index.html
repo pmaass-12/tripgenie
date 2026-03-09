@@ -11432,6 +11432,14 @@ function renderSchedule() {
   var _lastHeaderWasHome = false;  // prevent duplicate "Home" banner
   var html      = '';
 
+  /* Pre-compute today's date string for reliable "isToday" comparison.
+     Using effective (pause-shifted) date strings avoids the day-number
+     mismatch that occurs after AI rebuilds the trip. */
+  var _todayMidnight = (function() { var t=new Date(); t.setHours(0,0,0,0); return t; })();
+  var _todayDateStr  = _todayMidnight.getFullYear() + '-'
+    + String(_todayMidnight.getMonth()+1).padStart(2,'0') + '-'
+    + String(_todayMidnight.getDate()).padStart(2,'0');
+
   /* Pre-compute which day numbers are hidden because a stop had days removed */
   var skipDayNums = {};
   var removedStopIds = appState.removedStops || {};
@@ -11555,8 +11563,12 @@ function renderSchedule() {
 
     var stop     = getStop(d.stopId);
     var sleep    = getDaySleep(d.day);
-    var isToday  = _live && d.day === todayNum;
-    var isBefore = _live && d.day < todayNum;
+    /* Use effective date string comparison — reliable even after AI trip rebuild */
+    var _effDateStr = _effectiveDate.getFullYear() + '-'
+      + String(_effectiveDate.getMonth()+1).padStart(2,'0') + '-'
+      + String(_effectiveDate.getDate()).padStart(2,'0');
+    var isToday  = _live && _effDateStr === _todayDateStr;
+    var isBefore = _live && _effectiveDate < _todayMidnight;
 
     // Phase header when phase OR stop changes — each stop gets its own blue bar
     // (handles generic region phases like "Southwest" containing White Sands + Albuquerque)
@@ -14514,7 +14526,10 @@ function _buildDayItems(d, agOpts) {
     var _dpt  = (appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].departTime) || _agDepart;
     var _dptH = parseInt(_dpt.split(':')[0], 10);
     var _dptM = parseInt(_dpt.split(':')[1] || '0', 10);
-    var _drH  = d.driveHours || 0;
+    /* Use OSRM-cached values when available — same source as the orange drive separator */
+    var _osrmHit = appState.osrmDriveCache && appState.osrmDriveCache[d.day];
+    var _drH  = (_osrmHit && _osrmHit.driveHours) || d.driveHours || 0;
+    var _drMi = (_osrmHit && _osrmHit.miles)       || d.miles      || 0;
     var _sbN  = (_agSbEvery > 0 && _drH > 0) ? Math.floor(_drH / _agSbEvery) : 0;
     var _sbH  = _sbN > 0 ? Math.round((_sbN * _agSbMins) / 60 * 10) / 10 : 0;
     var _totH = _drH + _sbH;
@@ -14524,7 +14539,7 @@ function _buildDayItems(d, agOpts) {
     var _aftT = _calAddHours(_ciT.h, _ciT.m, 0.5);
     var _drTitle = (typeof _getDriveDayTitle === 'function') ? _getDriveDayTitle(d) : (d.title || 'Drive day');
     var _slpIcon = d.sleepType==='rv_park'?'🏕️':d.sleepType==='walmart'?'🛒':d.sleepType==='boondock'?'🏕️':'⛺';
-    var _drSub = (d.miles ? d.miles.toLocaleString() + ' mi · ' : '') + (_drH ? _drH + 'h drive' : '') + (_sbH ? ' + ' + _sbH + 'h stops' : '') + (_arrT.h ? ' · Arrive ~' + _calFmtTime(_arrT.h, _arrT.m) : '');
+    var _drSub = (_drMi ? _drMi.toLocaleString() + ' mi · ' : '') + (_drH ? _drH + 'h drive' : '') + (_sbH ? ' + ' + _sbH + 'h stops' : '') + (_arrT.h ? ' · Arrive ~' + _calFmtTime(_arrT.h, _arrT.m) : '');
     items.push({id:'bkf',  time:'07:00', icon:'🍳', title:'Breakfast & Pack Up',   subtitle:'Get the RV road-ready'});
     items.push({id:'drv',  time:_fmtTime24(_dptH,_dptM), icon:'🚗', title:_drTitle, subtitle:_drSub});
     if (_isHome) {
