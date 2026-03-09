@@ -8882,7 +8882,7 @@ function renderStopNavigator() {
       + ' draggable="true"'
       + ' data-nav-idx="' + idx + '"'
       + ' data-nav-stopid="' + stopId + '"'
-      + ' onclick="_navFlyToStop(' + JSON.stringify(stopId) + ',event)"'
+      + ' onclick="_navFlyToStop(' + JSON.stringify(stopId).replace(/"/g,'&quot;') + ',event)"'
       + ' ondragstart="_navDragStart(event)"'
       + ' ondragover="_navDragOver(event)"'
       + ' ondrop="_navDrop(event)"'
@@ -8892,7 +8892,7 @@ function renderStopNavigator() {
       + '<div style="flex:1;min-width:0;font-size:.8rem;font-weight:' + (isWaypoint ? '600' : '700') + ';overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:' + (isWaypoint ? 'var(--text-2)' : 'var(--text)') + ';">' + name + state + '</div>'
       + '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0;color:var(--text-3);font-size:.72rem;white-space:nowrap;">'
       + metaHtml
-      + '<button onclick="event.stopPropagation();_navDeleteStop(' + JSON.stringify(stopId) + ',\'' + name.replace(/'/g,"\\'") + '\')" title="Remove stop" draggable="false" style="background:none;border:none;cursor:pointer;padding:2px 3px;color:var(--text-3);font-size:.75rem;line-height:1;border-radius:4px;display:flex;align-items:center;" onmouseenter="this.style.color=\'#e53e3e\'" onmouseleave="this.style.color=\'var(--text-3)\'"><i class="fa-solid fa-xmark"></i></button>'
+      + '<button onclick="event.stopPropagation();_navDeleteStop(' + JSON.stringify(stopId).replace(/"/g,'&quot;') + ',\'' + name.replace(/'/g,"\\'") + '\')" title="Remove stop" draggable="false" style="background:none;border:none;cursor:pointer;padding:2px 3px;color:var(--text-3);font-size:.75rem;line-height:1;border-radius:4px;display:flex;align-items:center;" onmouseenter="this.style.color=\'#e53e3e\'" onmouseleave="this.style.color=\'var(--text-3)\'"><i class="fa-solid fa-xmark"></i></button>'
       + '<i class="fa-solid fa-grip-vertical" style="font-size:.72rem;cursor:grab;"></i>'
       + '</div>'
       + '</div>';
@@ -9884,7 +9884,7 @@ function phaseHeaderHtml(phase, firstDay) {
       _wxHtml = '<button onclick="loadStopWeather(' + _sidAttr + ')" style="background:rgba(255,255,255,.12);border:1px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.7);border-radius:20px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Load weather">🌡️ Weather</button>';
     }
   } else if (pStop && pStop.lat) {
-    _wxHtml = '<button onclick="loadStopWeather(' + _sid + ')" style="background:rgba(255,255,255,.12);border:1px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.7);border-radius:20px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Load weather">🌡️ Weather</button>';
+    _wxHtml = '<button onclick="loadStopWeather(' + _sidAttr + ')" style="background:rgba(255,255,255,.12);border:1px dashed rgba(255,255,255,.4);color:rgba(255,255,255,.7);border-radius:20px;padding:3px 9px;font-size:.72rem;cursor:pointer;font-family:var(--font);white-space:nowrap;flex-shrink:0;" title="Load weather">🌡️ Weather</button>';
   }
 
   // Determine if this phase is first / last among visible (non-removed) phases
