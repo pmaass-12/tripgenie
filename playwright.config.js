@@ -31,10 +31,11 @@ module.exports = defineConfig({
       testMatch: /auth\.setup\.js/,
     },
 
-    // ── Smoke tests (fast, no login required) ────────────────────────
+    // ── No-auth tests: smoke, unit, regression (fast, no login) ─────
+    // All three test files run in this project — no auth needed.
     {
       name: 'smoke',
-      testMatch: /smoke\.spec\.js/,
+      testMatch: /smoke\.spec\.js|unit\.spec\.js|regression\.spec\.js/,
     },
 
     // ── Full test suite (reuses saved login state) ───────────────────
@@ -45,7 +46,7 @@ module.exports = defineConfig({
         storageState: 'tests/.auth/user.json', // logged-in session
       },
       dependencies: ['setup'],
-      testIgnore: /smoke\.spec\.js|auth\.setup\.js/,
+      testIgnore: /smoke\.spec\.js|unit\.spec\.js|regression\.spec\.js|auth\.setup\.js/,
     },
 
     // ── Mobile (uses same auth state) ────────────────────────────────

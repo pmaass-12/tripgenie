@@ -4,15 +4,18 @@
   "description": "",
   "main": "regression_test.js",
   "scripts": {
-    "test":          "playwright test",
-    "test:ui":       "playwright test --ui",
-    "test:headed":   "playwright test --headed",
-    "test:debug":    "playwright test --debug",
-    "test:auth":     "playwright test tests/auth.spec.js",
-    "test:schedule": "playwright test tests/schedule.spec.js",
-    "test:unit":     "playwright test tests/unit.spec.js",
-    "test:smoke":    "playwright test --grep @smoke",
-    "report":        "playwright show-report"
+    "test":              "playwright test",
+    "test:ui":           "playwright test --ui",
+    "test:headed":       "playwright test --headed",
+    "test:debug":        "playwright test --debug",
+    "test:smoke":        "playwright test tests/smoke.spec.js --project=smoke",
+    "test:unit":         "playwright test tests/unit.spec.js --project=smoke",
+    "test:regression":   "playwright test tests/regression.spec.js --project=smoke",
+    "test:integration":  "playwright test tests/integration.spec.js",
+    "test:e2e":          "playwright test tests/e2e.spec.js",
+    "test:fast":         "playwright test tests/smoke.spec.js tests/regression.spec.js tests/unit.spec.js --project=smoke",
+    "predeploy":         "bash scripts/pre-deploy-check.sh",
+    "report":            "playwright show-report"
   },
   "devDependencies": {
     "@playwright/test": "^1.42.0"

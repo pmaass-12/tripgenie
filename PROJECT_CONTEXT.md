@@ -29,15 +29,20 @@ tripgenie/
 ├── CLAUDE.md                     # Persistent Claude session instructions
 ├── PROJECT_CONTEXT.md            # This file
 ├── _redirects                    # Netlify SPA routing (/* /index.html 200)
-├── package.json                  # Playwright test runner config
-├── playwright.config.js          # Playwright project config
+├── package.json                  # Playwright test runner config + scripts
+├── playwright.config.js          # Playwright project config (smoke/chromium/mobile)
 ├── TripGenie-Test-Plan.docx      # Comprehensive 100+ test-case plan
 ├── tripgenie-auth-implementation.md  # Supabase auth implementation notes
+├── scripts/
+│   └── pre-deploy-check.sh       # Run before every deploy (bash scripts/pre-deploy-check.sh)
 └── tests/
     ├── helpers.js                # Shared: login(), openTab(), callFn(), waitForToast()
     ├── auth.setup.js             # Logs in once, saves session to .auth/user.json
     ├── smoke.spec.js             # 7 fast @smoke tests (no login required)
-    └── unit.spec.js              # Pure function unit tests via page.evaluate()
+    ├── unit.spec.js              # 25 groups, 130+ pure function tests
+    ├── integration.spec.js       # 9 groups testing data flow, auth, permissions
+    ├── e2e.spec.js               # 10 groups testing full user workflows
+    └── regression.spec.js        # 25 REG-* checks — run before every deploy
 ```
 
 ---
@@ -77,8 +82,14 @@ tripgenie/
   - Added `PASSWORD_RECOVERY` handler in `onAuthStateChange`
   - Removed `setSession()` calls that caused JWT kid errors
   - **Latest fix (this session)**: `_doSetNewPassword()` now calls `client.auth.getSession()` as a fallback when `_sbUser` is null after polling. This handles cases where `onAuthStateChange` cleared `_sbUser` after initially setting it. Better error message directs user to "Forgot password?" link if truly expired.
-- **Playwright testing framework**: Created `package.json`, `playwright.config.js`, `tests/helpers.js`, `tests/auth.setup.js`, `tests/smoke.spec.js`, `tests/unit.spec.js`.
-  - To run: `npm install && npx playwright install chromium` then `npm test`
+- **Playwright testing framework**: Full test suite created.
+  - `tests/smoke.spec.js` — 7 fast no-login smoke checks
+  - `tests/unit.spec.js` — 25 groups, 130+ unit test cases for pure functions
+  - `tests/integration.spec.js` — 9 groups testing auth state, save/load pipeline, IDB, merge, permissions
+  - `tests/e2e.spec.js` — 10 groups testing full user workflows (login, tabs, reset, notes, toast)
+  - `tests/regression.spec.js` — 25 named regression checks (REG-001 to REG-025)
+  - `scripts/pre-deploy-check.sh` — run before every deploy; exits 0 = safe, 1 = blocked
+  - To run: `npm install && npx playwright install chromium` then `npm run test:fast` (no auth) or `npm test` (full)
 - **TripGenie-Test-Plan.docx**: 20-section, 100+ test-case plan covering all features.
 
 ### Session 26 (continued 8) — 2026-03-08
