@@ -6552,19 +6552,21 @@ async function _doSetNewPassword() {
 
   showErr('Saving…');
 
-  // If onAuthStateChange hasn't established the session yet (race condition),
-  // extract the tokens from the URL hash and call setSession() explicitly.
+  // onAuthStateChange (PASSWORD_RECOVERY) sets _sbUser asynchronously.
+  // If the user clicks Save before it fires, poll up to 4s for it.
+  // Do NOT call setSession() manually — Supabase already consumed the URL
+  // token internally; calling it again causes "unrecognized JWT kid" errors.
   if (!_sbUser) {
-    var _hash = window.location.hash || '';
-    var _params = new URLSearchParams(_hash.replace(/^#/, ''));
-    var _at = _params.get('access_token');
-    var _rt = _params.get('refresh_token');
-    if (_at) {
-      var { data: _sd, error: _se } = await client.auth.setSession({
-        access_token: _at, refresh_token: _rt || ''
-      });
-      if (_se) { showErr(_se.message); return; }
-      _sbUser = _sd && _sd.user;
+    var _waited = 0;
+    await new Promise(function(resolve) {
+      var _poll = setInterval(function() {
+        _waited += 200;
+        if (_sbUser || _waited >= 4000) { clearInterval(_poll); resolve(); }
+      }, 200);
+    });
+    if (!_sbUser) {
+      showErr('Session not ready — please wait a moment and try again.');
+      return;
     }
   }
 
