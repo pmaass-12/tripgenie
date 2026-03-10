@@ -2712,9 +2712,27 @@
         onkeydown="if(event.key==='Escape')_closePasswordResetOverlay();else if(event.key==='Enter')_doSetNewPassword()" />
     </div>
     <div class="login-error" id="reset-password-error"></div>
-    <button class="login-btn" type="button" onclick="_doSetNewPassword()" style="margin-top:14px;">
+    <button id="reset-save-btn" class="login-btn" type="button" onclick="_doSetNewPassword()" style="margin-top:14px;">
       <i class="fa-solid fa-lock"></i> Save New Password
     </button>
+
+    <!-- Shown automatically when the link is detected as expired -->
+    <div id="reset-expired-section" style="display:none;margin-top:16px;border-top:1px solid var(--border);padding-top:14px;">
+      <div style="font-size:.83rem;color:var(--text-2);margin-bottom:8px;text-align:center;font-weight:600;">
+        <i class="fa-solid fa-rotate-right" style="color:var(--orange);"></i> Get a fresh reset link
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input type="email" id="reset-remail-input" placeholder="Your email address"
+          class="login-input" style="box-sizing:border-box;margin-bottom:0;flex:1;font-size:.88rem;"
+          onkeydown="if(event.key==='Enter')_doResendResetEmail()" />
+        <button type="button" onclick="_doResendResetEmail()"
+          style="flex-shrink:0;background:var(--orange);color:#fff;border:none;border-radius:10px;padding:10px 14px;font-size:.88rem;font-weight:700;cursor:pointer;font-family:var(--font);">
+          <i class="fa-solid fa-paper-plane"></i>
+        </button>
+      </div>
+      <div class="login-error" id="reset-remail-error" style="margin-top:6px;min-height:18px;"></div>
+    </div>
+
     <div style="text-align:center;margin-top:10px;">
       <a href="#" onclick="event.preventDefault();_closePasswordResetOverlay()"
         style="color:var(--text-3);font-size:.78rem;text-decoration:none;">Cancel — back to sign in</a>
@@ -5762,6 +5780,7 @@ var _sbClient = null;   // supabase-js v2 client, initialized once
 var _sbUser   = null;   // currently signed-in user (or null)
 var _currentTripId = null; // UUID of the active trip row in `trips` table
 var _isRecoveryMode = false; // true while the password-reset overlay is active
+var _recoverySession = null; // {access_token, refresh_token} saved at PASSWORD_RECOVERY
 
 function _initSbClient() {
   if (_sbClient) return _sbClient;
@@ -5789,6 +5808,15 @@ function _initAuth() {
     if (event === 'PASSWORD_RECOVERY') {
       _isRecoveryMode = true;
       _sbUser = session && session.user;
+      // Save tokens so we can restore the session before updateUser() —
+      // Supabase fires SIGNED_OUT after this event (consuming the one-time token)
+      // which clears its own internal session; setSession() restores it.
+      if (session && session.access_token) {
+        _recoverySession = {
+          access_token:  session.access_token,
+          refresh_token: session.refresh_token || ''
+        };
+      }
       var ls = document.getElementById('login-screen');
       if (ls) ls.classList.remove('hidden');
       var appEl = document.getElementById('app');
@@ -6562,14 +6590,59 @@ function _showPasswordResetForm() {
 
 function _closePasswordResetOverlay() {
   _isRecoveryMode = false;
+  _recoverySession = null;
   var overlay = document.getElementById('password-reset-overlay');
   if (overlay) { overlay.classList.add('hidden'); overlay.style.display = 'none'; }
-  // Clear any error message
+  // Clear any error messages
   var errEl = document.getElementById('reset-password-error');
   if (errEl) errEl.textContent = '';
+  var remailErr = document.getElementById('reset-remail-error');
+  if (remailErr) remailErr.textContent = '';
   // Return to normal login screen
   var ls = document.getElementById('login-screen');
   if (ls) ls.classList.remove('hidden');
+}
+
+/* Called when the recovery token is detected as expired/invalid.
+   Disables the password fields, shows the "get a new link" section. */
+function _showRecoveryExpired() {
+  var errEl  = document.getElementById('reset-password-error');
+  var inp1   = document.getElementById('reset-password-input');
+  var inp2   = document.getElementById('reset-password-confirm');
+  var saveBtn = document.getElementById('reset-save-btn');
+  var expSec = document.getElementById('reset-expired-section');
+  var remailIn = document.getElementById('reset-remail-input');
+
+  if (errEl)   errEl.textContent = '⚠️ This reset link has expired.';
+  if (inp1)  { inp1.disabled = true;  inp1.style.opacity = '0.35'; }
+  if (inp2)  { inp2.disabled = true;  inp2.style.opacity = '0.35'; }
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.style.opacity = '0.35'; }
+  if (expSec)  expSec.style.display = 'block';
+
+  // Pre-fill email if available
+  if (remailIn) {
+    var emailEl = document.getElementById('email-input');
+    if (emailEl && emailEl.value) remailIn.value = emailEl.value;
+    setTimeout(function() { remailIn.focus(); }, 100);
+  }
+}
+
+/* Sends a fresh password reset email from within the expired-link section. */
+async function _doResendResetEmail() {
+  var client = _initSbClient();
+  if (!client) { return; }
+  var email  = (document.getElementById('reset-remail-input') || {}).value || '';
+  var errEl  = document.getElementById('reset-remail-error');
+  function showMsg(msg) { if (errEl) errEl.textContent = msg; }
+
+  if (!email || !email.includes('@')) { showMsg('Enter a valid email address.'); return; }
+  showMsg('Sending…');
+
+  var { error } = await client.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+  if (error) { showMsg('Error: ' + error.message); return; }
+  showMsg('✅ New reset link sent! Check your email — then click the link to set your password.');
 }
 
 async function _doSetNewPassword() {
@@ -6585,21 +6658,33 @@ async function _doSetNewPassword() {
 
   showErr('Saving…');
 
-  // onAuthStateChange (PASSWORD_RECOVERY) sets _sbUser asynchronously.
-  // Poll briefly in case the event hasn't fired yet when the user clicks Save.
-  // Note: _isRecoveryMode prevents onAuthStateChange(SIGNED_OUT) from clearing
-  // _sbUser while the reset overlay is active, so this poll will find it.
+  // Supabase fires SIGNED_OUT after PASSWORD_RECOVERY (the one-time token is
+  // consumed), which clears the client's internal session storage.
+  // We saved access_token + refresh_token at PASSWORD_RECOVERY time, so we
+  // can restore the session explicitly before calling updateUser().
+  if (_recoverySession && _recoverySession.access_token) {
+    try {
+      await client.auth.setSession({
+        access_token:  _recoverySession.access_token,
+        refresh_token: _recoverySession.refresh_token
+      });
+    } catch(e) {
+      // setSession failed — token may be truly expired
+    }
+  }
+
+  // Re-check: if _sbUser still null, poll briefly (race condition on slow devices)
   if (!_sbUser) {
     var _waited = 0;
     await new Promise(function(resolve) {
       var _poll = setInterval(function() {
         _waited += 200;
-        if (_sbUser || _waited >= 4000) { clearInterval(_poll); resolve(); }
+        if (_sbUser || _waited >= 3000) { clearInterval(_poll); resolve(); }
       }, 200);
     });
   }
 
-  // Final fallback: read the session directly from Supabase's localStorage store
+  // Last-resort fallback: read session directly from Supabase
   if (!_sbUser) {
     try {
       var _gs = await client.auth.getSession();
@@ -6610,14 +6695,26 @@ async function _doSetNewPassword() {
   }
 
   if (!_sbUser) {
-    showErr('Session expired — request a new reset email via "Forgot password?".');
+    showErr('Session expired — please request a new reset email via "Forgot password?".');
+    _showRecoveryExpired();
     return;
   }
 
   var { error } = await client.auth.updateUser({ password: pw1 });
-  if (error) { showErr(error.message); return; }
+  if (error) {
+    // If the error looks like an expired/invalid token, show the re-request UI
+    var msg = error.message || '';
+    if (msg.toLowerCase().includes('expired') || msg.toLowerCase().includes('invalid') ||
+        msg.toLowerCase().includes('token') || msg.toLowerCase().includes('session')) {
+      _showRecoveryExpired();
+    } else {
+      showErr(msg);
+    }
+    return;
+  }
 
   // Success — exit recovery mode, hide overlay, proceed to app
+  _recoverySession = null;
   _isRecoveryMode = false;
   var overlay = document.getElementById('password-reset-overlay');
   if (overlay) { overlay.classList.add('hidden'); overlay.style.display = 'none'; }

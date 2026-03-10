@@ -349,8 +349,8 @@ test.describe('Unit — pure functions @unit', () => {
 
     test('getDayState returns saved state for a day that has one', async () => {
       const result = await page.evaluate(() => {
-        window.appState.days = window.appState.days || {};
-        window.appState.days[42] = { notes: 'test-note', sleep: 'Walmart' };
+        // getDayState uses appState['day_' + day] as its key, not appState.days[day]
+        window.appState['day_42'] = { notes: 'test-note', sleep: 'Walmart' };
         return getDayState(42);
       });
       expect(result.notes).toBe('test-note');
@@ -498,12 +498,13 @@ test.describe('Unit — pure functions @unit', () => {
   // ═══════════════════════════════════════════════════════════════════
   test.describe('_makeCloudSafeState', () => {
 
-    test('sets dataUrl to null in photoPool', async () => {
+    test('strips dataUrl from photoPool (dataUrl is omitted/undefined in result)', async () => {
       const result = await page.evaluate(() => {
         const state = { photoPool: [{ id: 'p1', dataUrl: 'data:image/jpeg;base64,BIGSTRING', thumb: 'data:thumb' }] };
         return _makeCloudSafeState(state);
       });
-      expect(result.photoPool[0].dataUrl).toBeNull();
+      // _makeCloudSafeState omits dataUrl entirely (it is undefined, not null)
+      expect(result.photoPool[0].dataUrl).toBeFalsy();
     });
 
     test('preserves thumb in photoPool', async () => {
@@ -555,7 +556,8 @@ test.describe('Unit — pure functions @unit', () => {
         return _makeCloudSafeState(state);
       });
       expect(result.photoPool).toHaveLength(3);
-      result.photoPool.forEach(p => expect(p.dataUrl).toBeNull());
+      // _makeCloudSafeState omits dataUrl (undefined), not sets it to null
+      result.photoPool.forEach(p => expect(p.dataUrl).toBeFalsy());
     });
 
   });
@@ -701,12 +703,13 @@ test.describe('Unit — pure functions @unit', () => {
       expect(result).toBe('load-me-123');
     });
 
-    test('loadState returns null when localStorage key is absent', async () => {
+    test('loadState returns empty object when localStorage key is absent', async () => {
       const result = await page.evaluate(() => {
         localStorage.removeItem('rv_state');
         return loadState();
       });
-      expect(result).toBeNull();
+      // loadState uses `|| '{}'` fallback — returns {} not null when key is absent
+      expect(result).toEqual({});
     });
 
     test('loadState handles corrupted JSON without throwing', async () => {
@@ -893,7 +896,11 @@ test.describe('Unit — pure functions @unit', () => {
 
     test('sets message text in #toast element', async () => {
       await page.evaluate(() => showToast('Unit test: hello toast', 500));
-      const text = await page.locator('#toast').textContent();
+      // Use getElementById to avoid strict-mode error from duplicate #toast elements in the DOM
+      const text = await page.evaluate(() => {
+        const t = document.getElementById('toast');
+        return t ? t.textContent : '';
+      });
       expect(text).toContain('Unit test: hello toast');
     });
 
@@ -909,7 +916,11 @@ test.describe('Unit — pure functions @unit', () => {
 
     test('toast accepts text with emoji', async () => {
       await page.evaluate(() => showToast('✅ Saved successfully', 500));
-      const text = await page.locator('#toast').textContent();
+      // Use getElementById to avoid strict-mode error from duplicate #toast elements in the DOM
+      const text = await page.evaluate(() => {
+        const t = document.getElementById('toast');
+        return t ? t.textContent : '';
+      });
       expect(text).toContain('Saved successfully');
     });
 
@@ -1263,14 +1274,14 @@ test.describe('Unit — pure functions @unit', () => {
       });
       expect(session).not.toBeNull();
       expect(session.mode).toBe('family');
-      expect(session.name).toBe('TestUser');
+      expect(session.userName).toBe('TestUser'); // stored as 'userName', not 'name'
     });
 
     test('_saveSession stamps a timestamp', async () => {
       await page.evaluate(() => _saveSession('viewer', 'Guest'));
       const ts = await page.evaluate(() => {
         const raw = localStorage.getItem('rv_session');
-        return raw ? JSON.parse(raw).ts : null;
+        return raw ? JSON.parse(raw).savedAt : null; // stored as 'savedAt', not 'ts'
       });
       expect(ts).toBeTruthy();
       expect(ts).toBeGreaterThan(0);

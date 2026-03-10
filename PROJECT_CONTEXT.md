@@ -71,6 +71,23 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 27 (continued) — 2026-03-10
+
+**Password reset root-cause fix + unit test corrections.**
+
+- **Password reset root-cause fix (`_recoverySession`)**:
+  - Root cause: Supabase JS v2 fires `SIGNED_OUT` after `PASSWORD_RECOVERY` (one-time token is consumed), which clears the *client's internal* session storage. Our `_isRecoveryMode` flag guarded our `_sbUser` variable but not Supabase's own session — so `updateUser()` failed with "Reset link expired" even on fresh links.
+  - Fix: Added `_recoverySession = { access_token, refresh_token }` variable. Captured when `PASSWORD_RECOVERY` fires in `onAuthStateChange`.
+  - In `_doSetNewPassword()`, before calling `updateUser()`, we now call `client.auth.setSession(_recoverySession)` to restore the session explicitly.
+  - If `updateUser()` still returns a token/session/expired error, `_showRecoveryExpired()` is shown so user can request a new link inline.
+  - `_recoverySession` is cleared on success and on `_closePasswordResetOverlay()`.
+- **8 unit test corrections in `tests/unit.spec.js`**:
+  - `getDayState`: test used `appState.days[42]` → fixed to `appState['day_42']` (actual key format)
+  - `_makeCloudSafeState` (2 tests): `.toBeNull()` → `.toBeFalsy()` (function omits dataUrl entirely, value is undefined not null)
+  - `loadState`: `.toBeNull()` → `.toEqual({})` (function returns empty object via `|| '{}'` fallback)
+  - `showToast` (2 tests): `page.locator('#toast').textContent()` → `page.evaluate(() => document.getElementById('toast').textContent)` (avoids strict-mode error from duplicate #toast IDs in DOM)
+  - `_saveSession` (2 tests): `session.name` → `session.userName`, `session.ts` → `session.savedAt` (actual property names)
+
 ### Session 27 — 2026-03-10
 
 **Supabase auth, Playwright test framework, password reset fixes.**
@@ -81,7 +98,9 @@ tripgenie/
   - Created `_redirects` for Netlify SPA routing
   - Added `PASSWORD_RECOVERY` handler in `onAuthStateChange`
   - Removed `setSession()` calls that caused JWT kid errors
-  - **Latest fix (this session)**: `_doSetNewPassword()` now calls `client.auth.getSession()` as a fallback when `_sbUser` is null after polling. This handles cases where `onAuthStateChange` cleared `_sbUser` after initially setting it. Better error message directs user to "Forgot password?" link if truly expired.
+  - Added `_isRecoveryMode` flag to prevent SIGNED_OUT from clearing `_sbUser`
+  - Added × close button, Escape key, Cancel link to reset overlay
+  - Added `_showRecoveryExpired()` + inline re-request UI
 - **Playwright testing framework**: Full test suite created.
   - `tests/smoke.spec.js` — 7 fast no-login smoke checks
   - `tests/unit.spec.js` — 25 groups, 130+ unit test cases for pure functions
