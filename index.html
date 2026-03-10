@@ -14,6 +14,8 @@
   <!-- exifr: read GPS + datetime EXIF from uploaded photos -->
   <!-- NOTE: must use unpkg.com (not jsdelivr) — jsdelivr serves .cjs with wrong MIME type -->
   <script src="https://unpkg.com/exifr@7.1.3/dist/lite.umd.js" onerror="console.warn('exifr failed to load — photo EXIF reading unavailable')"></script>
+  <!-- supabase-js v2 — exposes window.supabase.createClient() used by _initSbClient() -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     /* ── RESET & BASE ─────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -5686,6 +5688,52 @@ function _initSbClient() {
   }
   return _sbClient;
 }
+
+/* ── AUTH BOOTSTRAP ──────────────────────────────────────────────────
+   Call once at page load. Subscribes to Supabase auth state changes so
+   that session restore on page reload, token refresh, and cross-tab
+   sign-out all work automatically — no localStorage session needed.    */
+function _initAuth() {
+  var client = _initSbClient();
+  if (!client) {
+    // supabase-js not available (CDN blocked / offline) — fall back to
+    // the legacy localStorage session path
+    _tryAutoLogin();
+    return;
+  }
+
+  client.auth.onAuthStateChange(function(event, session) {
+    /* ── Signed in or page-reload with existing session ── */
+    if (session && session.user) {
+      _sbUser = session.user;
+      var loginEl = document.getElementById('login-screen');
+      var loginOv = document.getElementById('login-overlay');
+      // INITIAL_SESSION fires on every page load when a valid session exists.
+      // Only redirect to profile / app if we are still showing the login UI.
+      if (loginEl && !loginEl.classList.contains('hidden')) {
+        _showProfilePicker();
+      }
+      if (loginOv && loginOv.style.display !== 'none') {
+        _showProfilePicker();
+      }
+      return;
+    }
+
+    /* ── Signed out or session expired ── */
+    _sbUser        = null;
+    _currentTripId = null;
+    _authed        = false;
+    _userName      = '';
+
+    var appEl = document.getElementById('app');
+    if (appEl && !appEl.classList.contains('hidden')) {
+      appEl.classList.add('hidden');
+      var ls = document.getElementById('login-screen');
+      if (ls) ls.classList.remove('hidden');
+    }
+  });
+}
+
 var _syncTimer  = null;
 
 function _setSyncStatus(icon, text, color) {
@@ -5803,14 +5851,20 @@ function syncToCloud(state) {
 }
 
 function _saveLocalBackup(state) {
-  /* Keep a rolling set of up to 3 local snapshots in localStorage so data can be
-     recovered even if the cloud sync delivers a stale/regressed version. */
+  /* When a Supabase user is logged in, delegate to cloud snapshots so
+     backups are cross-device and don't consume localStorage quota.
+     For legacy / offline sessions keep the 3-slot localStorage rotation. */
+  if (_sbUser && _currentTripId) {
+    // Non-blocking cloud snapshot — failures are silent (best-effort)
+    _saveCloudSnapshot('Auto').catch(function() {});
+    return;
+  }
+  // Legacy offline fallback — rotate up to 3 local slots
   try {
-    var now = new Date().toISOString();
+    var now  = new Date().toISOString();
     var snap = JSON.stringify({ ts: now, state: state });
-    // Rotate: backup_2 ← backup_1 ← backup_0 ← snap
-    var b1 = localStorage.getItem('rv_backup_1');
-    var b2 = localStorage.getItem('rv_backup_2');
+    var b1   = localStorage.getItem('rv_backup_1');
+    var b2   = localStorage.getItem('rv_backup_2');
     if (b2) localStorage.setItem('rv_backup_3', b2);
     if (b1) localStorage.setItem('rv_backup_2', b1);
     localStorage.setItem('rv_backup_1', snap);
@@ -5818,14 +5872,16 @@ function _saveLocalBackup(state) {
 }
 
 function _restoreFromBackup(slot) {
+  // Restore from a local device backup slot (legacy / offline path).
+  // Cloud snapshot restore uses _restoreFromCloudSnapshot() instead.
   try {
     var raw = localStorage.getItem('rv_backup_' + slot);
-    if (!raw) { showToast('No backup #' + slot + ' found', 3000); return; }
+    if (!raw) { showToast('No local backup #' + slot + ' found', 3000); return; }
     var obj = JSON.parse(raw);
     var ts  = obj.ts ? new Date(obj.ts).toLocaleString() : 'unknown time';
-    if (!confirm('Restore backup from ' + ts + '?\n\nThis will overwrite your current trip state and save to cloud.')) return;
+    if (!confirm('Restore local backup from ' + ts + '?\n\nThis will overwrite your current trip state and save to cloud.')) return;
     appState = obj.state;
-    localStorage.setItem('rv_state', JSON.stringify(appState));
+    try { localStorage.setItem('rv_state', JSON.stringify(appState)); } catch(e) {}
     syncToCloud(appState);
     if (_sbUser) _syncToSupabaseTrips(appState);
     _refreshAll(true);
@@ -5884,17 +5940,50 @@ function loadFromCloud(callback) {
 
 /* ── EDITABLE STATE (persisted in localStorage + cloud) ──────────── */
 function loadState() {
+  // Synchronous local-cache read — used at startup before any async trip load.
+  // After login, _openTrip() fetches from Supabase and overwrites appState,
+  // so this is only the cold-start value.
   try { return JSON.parse(localStorage.getItem('rv_state') || '{}'); }
   catch(e) { return {}; }
 }
+
+/* Async version — used when we need the freshest data from Supabase.
+   Falls back to the localStorage cache if offline or not logged in.   */
+async function loadStateFromCloud() {
+  if (!_sbUser || !_currentTripId) {
+    try { return JSON.parse(localStorage.getItem('rv_state') || '{}'); }
+    catch(e) { return {}; }
+  }
+  var client = _initSbClient();
+  if (!client) {
+    try { return JSON.parse(localStorage.getItem('rv_state') || '{}'); }
+    catch(e) { return {}; }
+  }
+  var { data, error } = await client
+    .from('trips')
+    .select('trip_data')
+    .eq('id', _currentTripId)
+    .eq('user_id', _sbUser.id)
+    .single();
+  if (error || !data) {
+    // Offline or row missing — return cached copy
+    try { return JSON.parse(localStorage.getItem('rv_state') || '{}'); }
+    catch(e) { return {}; }
+  }
+  // Mirror to localStorage as offline/fast-reload cache
+  try { localStorage.setItem('rv_state', JSON.stringify(data.trip_data)); } catch(e) {}
+  return data.trip_data || {};
+}
+
 function saveState(state) {
   if (state === undefined) state = appState; // allow bare saveState() calls
   if (_isViewer) return; // read-only mode — never persist
   state._savedAt = new Date().toISOString();
   if (_userName) state._savedBy = _userName;
-  localStorage.setItem('rv_state', JSON.stringify(state));
+  // localStorage is now the offline cache; Supabase trips table is primary
+  try { localStorage.setItem('rv_state', JSON.stringify(state)); } catch(e) {}
   syncToCloud(state);
-  if (_sbUser) _syncToSupabaseTrips(state); // also sync to per-user trips table
+  if (_sbUser) _syncToSupabaseTrips(state); // primary: per-user trips table
   /* Keep Decisions tab live if it's currently visible */
   var _decEl = document.getElementById('decisions-content');
   if (_decEl && _decEl.offsetParent !== null && typeof renderDecisions === 'function') renderDecisions();
@@ -6054,21 +6143,36 @@ function _toggleShowPassword() {
   if (icon) { icon.className = showing ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash'; }
 }
 
-function _showProfilePicker() {
-  // Check localStorage for a saved profile for this Supabase user
-  var savedProfile = null;
-  try {
-    var _sp = localStorage.getItem('rv_profile_' + (_sbUser && _sbUser.id || 'guest'));
-    if (_sp) savedProfile = JSON.parse(_sp);
-  } catch(e) {}
-
-  if (savedProfile && savedProfile.name) {
-    // Auto-select saved profile, skip picker
-    _applyProfile(savedProfile.name, savedProfile.color || '#2C5F8A');
-    return;
+async function _showProfilePicker() {
+  if (_sbUser) {
+    // ── Supabase path: look up profile in `profiles` table ────────────
+    var client = _initSbClient();
+    if (client) {
+      var { data } = await client
+        .from('profiles')
+        .select('display_name, avatar_color')
+        .eq('id', _sbUser.id)
+        .maybeSingle();   // returns null (not an error) when no row exists yet
+      if (data && data.display_name) {
+        _applyProfile(data.display_name, data.avatar_color || '#2C5F8A');
+        return;
+      }
+    }
+  } else {
+    // ── Legacy / guest path: fall back to localStorage ────────────────
+    try {
+      var _sp = localStorage.getItem('rv_profile_guest');
+      if (_sp) {
+        var savedProfile = JSON.parse(_sp);
+        if (savedProfile && savedProfile.name) {
+          _applyProfile(savedProfile.name, savedProfile.color || '#2C5F8A');
+          return;
+        }
+      }
+    } catch(e) {}
   }
 
-  // Show the picker overlay
+  // First-time user — show the picker overlay
   var ov = document.getElementById('profile-picker-overlay');
   if (ov) { ov.style.display = 'flex'; }
 }
@@ -6102,11 +6206,25 @@ function _confirmCustomProfile() {
   _applyProfile(name, _ppoColor);
 }
 
-function _applyProfile(name, color) {
-  // Persist profile keyed to Supabase user id (or 'guest' for legacy)
-  try {
-    localStorage.setItem('rv_profile_' + (_sbUser && _sbUser.id || 'guest'), JSON.stringify({ name: name, color: color }));
-  } catch(e) {}
+async function _applyProfile(name, color) {
+  if (_sbUser) {
+    // ── Supabase path: upsert into `profiles` table ───────────────────
+    var client = _initSbClient();
+    if (client) {
+      var { error } = await client.from('profiles').upsert({
+        id:           _sbUser.id,
+        display_name: name,
+        avatar_color: color || '#2C5F8A',
+        updated_at:   new Date().toISOString()
+      });
+      if (error) console.warn('Profile save failed:', error.message);
+    }
+  } else {
+    // ── Legacy / guest path: keep localStorage for non-Supabase sessions ──
+    try {
+      localStorage.setItem('rv_profile_guest', JSON.stringify({ name: name, color: color }));
+    } catch(e) {}
+  }
 
   // Hide picker overlay
   var ov = document.getElementById('profile-picker-overlay');
@@ -6267,7 +6385,9 @@ async function _showMyTrips() {
   var client = _initSbClient();
   if (!client || !_sbUser) { _doLegacyInitAfterSbAuth(); return; }
 
-  var { data, error } = await client.from('trips').select('id,name,start_date,end_date,updated_at').order('updated_at', { ascending: false });
+  var { data, error } = await client.from('trips').select('id,name,start_date,end_date,updated_at')
+    .eq('user_id', _sbUser.id)           // belt-and-suspenders alongside RLS
+    .order('updated_at', { ascending: false });
   if (error) {
     document.getElementById('my-trips-list').innerHTML = '<div style="color:var(--red);padding:20px;">Error loading trips: ' + error.message + '</div>';
     return;
@@ -6310,7 +6430,10 @@ function _escHtml(s) {
 async function _openTrip(tripId) {
   var client = _initSbClient();
   if (!client) return;
-  var { data, error } = await client.from('trips').select('trip_data,name').eq('id', tripId).single();
+  var { data, error } = await client.from('trips').select('trip_data,name')
+    .eq('id', tripId)
+    .eq('user_id', _sbUser.id)   // prevent loading another user's trip via guessed UUID
+    .single();
   if (error || !data) { alert('Could not load trip: ' + (error && error.message)); return; }
   _currentTripId = tripId;
   var loaded = data.trip_data || {};
@@ -6329,7 +6452,9 @@ async function _deleteTrip(tripId, btn) {
   var client = _initSbClient();
   if (!client) return;
   btn.textContent = '…';
-  var { error } = await client.from('trips').delete().eq('id', tripId);
+  var { error } = await client.from('trips').delete()
+    .eq('id', tripId)
+    .eq('user_id', _sbUser.id);  // cannot delete another user's trip
   if (error) { alert('Delete failed: ' + error.message); btn.textContent = 'Delete'; return; }
   _showMyTrips();
 }
@@ -6342,6 +6467,8 @@ function _doLegacyInitAfterSbAuth() {
   if (mto) mto.style.display = 'none';
   /* Start cloud auto-snapshot timer once the user is authenticated */
   if (_sbUser) _startAutoSnapshot();
+  /* Start Realtime cross-device sync now that _currentTripId is set */
+  _startRealtimeSync();
 }
 
 /* ── CLOUD SNAPSHOT SYSTEM ───────────────────────────────────────
@@ -6588,22 +6715,61 @@ function _startAutoSnapshot() {
   }, 20 * 60 * 1000);
 }
 
-/* Cross-tab sync: when another tab saves to localStorage, reload appState */
-(function() {
-  window.addEventListener('storage', function(e) {
-    if (e.key !== 'rv_state' || !e.newValue) return;
-    try {
-      var incoming = JSON.parse(e.newValue);
+/* ── Cross-device / cross-tab real-time sync ─────────────────────────
+   Replaces the localStorage 'storage' event (same-browser-only) with a
+   Supabase Realtime channel that fires on any device or tab.
+   Falls back to the storage event if supabase-js is unavailable.        */
+var _realtimeSyncChannel = null;
+
+function _startRealtimeSync() {
+  var client = _initSbClient();
+  if (!client || !_sbUser || !_currentTripId) {
+    // Supabase not available — keep same-tab/same-browser localStorage fallback
+    window.addEventListener('storage', function(e) {
+      if (e.key !== 'rv_state' || !e.newValue) return;
+      try {
+        var inc = JSON.parse(e.newValue);
+        var incTs = inc._savedAt ? new Date(inc._savedAt).getTime() : 0;
+        var locTs = appState._savedAt ? new Date(appState._savedAt).getTime() : 0;
+        if (incTs > locTs) { appState = inc; _refreshAll(true); }
+      } catch(ex) {}
+    });
+    return;
+  }
+
+  // Unsubscribe from any previous trip channel before subscribing to the new one
+  if (_realtimeSyncChannel) {
+    try { client.removeChannel(_realtimeSyncChannel); } catch(e) {}
+    _realtimeSyncChannel = null;
+  }
+
+  _realtimeSyncChannel = client
+    .channel('trip-realtime-' + _currentTripId)
+    .on('postgres_changes', {
+      event:  'UPDATE',
+      schema: 'public',
+      table:  'trips',
+      filter: 'id=eq.' + _currentTripId
+    }, function(payload) {
+      var incoming = payload.new && payload.new.trip_data;
+      if (!incoming) return;
+      // Ignore our own saves (same user, same device — _savedBy matches)
+      if (incoming._savedBy === _userName) return;
       var incomingTs = incoming._savedAt ? new Date(incoming._savedAt).getTime() : 0;
-      var localTs    = appState._savedAt  ? new Date(appState._savedAt).getTime()  : 0;
+      var localTs    = appState._savedAt ? new Date(appState._savedAt).getTime()  : 0;
       if (incomingTs > localTs) {
-        /* Another tab just saved newer data — adopt it silently */
+        _saveLocalBackup(appState); // keep a recovery copy before overwriting
         appState = incoming;
+        try { localStorage.setItem('rv_state', JSON.stringify(appState)); } catch(e) {}
         _refreshAll(true);
+        var who = incoming._savedBy ? incoming._savedBy : 'another device';
+        showToast('☁️ Live update from ' + who, 2500);
       }
-    } catch(ex) {}
-  });
-})();
+    })
+    .subscribe();
+}
+
+// _startRealtimeSync() is called from _doLegacyInitAfterSbAuth() after _currentTripId is set
 
 var _sbSyncTimer = null;
 function _syncToSupabaseTrips(state) {
@@ -6629,17 +6795,25 @@ function _syncToSupabaseTrips(state) {
       start_date: CONFIG && CONFIG.startDate,
       end_date:   CONFIG && CONFIG.endDate,
       updated_at: new Date().toISOString()
-    }).eq('id', _currentTripId);
+    })
+    .eq('id', _currentTripId)
+    .eq('user_id', _sbUser.id);  // belt-and-suspenders alongside RLS
   }, 1200);
 }
 
 async function _sbSignOut() {
   var client = _initSbClient();
-  if (client) await client.auth.signOut();
-  _sbUser = null;
-  _currentTripId = null;
-  localStorage.removeItem('rv_session');
-  window.location.reload();
+  if (client) {
+    await client.auth.signOut();
+    // onAuthStateChange(SIGNED_OUT) fires and resets _sbUser, _authed, and the UI —
+    // no manual DOM manipulation or localStorage removal needed here.
+  } else {
+    // Legacy fallback when supabase-js is unavailable
+    _sbUser = null;
+    _currentTripId = null;
+    localStorage.removeItem('rv_session');
+    window.location.reload();
+  }
 }
 
 /* ── NEW TRIP WIZARD ─────────────────────────────────────────── */
@@ -6880,12 +7054,20 @@ function applyViewerMode() {
   showToast('👁 View-only mode — changes won\'t be saved', 3500);
 }
 
-document.getElementById('logout-btn').addEventListener('click', function() {
-  _authed = false;
-  localStorage.removeItem('rv_session');
-  document.getElementById('app').classList.add('hidden');
-  document.getElementById('login-screen').classList.remove('hidden');
-  document.getElementById('password-input').value = '';
+document.getElementById('logout-btn').addEventListener('click', async function() {
+  var client = _initSbClient();
+  if (client && _sbUser) {
+    // Supabase path: signOut() triggers onAuthStateChange(SIGNED_OUT) which
+    // resets all state and shows the login screen automatically.
+    await client.auth.signOut();
+  } else {
+    // Legacy path (no Supabase session active)
+    _authed = false;
+    localStorage.removeItem('rv_session');
+    document.getElementById('app').classList.add('hidden');
+    document.getElementById('login-screen').classList.remove('hidden');
+    document.getElementById('password-input').value = '';
+  }
 });
 
 /* ── AUTO-LOGIN: persist session across reloads (30-day TTL) ─────── */
@@ -7063,13 +7245,21 @@ function _initVersionCheck() {
     return; // skip normal auto-login flow
   }
 
-  if (!_tryAutoLogin()) {
-    // No saved session — focus email field so user can start typing immediately
-    setTimeout(function() {
+  // _initAuth() subscribes to Supabase onAuthStateChange, which fires INITIAL_SESSION
+  // immediately if a valid Supabase session exists (handles page-reload auto-login).
+  // Inside _initAuth(), _tryAutoLogin() is called as the fallback when supabase-js
+  // is unavailable (offline / CDN blocked).
+  _initAuth();
+
+  // Focus the email field only if we're still on the login screen after a short delay —
+  // gives onAuthStateChange time to fire before we decide nobody is logged in.
+  setTimeout(function() {
+    var ls = document.getElementById('login-screen');
+    if (ls && !ls.classList.contains('hidden')) {
       var e = document.getElementById('email-input');
       if (e) e.focus();
-    }, 120);
-  }
+    }
+  }, 300);
 })();
 
 /* ── TAB NAVIGATION ───────────────────────────────────────────────── */
@@ -11756,12 +11946,33 @@ var _recTimerInt     = null;
 var _recSeconds      = 0;
 var _photoLookup     = [];
 
-function loadJournal() {
+async function loadJournal() {
+  if (_sbUser && _currentTripId) {
+    // ── Supabase path: fetch from journal_entries table ───────────────
+    var client = _initSbClient();
+    if (client) {
+      var { data, error } = await client
+        .from('journal_entries')
+        .select('*')
+        .eq('trip_id', _currentTripId)
+        .order('date',       { ascending: true })
+        .order('created_at', { ascending: true });
+      if (!error && data) {
+        _journalEntries = data;
+        // Mirror to localStorage as offline cache
+        try { localStorage.setItem('rv_journal', JSON.stringify(_journalEntries)); } catch(ex) {}
+        return;
+      }
+    }
+  }
+
+  // ── Offline / legacy fallback: read from localStorage ────────────────
   try {
     var raw = localStorage.getItem('rv_journal');
     _journalEntries = raw ? JSON.parse(raw) : [];
   } catch(e) { _journalEntries = []; }
-  // Merge cloud-synced journal entries (text + photo thumbnails) from other family devices
+
+  // Merge any cloud-synced thumbnails piggy-backed on appState (legacy cross-device path)
   try {
     var cloudEntries = appState.journalEntries;
     if (cloudEntries && cloudEntries.length) {
@@ -11770,11 +11981,9 @@ function loadJournal() {
       var changed = false;
       cloudEntries.forEach(function(ce) {
         if (!localMap[ce.id]) {
-          // New entry from another device — add it with any thumbnails they synced
           _journalEntries.push(ce);
           changed = true;
         } else {
-          // Entry exists locally — merge in photoThumbs from cloud if local has none
           var local = localMap[ce.id];
           if (ce.photoThumbs && ce.photoThumbs.length && (!local.photoThumbs || !local.photoThumbs.length)) {
             local.photoThumbs = ce.photoThumbs;
@@ -11808,21 +12017,48 @@ function _compressPhotoThumb(dataUrl, cb) {
   } catch(e) { cb(null); }
 }
 
-function saveJournal() {
+async function saveJournal() {
+  // Always keep localStorage in sync as the offline cache
   try {
     localStorage.setItem('rv_journal', JSON.stringify(_journalEntries));
   } catch(e) {
     showToast('Storage full — try removing some photos to free space', 4000);
   }
-  // Sync entries to appState for Supabase cloud sync.
-  // Photos are compressed to small thumbnails (≤200px) so other devices can see them.
+
+  if (_sbUser && _currentTripId) {
+    // ── Supabase path: upsert all entries into journal_entries table ──
+    var client = _initSbClient();
+    if (client) {
+      var rows = _journalEntries.map(function(e) {
+        return {
+          id:           e.id,
+          trip_id:      _currentTripId,
+          user_id:      _sbUser.id,
+          author:       e.author || _userName || '',
+          day:          e.day    || null,
+          date:         e.date   || null,
+          stop_id:      e.stopId || null,
+          location:     e.location || '',
+          text:         e.text   || '',
+          photo_thumbs: e.photoThumbs || [],
+          photo_urls:   e.photoUrls  || [],
+          created_at:   e.created || new Date().toISOString(),
+          updated_at:   new Date().toISOString()
+        };
+      });
+      var { error } = await client.from('journal_entries').upsert(rows);
+      if (error) console.warn('Journal sync error:', error.message);
+    }
+    return; // primary path done
+  }
+
+  // ── Legacy fallback: piggy-back thumbnails on appState for cross-device sync ──
   try {
     var toSync = _journalEntries.map(function(e) {
       return {
         id: e.id, day: e.day, author: e.author, date: e.date,
         stopId: e.stopId, location: e.location, text: e.text,
         created: e.created,
-        /* Include cached thumbnails if already generated, otherwise omit photos */
         photoThumbs: e.photoThumbs || []
       };
     });
@@ -13717,18 +13953,8 @@ async function _guestSubmit(stopId, stopName) {
     } catch(e) {}
   }
 
-  /* ── 3. Also cache locally as fallback ── */
-  try {
-    var cached = JSON.parse(localStorage.getItem('rv_friend_suggestions') || '[]');
-    cached.unshift({
-      id: 'sugg_' + Date.now(),
-      stop_id: stopId, stop_name: stopName,
-      first_name: fn, last_name: ln,
-      suggestion: txt, created_at: new Date().toISOString()
-    });
-    localStorage.setItem('rv_friend_suggestions', JSON.stringify(cached.slice(0, 200)));
-    saved = true;
-  } catch(e) {}
+  /* ── 3. Local cache removed — trip_suggestions table is now the source of truth.
+           The Supabase insert above (section 2) is the definitive write path.         ── */
 
   if (saved) {
     /* Only clear the text field — name at top stays filled for subsequent stops */
@@ -13967,17 +14193,12 @@ async function _loadFriendSuggestions() {
 
   el.innerHTML = hdrHtml + '<div id="friends-inner"><div style="text-align:center;padding:30px;color:var(--text-3);">Loading…</div></div>';
 
-  /* Always load local suggestions first (these work without Supabase) */
-  var localRows = [];
-  try {
-    localRows = JSON.parse(localStorage.getItem('rv_friend_suggestions') || '[]');
-  } catch(e) {}
-
-  /* Also try Supabase — fetch suggestions for this trip AND 'local' (submitted via ?friends=1 link) */
-  var cloudRows = [];
+  /* Fetch exclusively from trip_suggestions table — localStorage cache removed.
+     Include both the current trip's suggestions and any submitted via the legacy
+     ?friends=1 link (where trip_id = 'local').                                   */
+  var allRows = [];
   if (SUPA_URL && SUPA_KEY) {
     try {
-      /* Build OR filter: match current trip ID and 'local' trip_id */
       var tripFilter = 'trip_id=eq.local';
       if (_currentTripId && _currentTripId !== 'local') {
         tripFilter = 'or=(trip_id.eq.' + encodeURIComponent(_currentTripId) + ',trip_id.eq.local)';
@@ -13986,18 +14207,9 @@ async function _loadFriendSuggestions() {
         headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
       });
       var rows = await resp.json();
-      if (Array.isArray(rows)) cloudRows = rows;
+      if (Array.isArray(rows)) allRows = rows;
     } catch(e) {}
   }
-
-  /* Merge: dedupe by id, prefer cloud rows */
-  var seen = {};
-  var allRows = [];
-  cloudRows.concat(localRows).forEach(function(r) {
-    if (r.id && seen[r.id]) return;
-    if (r.id) seen[r.id] = true;
-    allRows.push(r);
-  });
 
   _renderFriendSuggestionsFamily(allRows);
 }
@@ -14298,14 +14510,76 @@ function applyFriendMode() {
 }
 
 /* ── SUGGESTIONS DATA ────────────────────────────────────────────── */
-function loadSuggestions() {
+async function loadSuggestions() {
+  if (_sbUser && _currentTripId) {
+    var client = _initSbClient();
+    if (client) {
+      var { data, error } = await client
+        .from('trip_suggestions')
+        .select('*')
+        .eq('trip_id', _currentTripId)
+        .eq('source', 'family')
+        .order('created_at', { ascending: true });
+      if (!error) return data || [];
+    }
+  }
+  // Offline / legacy fallback
   try {
     var raw = localStorage.getItem('rv_suggestions');
     return raw ? JSON.parse(raw) : [];
   } catch(e) { return []; }
 }
+
+async function saveSuggestion(suggestion) {
+  // Saves a single suggestion (replaces the full-array overwrite pattern).
+  if (_sbUser && _currentTripId) {
+    var client = _initSbClient();
+    if (client) {
+      var { error } = await client.from('trip_suggestions').upsert({
+        id:         suggestion.id || ('fam_' + Date.now()),
+        trip_id:    _currentTripId,
+        stop_id:    suggestion.stopId    || suggestion.stop_id    || '',
+        stop_name:  suggestion.stopName  || suggestion.stop_name  || '',
+        first_name: suggestion.authorName || _userName || '',
+        last_name:  '',
+        suggestion: suggestion.text || suggestion.suggestion || '',
+        source:     'family'
+      });
+      if (error) console.warn('Suggestion save error:', error.message);
+      return;
+    }
+  }
+  // Offline / legacy fallback — write to localStorage
+  try {
+    var arr = JSON.parse(localStorage.getItem('rv_suggestions') || '[]');
+    var existing = arr.findIndex(function(s) { return s.id === suggestion.id; });
+    if (existing >= 0) arr[existing] = suggestion; else arr.push(suggestion);
+    localStorage.setItem('rv_suggestions', JSON.stringify(arr));
+  } catch(e) {}
+}
+
+async function deleteSuggestion(suggestionId) {
+  if (_sbUser && _currentTripId) {
+    var client = _initSbClient();
+    if (client) {
+      await client.from('trip_suggestions').delete()
+        .eq('id', suggestionId)
+        .eq('trip_id', _currentTripId);
+      return;
+    }
+  }
+  // Offline / legacy fallback
+  try {
+    var arr = JSON.parse(localStorage.getItem('rv_suggestions') || '[]');
+    localStorage.setItem('rv_suggestions', JSON.stringify(arr.filter(function(s) { return s.id !== suggestionId; })));
+  } catch(e) {}
+}
+
+// Legacy alias kept for any call sites that pass a full array.
+// New code should call saveSuggestion(item) for individual saves.
 function saveSuggestions(arr) {
-  try { localStorage.setItem('rv_suggestions', JSON.stringify(arr)); } catch(e) {}
+  if (!arr || !arr.length) return;
+  arr.forEach(function(s) { saveSuggestion(s); });
 }
 
 /* ── RENDER SUGGESTIONS TAB ──────────────────────────────────────── */
@@ -26978,8 +27252,13 @@ var _ideasMicRecognition = null;
 var _ideasCache          = null;  // in-memory cache so re-renders stay fast
 var IDEAS_ROW            = 'maass_ideas';
 
-/* ── Get or create a stable voter-ID in localStorage ── */
+/* ── Get a stable voter ID ──────────────────────────────────────────
+   Authenticated users: use Supabase user UUID — stable across devices.
+   Guest / unauthenticated: fall back to a random localStorage key so
+   anonymous voting (e.g. viewer mode) still works.                    */
 function _getVoterId() {
+  if (_sbUser && _sbUser.id) return _sbUser.id;
+  // Anonymous fallback
   var k = 'rv_voter_id';
   var v = localStorage.getItem(k);
   if (!v) {
@@ -27108,8 +27387,15 @@ function _ideasSubmit() {
       if (btn) { btn.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Submit Idea'; btn.disabled = false; }
       if (ok) {
         if (ta) ta.value = '';
-        /* Auto-fill name next time via localStorage */
-        localStorage.setItem('ideas_name', name);
+        /* Name is already in _userName (set at login / profile pick).
+           Update profiles table if the user typed a different name here. */
+        if (_sbUser && name !== _userName) {
+          var _iClient = _initSbClient();
+          if (_iClient) {
+            _iClient.from('profiles').update({ display_name: name, updated_at: new Date().toISOString() }).eq('id', _sbUser.id);
+            _userName = name;
+          }
+        }
         renderIdeas();
         showToast('💡 Idea submitted — thanks, ' + name + '!', 3000);
         /* Show green dot to others */
@@ -27153,7 +27439,8 @@ function renderIdeas() {
   var el = document.getElementById('ideas-content');
   if (!el) return;
   var voterId   = _getVoterId();
-  var savedName = localStorage.getItem('ideas_name') || _userName || '';
+  // Name comes from _userName (set at login from profiles table); no separate localStorage key needed
+  var savedName = _userName || '';
 
   /* Submit card — always writable (even for viewers) */
   var html = '<div style="background:linear-gradient(135deg,#fffde7,#fff9c4);border:1.5px solid #f9e44a;border-radius:var(--radius-s);padding:16px 18px;margin-bottom:22px;">'
