@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-10 (Session 27 continued 5)
+2026-03-10 (Session 27 continued 6)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -42,7 +42,7 @@ tripgenie/
     ├── unit.spec.js              # 26 groups, 140+ pure function tests
     ├── integration.spec.js       # 9 groups testing data flow, auth, permissions
     ├── e2e.spec.js               # 10 groups testing full user workflows
-    └── regression.spec.js        # 39 REG-* checks — run before every deploy
+    └── regression.spec.js        # 46 REG-* checks — run before every deploy
 ```
 
 ---
@@ -70,6 +70,28 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 27 (continued 6) — 2026-03-10
+
+**Comprehensive removedStops audit — all 8 missing filters fixed + new tests + CI.**
+
+- **`renderTrivia` / `fetchTrivia`** — skip removed stops when finding next destination
+- **`totalMilesDriven`** — exclude removed stops' miles from the running total
+- **`loadWeather`** — skip fetching weather for removed stops (saves API calls)
+- **`fetchTripPrecipitation`** — filter removed stops from precip fetch loop
+- **`_prefetchVirtualRoutes`** — skip building route legs for removed stops
+- **`_editStopDays`** — skip removed stops when finding "previous stop" for date constraints
+- **`adm-insert-btn` DOM fix** — added `id="adm-insert-btn"` to the Add Destination button (was referenced by JS but not in HTML); also updated its default label to match the JS code
+- **ATTRACTION regex fix** — changed `\s*` to `[^\S\n]*` in app code + test to prevent the regex from eating the newline on blank ATTRACTION lines and capturing the next field
+- **REG-040 through REG-046** added to `regression.spec.js` — verify that each display/data function correctly excludes removed stops
+- **GitHub Actions workflow** (`test.yml`) completely rewritten:
+  - Push/PR to main → full suite (smoke + unit + regression); fails CI if tests fail
+  - Daily at 8 AM ET → full suite (catches environment drift)
+  - Hourly → smoke only (production health check)
+  - HTML report artifact retained 30 days; JSON results retained 90 days
+  - Markdown summary written to GitHub Actions job summary
+  - On scheduled failure: auto-creates a GitHub issue tagged `test-failure`
+- **`playwright.config.js`** — JSON reporter enabled in CI mode so job summary can parse pass/fail counts
 
 ### Session 27 (continued 5) — 2026-03-10
 

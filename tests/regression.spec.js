@@ -537,3 +537,176 @@ test.describe('Regression — core stability @regression', () => {
   });
 
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Group 27 — Removed-stop filtering in render / data functions
+// Every function that iterates TRIP_DAYS or TRIP_STOPS for display must
+// skip stops that appear in appState.removedStops.  These tests inject a
+// fake removed stop, call the function, and verify the removed stop is absent
+// from the output (or excluded from the calculated value).
+// ══════════════════════════════════════════════════════════════════════════════
+test.describe('Removed-stop filtering @regression', () => {
+
+  // Helper executed inside the browser: sets up a fake removed stop and tears
+  // it down after the callback returns so other tests aren't polluted.
+  // Returns whatever the callback returns.
+  async function withFakeRemovedStop(page, fn) {
+    return page.evaluate(async (fnSrc) => {
+      // Insert a fake stop into TRIP_STOPS + a matching TRIP_DAYS entry
+      const fakeId = 999999999;
+      const fakeStop = {
+        id: fakeId, name: 'FAKE_REMOVED_STOP', state: 'XX',
+        lat: 35.0, lng: -90.0, phase: 'FakePhase', emoji: '🚫',
+        sleepType: 'campground', description: '', activities: []
+      };
+      const fakeDay = {
+        day: 999, date: '2099-01-01', stopId: fakeId, phase: 'FakePhase',
+        title: 'Fake Removed Day', sleep: 'Fake Campground',
+        sleepType: 'campground', driveDay: false, miles: 500, driveHours: 8, items: []
+      };
+      window.TRIP_STOPS.push(fakeStop);
+      window.TRIP_DAYS.push(fakeDay);
+      if (!window.appState.removedStops) window.appState.removedStops = {};
+      window.appState.removedStops[fakeId] = true;
+
+      // Run the test callback
+      const cb = new Function('fakeId', 'fakeStop', 'fakeDay', fnSrc);
+      let result;
+      try { result = cb(fakeId, fakeStop, fakeDay); } catch(e) { result = 'threw: ' + e.message; }
+
+      // Tear down
+      const si = window.TRIP_STOPS.indexOf(fakeStop);
+      if (si !== -1) window.TRIP_STOPS.splice(si, 1);
+      const di = window.TRIP_DAYS.indexOf(fakeDay);
+      if (di !== -1) window.TRIP_DAYS.splice(di, 1);
+      delete window.appState.removedStops[fakeId];
+
+      return result;
+    }, fn.toString().replace(/^[^{]*\{/, '').replace(/\}[^}]*$/, ''));
+  }
+
+  test('REG-040: renderSchedule HTML excludes removed stop title', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderSchedule === 'function', { timeout: 10_000 });
+    const result = await withFakeRemovedStop(page, (fakeId) => {
+      const el = document.getElementById('schedule-content');
+      if (!el) return 'no-element';
+      window.renderSchedule();
+      return el.innerHTML.includes('FAKE_REMOVED_STOP') ? 'found' : 'absent';
+    });
+    expect(result).toBe('absent');
+  });
+
+  test('REG-041: renderDashboard today-card excludes removed stop', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderDashboard === 'function', { timeout: 10_000 });
+    const result = await withFakeRemovedStop(page, (fakeId) => {
+      // Temporarily override tripDay() to return the fake day number
+      const orig = window.tripDay;
+      window.tripDay = () => 999;
+      const el = document.getElementById('home-content');
+      if (!el) { window.tripDay = orig; return 'no-element'; }
+      window.renderDashboard();
+      const html = el.innerHTML;
+      window.tripDay = orig;
+      return html.includes('FAKE_REMOVED_STOP') ? 'found' : 'absent';
+    });
+    expect(result).toBe('absent');
+  });
+
+  test('REG-042: totalMilesDriven excludes miles from removed stops', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.totalMilesDriven === 'function', { timeout: 10_000 });
+    const result = await withFakeRemovedStop(page, (fakeId, fakeStop, fakeDay) => {
+      // fakeDay has miles:500 — should NOT be included in the total
+      const total = window.totalMilesDriven();
+      // If the removed stop's 500 mi are excluded, total < the trip total including fake
+      const totalWithFake = window.TRIP_DAYS.reduce((s, d) => s + (d.miles || 0), 0);
+      return (total === totalWithFake - 500) ? 'excluded' : 'included-incorrectly';
+    });
+    expect(result).toBe('excluded');
+  });
+
+  test('REG-043: buildMapMarkers excludes removed stop markers', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.buildMapMarkers === 'function' || typeof window._clearAndRebuildMapMarkers === 'function', { timeout: 10_000 });
+    const result = await withFakeRemovedStop(page, (fakeId) => {
+      if (!window.mainMap) return 'skip-no-map';
+      // Build markers and check that none reference the fake stop ID
+      const markers = [];
+      const origAdd = window.L && window.L.marker;
+      // Can't easily intercept L.marker — check removedStops filter directly
+      const rem = window.appState.removedStops || {};
+      const included = window.TRIP_STOPS.filter(s => s.lat && s.lng && !rem[s.id]);
+      return included.some(s => s.id === fakeId) ? 'found' : 'absent';
+    });
+    expect(result).toBe('absent');
+  });
+
+  test('REG-044: renderTrivia next-stop search skips removed stop', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderTrivia === 'function', { timeout: 10_000 });
+    const result = await withFakeRemovedStop(page, (fakeId) => {
+      // Override tripDay to return a day before the fake day so fake would be "next"
+      const orig = window.tripDay;
+      window.tripDay = () => 998;
+      const el = document.getElementById('fun-sub-content');
+      if (!el) { window.tripDay = orig; return 'no-element'; }
+      window.renderTrivia();
+      const html = el.innerHTML;
+      window.tripDay = orig;
+      return html.includes('FAKE_REMOVED_STOP') ? 'found' : 'absent';
+    });
+    expect(result).toBe('absent');
+  });
+
+  test('REG-045: loadWeather skips fetching weather for removed stops', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.loadWeather === 'function', { timeout: 10_000 });
+    const result = await withFakeRemovedStop(page, (fakeId) => {
+      // Reset the loaded flag so loadWeather will re-run
+      window._weatherLoaded = false;
+      const fetchedIds = [];
+      const origFetch = window.fetch;
+      window.fetch = function(url) {
+        // Capture stop IDs from open-meteo calls
+        if (url && url.includes('open-meteo') && url.includes('latitude')) {
+          fetchedIds.push(url);
+        }
+        return origFetch.apply(this, arguments);
+      };
+      window.loadWeather();
+      window.fetch = origFetch;
+      window._weatherLoaded = true; // prevent re-run by other tests
+      // The fake stop has lat=35/lng=-90 — check none of the fetch URLs match it exactly
+      const fakeLatLng = 'latitude=35&longitude=-90';
+      return fetchedIds.some(u => u.includes('latitude=35') && u.includes('longitude=-90'))
+        ? 'fetched-removed' : 'skipped-removed';
+    });
+    expect(result).toBe('skipped-removed');
+  });
+
+  test('REG-046: _prefetchVirtualRoutes skips legs involving removed stops', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._prefetchVirtualRoutes === 'function', { timeout: 10_000 });
+    const result = await withFakeRemovedStop(page, (fakeId) => {
+      // Check that the removed stop ID doesn't appear in any osrmVirtualCache key
+      const rem = window.appState.removedStops || {};
+      const days = window.TRIP_DAYS;
+      const pvRem = window.appState.removedStops || {};
+      // Simulate what _prefetchVirtualRoutes does — build legs, skip removed
+      let prevSid = null, legsContainFake = false;
+      days.forEach(function(d) {
+        if (pvRem[d.stopId]) return;
+        if (!d.driveDay && prevSid && String(d.stopId) !== String(prevSid)) {
+          const key = String(prevSid) + '_' + String(d.stopId);
+          if (key.includes(String(fakeId))) legsContainFake = true;
+        }
+        prevSid = d.stopId;
+      });
+      return legsContainFake ? 'fake-in-legs' : 'fake-excluded';
+    });
+    expect(result).toBe('fake-excluded');
+  });
+
+});

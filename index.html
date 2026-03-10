@@ -3529,7 +3529,7 @@
         </div>
       </div>
       <div style="display:flex;gap:8px;">
-        <button onclick="_admInsertDest()" style="flex:2;background:var(--orange);color:#fff;border:none;border-radius:100px;padding:12px;font-size:.95rem;font-weight:900;cursor:pointer;font-family:var(--font);">✅ Add to Trip</button>
+        <button id="adm-insert-btn" onclick="_admInsertDest()" style="flex:2;background:var(--orange);color:#fff;border:none;border-radius:100px;padding:12px;font-size:.95rem;font-weight:900;cursor:pointer;font-family:var(--font);">📍 Add to My Trip</button>
         <button onclick="_admSetStep(2)" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:100px;padding:12px 14px;font-size:.85rem;cursor:pointer;font-family:var(--font);color:var(--text-2);">&#8592; Back</button>
       </div>
     </div>
@@ -5775,7 +5775,8 @@ function isSpringBreak(dateStr) {
   return dateStr >= '2026-03-30' && dateStr <= '2026-04-03';
 }
 function totalMilesDriven() {
-  return TRIP_DAYS.reduce((sum, d) => sum + d.miles, 0);
+  var _rem = (appState && appState.removedStops) || {};
+  return TRIP_DAYS.reduce((sum, d) => _rem[d.stopId] ? sum : sum + (d.miles || 0), 0);
 }
 function formatDate(dateStr) {
   const d = new Date(dateStr + 'T12:00:00');
@@ -8167,10 +8168,12 @@ function openWeatherLink(stopId) {
 function fetchTripPrecipitation() {
   showToast('🌧️ Fetching precipitation data for all stops…', 3000);
   var totalMm = 0;
-  var pending = TRIP_STOPS.length;
+  var _precipRem = appState.removedStops || {};
+  var activeStops = TRIP_STOPS.filter(function(s) { return !_precipRem[s.id]; });
+  var pending = activeStops.length;
   if (!pending) return;
-  TRIP_STOPS.forEach(function(stop) {
-    var stopDays = TRIP_DAYS.filter(function(d) { return d.stopId === stop.id; });
+  activeStops.forEach(function(stop) {
+    var stopDays = TRIP_DAYS.filter(function(d) { return d.stopId === stop.id && !_precipRem[d.stopId]; });
     if (!stopDays.length) { pending--; if (pending === 0) _savePrecip(totalMm); return; }
     var firstDate = stopDays[0].date;
     var lastDate  = stopDays[stopDays.length - 1].date;
@@ -10795,13 +10798,16 @@ function _editStopDays(stopId, baseDays) {
   var _arrDate = _ed.arrival   || '';   /* YYYY-MM-DD */
   var _depDate = _ed.departure || '';   /* YYYY-MM-DD */
 
-  /* Find the previous stop in date-sorted TRIP_DAYS (to absorb arrive-date shifts).
-     Sort matches the order used by _getStopEffectiveDates and renderSchedule.       */
+  /* Find the previous VISIBLE stop in date-sorted TRIP_DAYS (to absorb arrive-date
+     shifts). Filter out removed stops so the date constraints reflect the actual
+     schedule the user sees, not hidden stops.                                       */
+  var _edRemoved = appState.removedStops || {};
   var _sortedForPrev = TRIP_DAYS.slice().sort(function(a,b){
     return a.date < b.date ? -1 : a.date > b.date ? 1 : (a.day||0)-(b.day||0);
   });
   var _seenPrev = [], _prevStopId = null;
   _sortedForPrev.forEach(function(d) {
+    if (_edRemoved[d.stopId]) return; /* skip removed stops */
     if (_seenPrev.indexOf(d.stopId) === -1) _seenPrev.push(d.stopId);
   });
   /* Find the unique stopId that immediately precedes ours in sorted order */
@@ -11304,10 +11310,13 @@ async function _prefetchVirtualRoutes(silent) {
 
   /* Build list of unique stop-to-stop legs that appear in the schedule as
      virtual separators: transitions between consecutive different stops     */
+  var _pvRem = appState.removedStops || {};
   var seenKeys = {};
   var legs = [];
   var prevSid = null;
   days.forEach(function(d) {
+    /* Skip removed stops entirely when building legs */
+    if (_pvRem[d.stopId]) return;
     if (!d.driveDay && prevSid && String(d.stopId) !== String(prevSid)) {
       var key = String(prevSid) + '_' + String(d.stopId);
       if (!seenKeys[key]) {
@@ -19601,10 +19610,12 @@ function lookupDestination() {
     var text = ''; try { text = data.candidates[0].content.parts[0].text.trim(); } catch(e) {}
     if (!text) { _admSetStep(1); showToast('Could not verify place. Try again.', 2500); return; }
 
-    var confirmed   = (text.match(/CONFIRMED:\s*(.+)/i)||[])[1] || city;
-    var attraction  = (text.match(/ATTRACTION:\s*(.+)/i)||[])[1] || '';
+    var confirmed   = (text.match(/CONFIRMED:[^\S\n]*(.+)/i)||[])[1] || city;
+    /* Use [^\S\n]* (horizontal whitespace only) so a blank ATTRACTION line doesn't
+       consume the newline and accidentally capture the next field's content.         */
+    var attraction  = (text.match(/ATTRACTION:[^\S\n]*(.+)/i)||[])[1] || '';
     var valid       = (text.match(/VALID:\s*(\w+)/i)||[])[1] || 'yes';
-    var desc        = (text.match(/DESC:\s*(.+)/i)||[])[1] || '';
+    var desc        = (text.match(/DESC:[^\S\n]*(.+)/i)||[])[1] || '';
     var days        = parseInt((text.match(/DAYS:\s*(\d)/i)||[])[1]) || 2;
 
     confirmed  = confirmed.trim().replace(/^"|"$/g,'');
@@ -23641,10 +23652,12 @@ function loadWeather() {
 
   /* Collect stops that actually need fetching to stagger requests */
   var stopsToFetch = [];
+  var _wxRemoved = appState.removedStops || {};
   TRIP_STOPS.forEach(function(stop) {
     var sid = stop.id;
     if (!appState.weather[sid]) appState.weather[sid] = {};
-    /* Skip stops with no coordinates — would produce a 400 from open-meteo */
+    /* Skip removed stops and stops with no coordinates */
+    if (_wxRemoved[sid]) return;
     if (!stop.lat || !stop.lng) return;
     var stopDays = TRIP_DAYS.filter(function(d) { return d.stopId === sid; });
     if (!stopDays.length) return;
@@ -23918,10 +23931,11 @@ function renderTrivia() {
   if (!el) return;
   var dayNum  = tripDay();
   var dayData = getDay(dayNum);
-  /* Next destination: find next stop after today */
+  /* Next destination: find next non-removed stop at or after today */
+  var _trivRem = appState.removedStops || {};
   var nextStop = null;
   for (var di = 0; di < TRIP_DAYS.length; di++) {
-    if (TRIP_DAYS[di].day >= dayNum) {
+    if (TRIP_DAYS[di].day >= dayNum && !_trivRem[TRIP_DAYS[di].stopId]) {
       nextStop = getStop(TRIP_DAYS[di].stopId);
       if (nextStop) break;
     }
@@ -23985,9 +23999,10 @@ function fetchTrivia() {
   var btn = document.getElementById('trivia-gen-btn');
   if (btn) { btn.textContent = '⏳ Loading…'; btn.disabled = true; }
   var dayNum = tripDay();
+  var _ftRem = appState.removedStops || {};
   var nextStop = null;
   for (var di = 0; di < TRIP_DAYS.length; di++) {
-    if (TRIP_DAYS[di].day >= dayNum) {
+    if (TRIP_DAYS[di].day >= dayNum && !_ftRem[TRIP_DAYS[di].stopId]) {
       nextStop = getStop(TRIP_DAYS[di].stopId);
       if (nextStop) break;
     }

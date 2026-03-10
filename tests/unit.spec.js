@@ -1399,18 +1399,20 @@ test.describe('Unit — pure functions @unit', () => {
     });
 
     test('ATTRACTION regex extracts blank for non-attraction searches', async () => {
+      // Use [^\S\n]* (horizontal whitespace only) — \s* would eat the newline and
+      // accidentally capture the next field, turning '' into 'VALID: yes'.
       const attraction = await page.evaluate((text) => {
-        const raw = (text.match(/ATTRACTION:\s*(.+)/i) || [])[1] || '';
+        const raw = (text.match(/ATTRACTION:[^\S\n]*(.+)/i) || [])[1] || '';
         return raw.trim().replace(/^"|"$/g, '');
       }, TYPICAL_RESPONSE);
-      // "ATTRACTION: " with a blank value — raw match may be empty or whitespace-only
+      // "ATTRACTION: " with a blank value — match fails, raw is ''
       expect(attraction.trim()).toBe('');
     });
 
     test('ATTRACTION regex extracts a landmark name when present', async () => {
       const withAttraction = 'CONFIRMED: Mammoth Cave, Kentucky\nATTRACTION: Mammoth Cave National Park\nVALID: yes\nDESC: Huge cave system.\nDAYS: 2';
       const attraction = await page.evaluate((text) => {
-        const raw = (text.match(/ATTRACTION:\s*(.+)/i) || [])[1] || '';
+        const raw = (text.match(/ATTRACTION:[^\S\n]*(.+)/i) || [])[1] || '';
         return raw.trim().replace(/^"|"$/g, '');
       }, withAttraction);
       expect(attraction).toBe('Mammoth Cave National Park');

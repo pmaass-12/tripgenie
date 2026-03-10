@@ -1,31 +1,186 @@
-name: Regression Tests
+name: TripGenie CI
 
+# ──────────────────────────────────────────────────────────────────────────────
+# Triggers:
+#   • Every push/PR to main  → full suite (smoke + unit + regression)
+#   • Daily at 8 AM ET       → full suite  (catches environment drift)
+#   • Hourly                 → smoke only  (production health check)
+# ──────────────────────────────────────────────────────────────────────────────
 on:
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  schedule:
+    # Daily at 8 AM ET (UTC-5 in winter = 13:00 UTC; UTC-4 in summer = 12:00 UTC)
+    - cron: '0 13 * * *'   # daily full suite
+    - cron: '0 * * * *'    # hourly smoke check
+
+# Cancel in-progress runs on the same branch so pushes don't pile up
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
+  # ── Determine which tests to run based on trigger ──────────────────────────
+  config:
     runs-on: ubuntu-latest
+    outputs:
+      suite: ${{ steps.pick.outputs.suite }}
+      label: ${{ steps.pick.outputs.label }}
+    steps:
+      - id: pick
+        run: |
+          EVENT="${{ github.event_name }}"
+          CRON="${{ github.event.schedule }}"
+          if [ "$EVENT" = "schedule" ] && [ "$CRON" = "0 * * * *" ]; then
+            echo "suite=smoke"  >> $GITHUB_OUTPUT
+            echo "label=Smoke (hourly health check)" >> $GITHUB_OUTPUT
+          else
+            echo "suite=full"   >> $GITHUB_OUTPUT
+            echo "label=Full suite (smoke + unit + regression)" >> $GITHUB_OUTPUT
+          fi
+
+  # ── Run the test suite ─────────────────────────────────────────────────────
+  test:
+    needs: config
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Node.js
+      - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: 'npm'
 
-      - name: Run regression tests
-        run: node regression_test.js
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Upload snapshots on first run
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      # ── Run the appropriate test suite ──────────────────────────────────────
+      - name: Run smoke tests
+        if: needs.config.outputs.suite == 'smoke'
+        run: npm run test:smoke -- --reporter=list,json --output=test-results/results.json
+        continue-on-error: false
+
+      - name: Run full test suite
+        if: needs.config.outputs.suite == 'full'
+        run: |
+          npm run test -- \
+            --reporter=list,html,json \
+            --output=test-results/results.json
+        continue-on-error: true
+        id: run_tests
+
+      # ── Upload HTML report as artifact (retained for 30 days) ──────────────
+      - name: Upload HTML test report
+        if: always() && needs.config.outputs.suite == 'full'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_number }}
+          path: playwright-report/
+          retention-days: 30
+
+      # ── Upload raw JSON results ────────────────────────────────────────────
+      - name: Upload JSON results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: snapshots
-          path: snapshots/
+          name: test-results-json-${{ github.run_number }}
+          path: test-results/results.json
+          retention-days: 90
           if-no-files-found: ignore
+
+      # ── Write a compact summary to the GitHub Actions job summary ──────────
+      - name: Write job summary
+        if: always() && needs.config.outputs.suite == 'full'
+        run: |
+          node -e "
+          const fs = require('fs');
+          let stats = { passed: 0, failed: 0, skipped: 0 };
+          try {
+            const raw = JSON.parse(fs.readFileSync('test-results/results.json', 'utf8'));
+            raw.suites && raw.suites.forEach(s => {
+              (s.specs || []).forEach(sp => {
+                (sp.tests || []).forEach(t => {
+                  const r = t.results && t.results[0] && t.results[0].status;
+                  if (r === 'passed')  stats.passed++;
+                  else if (r === 'failed' || r === 'timedOut') stats.failed++;
+                  else stats.skipped++;
+                });
+              });
+            });
+          } catch(e) { stats = { error: e.message }; }
+          const total = stats.passed + stats.failed + stats.skipped;
+          const icon  = stats.failed > 0 ? '❌' : '✅';
+          const md = [
+            '## ' + icon + ' Test Results — ${{ github.sha }}'.substring(0,7),
+            '',
+            '| Passed | Failed | Skipped | Total |',
+            '|--------|--------|---------|-------|',
+            '| ' + stats.passed + ' | ' + stats.failed + ' | ' + stats.skipped + ' | ' + total + ' |',
+            '',
+            stats.failed > 0 ? '**Download the HTML report from the Artifacts section above for details.**' : '_All tests green_ 🎉',
+            '',
+            'Suite: ${{ needs.config.outputs.label }}',
+            'Trigger: ${{ github.event_name }}',
+            'Branch: ${{ github.ref_name }}',
+          ].join('\n');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, md);
+          "
+
+      # ── Fail the job if full-suite tests failed ────────────────────────────
+      # This causes GitHub branch protection rules to block merges/deploys.
+      - name: Fail if tests failed
+        if: needs.config.outputs.suite == 'full' && steps.run_tests.outcome == 'failure'
+        run: |
+          echo "::error::One or more tests failed. Download the playwright-report artifact for details."
+          exit 1
+
+  # ── Notify on failure (scheduled runs only — push failures show in PR) ─────
+  notify-on-failure:
+    needs: [config, test]
+    runs-on: ubuntu-latest
+    if: failure() && github.event_name == 'schedule'
+    steps:
+      - name: Create GitHub issue on scheduled test failure
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const title = `🚨 Scheduled test failure — ${new Date().toISOString().slice(0,10)}`;
+            const body = [
+              '## Scheduled test run failed',
+              '',
+              `- **Trigger:** ${context.eventName}`,
+              `- **Run:** [#${context.runNumber}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`,
+              `- **Suite:** ${{ needs.config.outputs.label }}`,
+              '',
+              'Check the Actions run linked above and download the `playwright-report` artifact for details.',
+              '',
+              '_This issue was created automatically by the CI workflow._',
+            ].join('\n');
+
+            // Check if an open issue for today already exists to avoid duplicates
+            const issues = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'test-failure',
+            });
+            const today = new Date().toISOString().slice(0, 10);
+            const existing = issues.data.find(i => i.title.includes(today));
+            if (!existing) {
+              await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['test-failure'],
+              });
+            }

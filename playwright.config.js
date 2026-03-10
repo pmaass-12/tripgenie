@@ -14,7 +14,9 @@ module.exports = defineConfig({
   expect: { timeout: 5_000 },
   fullyParallel: false,     // Auth tests share Supabase state — run serially
   retries: process.env.CI ? 2 : 0,
-  reporter: [['html', { open: 'never' }], ['list']],
+  reporter: process.env.CI
+    ? [['html', { open: 'never' }], ['list'], ['json', { outputFile: 'test-results/results.json' }]]
+    : [['html', { open: 'never' }], ['list']],
 
   use: {
     baseURL: process.env.BASE_URL || 'https://www.maass5.com',
