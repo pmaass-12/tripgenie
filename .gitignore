@@ -1,0 +1,11 @@
+# Playwright test artifacts — never commit these
+playwright-report/
+test-results/
+.auth/
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
