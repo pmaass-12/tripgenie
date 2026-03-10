@@ -2704,12 +2704,24 @@
     <div class="login-title" style="font-size:1.3rem;">Set New Password</div>
     <div class="login-sub">Enter a new password for your account.</div>
     <div style="margin-top:18px;">
-      <input type="password" id="reset-password-input" placeholder="New password (min 6 characters)"
-        class="login-input" style="box-sizing:border-box;margin-bottom:10px;"
-        onkeydown="if(event.key==='Escape')_closePasswordResetOverlay();else if(event.key==='Enter')document.getElementById('reset-password-confirm').focus()" />
-      <input type="password" id="reset-password-confirm" placeholder="Confirm new password"
-        class="login-input" style="box-sizing:border-box;"
-        onkeydown="if(event.key==='Escape')_closePasswordResetOverlay();else if(event.key==='Enter')_doSetNewPassword()" />
+      <div style="position:relative;margin-bottom:10px;">
+        <input type="password" id="reset-password-input" placeholder="New password (min 6 characters)"
+          class="login-input" style="box-sizing:border-box;padding-right:44px;margin-bottom:0;"
+          onkeydown="if(event.key==='Escape')_closePasswordResetOverlay();else if(event.key==='Enter')document.getElementById('reset-password-confirm').focus()" />
+        <button type="button" onclick="_toggleResetPw('reset-password-input','reset-eye-1')"
+          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-3);cursor:pointer;font-size:1rem;padding:4px;line-height:1;" tabindex="-1">
+          <i class="fa-solid fa-eye" id="reset-eye-1"></i>
+        </button>
+      </div>
+      <div style="position:relative;">
+        <input type="password" id="reset-password-confirm" placeholder="Confirm new password"
+          class="login-input" style="box-sizing:border-box;padding-right:44px;margin-bottom:0;"
+          onkeydown="if(event.key==='Escape')_closePasswordResetOverlay();else if(event.key==='Enter')_doSetNewPassword()" />
+        <button type="button" onclick="_toggleResetPw('reset-password-confirm','reset-eye-2')"
+          style="position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text-3);cursor:pointer;font-size:1rem;padding:4px;line-height:1;" tabindex="-1">
+          <i class="fa-solid fa-eye" id="reset-eye-2"></i>
+        </button>
+      </div>
     </div>
     <div class="login-error" id="reset-password-error"></div>
     <button id="reset-save-btn" class="login-btn" type="button" onclick="_doSetNewPassword()" style="margin-top:14px;">
@@ -5808,6 +5820,7 @@ function _initAuth() {
     if (event === 'PASSWORD_RECOVERY') {
       _isRecoveryMode = true;
       _sbUser = session && session.user;
+      console.log('[PwReset] PASSWORD_RECOVERY fired | session=', session ? 'present' : 'null', '| user=', _sbUser ? _sbUser.email : 'null');
       // Save tokens so we can restore the session before updateUser() —
       // Supabase fires SIGNED_OUT after this event (consuming the one-time token)
       // which clears its own internal session; setSession() restores it.
@@ -5816,6 +5829,9 @@ function _initAuth() {
           access_token:  session.access_token,
           refresh_token: session.refresh_token || ''
         };
+        console.log('[PwReset] tokens saved, access_token prefix:', session.access_token.substring(0, 20));
+      } else {
+        console.log('[PwReset] WARNING: no access_token in session!');
       }
       var ls = document.getElementById('login-screen');
       if (ls) ls.classList.remove('hidden');
@@ -6432,6 +6448,15 @@ function _toggleShowPassword() {
   if (icon) { icon.className = showing ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash'; }
 }
 
+function _toggleResetPw(inputId, iconId) {
+  var inp  = document.getElementById(inputId);
+  var icon = document.getElementById(iconId);
+  if (!inp) return;
+  var showing = inp.type === 'text';
+  inp.type = showing ? 'password' : 'text';
+  if (icon) { icon.className = showing ? 'fa-solid fa-eye' : 'fa-solid fa-eye-slash'; }
+}
+
 async function _showProfilePicker() {
   if (_sbUser) {
     // ── Supabase path: look up profile in `profiles` table ────────────
@@ -6662,13 +6687,17 @@ async function _doSetNewPassword() {
   // consumed), which clears the client's internal session storage.
   // We saved access_token + refresh_token at PASSWORD_RECOVERY time, so we
   // can restore the session explicitly before calling updateUser().
+  console.log('[PwReset] _sbUser=', _sbUser, '| _recoverySession=', _recoverySession ? 'present' : 'null');
   if (_recoverySession && _recoverySession.access_token) {
     try {
-      await client.auth.setSession({
+      var setResult = await client.auth.setSession({
         access_token:  _recoverySession.access_token,
         refresh_token: _recoverySession.refresh_token
       });
+      console.log('[PwReset] setSession result:', setResult.error ? setResult.error.message : 'ok');
+      if (setResult.data && setResult.data.user) { _sbUser = setResult.data.user; }
     } catch(e) {
+      console.log('[PwReset] setSession threw:', e.message);
       // setSession failed — token may be truly expired
     }
   }
@@ -6700,8 +6729,10 @@ async function _doSetNewPassword() {
     return;
   }
 
+  console.log('[PwReset] calling updateUser, _sbUser=', _sbUser ? _sbUser.email : 'null');
   var { error } = await client.auth.updateUser({ password: pw1 });
   if (error) {
+    console.log('[PwReset] updateUser error:', error.message, '| code:', error.code);
     // If the error looks like an expired/invalid token, show the re-request UI
     var msg = error.message || '';
     if (msg.toLowerCase().includes('expired') || msg.toLowerCase().includes('invalid') ||
@@ -6712,6 +6743,7 @@ async function _doSetNewPassword() {
     }
     return;
   }
+  console.log('[PwReset] updateUser SUCCESS');
 
   // Success — exit recovery mode, hide overlay, proceed to app
   _recoverySession = null;
