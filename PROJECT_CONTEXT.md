@@ -71,6 +71,14 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 27 (continued 9) — 2026-03-10
+
+**Fix bookings removedStops filter + auto-fix all placeholder drive legs.**
+
+- **`renderBookings()` / `renderBookingsTools()`** (index.html): Both functions now skip removed stops. `renderBookings` (schedule bookmark list) and `renderBookingsTools` (the Tools→Bookings "ADD CONFIRMATION FOR A STOP" chip panel + existing confirmations list) all now filter `appState.removedStops`, so removed stops like Shawnee no longer appear.
+- **`_recalcDriveMiles()`** (index.html): Leg-building loop now skips removed stops so `prevStopId` doesn't advance through a removed stop and create a phantom leg.
+- **Health check auto-trigger threshold** (index.html): Changed `> 2` → `> 0`. Previously, only 3+ placeholder drive legs triggered automatic recalculation. With only 2 placeholder legs (Yellowstone→Fremont, Fremont→Warwick), the health check just warned. Now it auto-runs `_recalcDriveMiles` + `_prefetchVirtualRoutes` for ANY uncalculated drive leg on next app load.
+
 ### Session 27 (continued 8) — 2026-03-10
 
 **Add "Remove Duplicates" one-click cleanup for duplicate trips.**
