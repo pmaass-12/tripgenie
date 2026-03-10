@@ -11154,6 +11154,8 @@ function _refreshAll(silent) {
      regardless of which sub-tab is currently visible */
   try { renderStops(); } catch(e) {}
   try { renderPlannerAgenda(); } catch(e) {}
+  /* Keep Drive Mode in sync with any stop/day changes */
+  try { if (typeof _smRenderAll === 'function') _smRenderAll(); } catch(e) {}
   /* Refresh Tools sub-tabs if visible */
   var _calDiv = document.getElementById('tools-sub-content');
   if (_calDiv && _calDiv.style.display !== 'none' && window._toolsTab === 'calendar') { try { renderCalendar(); } catch(e) {} }
@@ -33017,6 +33019,13 @@ function _smRenderToday() {
 
   var idx = _smTodayIdx();
   var day = days[idx];
+  /* Skip removed stops — walk forward to find the next active stop */
+  var _smRemoved = (appState && appState.removedStops) || {};
+  if (_smRemoved[day.stopId]) {
+    for (var _smFwd = idx + 1; _smFwd < days.length; _smFwd++) {
+      if (!_smRemoved[days[_smFwd].stopId]) { day = days[_smFwd]; break; }
+    }
+  }
   var stop = stops.find(function(s){ return s.id === day.stopId; }) || {};
   var totalDays = days.length;
   var pct = Math.round(((idx + 1) / totalDays) * 100);

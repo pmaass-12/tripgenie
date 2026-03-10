@@ -71,6 +71,18 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 27 (continued 7) — 2026-03-10
+
+**Fix Drive Mode stale data + removed-stop blindspot.**
+
+- **`_smRenderToday()` — showed removed stop** (index.html):
+  - Root cause: drive mode never checked `appState.removedStops`. `_smTodayIdx()` finds today's date in TRIP_DAYS and returns that raw entry, even if its stop was removed. Result: drive mode showed "Today's Stop: Shawnee" and "We've Arrived! Check in at Shawnee" after Shawnee had been deleted.
+  - Fix: after resolving `var day = days[idx]`, check `_smRemoved[day.stopId]` and walk forward to the next non-removed stop if needed. Same IIFE-style pattern as the `renderDashboard` fix.
+
+- **`_refreshAll()` — never refreshed Drive Mode** (index.html):
+  - Root cause: `_smRenderAll()` was not in `_refreshAll()`, so stop removals and schedule changes never propagated to drive mode. Users saw stale drive mode data until page reload.
+  - Fix: added `try { if (typeof _smRenderAll === 'function') _smRenderAll(); } catch(e) {}` to `_refreshAll()`.
+
 ### Session 27 (continued 6) — 2026-03-10
 
 **Comprehensive removedStops audit — all 8 missing filters fixed + new tests + CI.**
