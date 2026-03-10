@@ -6551,6 +6551,23 @@ async function _doSetNewPassword() {
   if (pw1 !== pw2)             { showErr('Passwords do not match.'); return; }
 
   showErr('Saving…');
+
+  // If onAuthStateChange hasn't established the session yet (race condition),
+  // extract the tokens from the URL hash and call setSession() explicitly.
+  if (!_sbUser) {
+    var _hash = window.location.hash || '';
+    var _params = new URLSearchParams(_hash.replace(/^#/, ''));
+    var _at = _params.get('access_token');
+    var _rt = _params.get('refresh_token');
+    if (_at) {
+      var { data: _sd, error: _se } = await client.auth.setSession({
+        access_token: _at, refresh_token: _rt || ''
+      });
+      if (_se) { showErr(_se.message); return; }
+      _sbUser = _sd && _sd.user;
+    }
+  }
+
   var { error } = await client.auth.updateUser({ password: pw1 });
   if (error) { showErr(error.message); return; }
 
