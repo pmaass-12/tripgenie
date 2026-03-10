@@ -6149,6 +6149,9 @@ function _makeCloudSafeState(state) {
 
 function syncToCloud(state) {
   if (_isTestMode || _isViewer) return;
+  // Authenticated users save via _saveCloudSnapshot (trips table) — skip the
+  // legacy trip_state REST path entirely so it never hits a missing table.
+  if (_sbUser) return;
   if (_syncTimer) clearTimeout(_syncTimer);
   _syncTimer = setTimeout(function() { _doCloudSave(_makeCloudSafeState(state)); }, 1800);
 }
