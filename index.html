@@ -11151,12 +11151,16 @@ async function _recalcDriveMiles(silent) {
     var toSt    = stops.find(function(s) { return String(s.id) === String(leg.toId); });
     if (!fromSt || !toSt || !fromSt.lat || !fromSt.lng || !toSt.lat || !toSt.lng) { failed++; continue; }
     try {
-      /* OSRM: overview=false → returns only distance + duration, no geometry */
-      var osrmUrl = 'https://router.project-osrm.org/route/v1/driving/'
-        + fromSt.lng.toFixed(5) + ',' + fromSt.lat.toFixed(5) + ';'
-        + toSt.lng.toFixed(5)   + ',' + toSt.lat.toFixed(5)
-        + '?overview=false';
-      var resp = await fetch(osrmUrl);
+      /* Prefer Mapbox (already domain-authorized, no CORS issues).
+         Fall back to OSRM only when no Mapbox token is configured.   */
+      var _mbTok = (appState && appState.mapboxToken) || MAPBOX_TOKEN || '';
+      var coordPair = fromSt.lng.toFixed(5) + ',' + fromSt.lat.toFixed(5) + ';'
+                    + toSt.lng.toFixed(5)   + ',' + toSt.lat.toFixed(5);
+      var routeUrl = _mbTok
+        ? 'https://api.mapbox.com/directions/v5/mapbox/driving/' + coordPair
+            + '?overview=none&access_token=' + _mbTok
+        : 'https://router.project-osrm.org/route/v1/driving/' + coordPair + '?overview=false';
+      var resp = await fetch(routeUrl);
       var data = await resp.json();
       if (data.routes && data.routes[0]) {
         var meters = data.routes[0].distance;
@@ -11237,11 +11241,14 @@ async function _prefetchVirtualRoutes(silent) {
     var toSt   = stops.find(function(s) { return String(s.id) === String(leg.toId); });
     if (!fromSt || !toSt || !fromSt.lat || !fromSt.lng || !toSt.lat || !toSt.lng) continue;
     try {
-      var osrmUrl = 'https://router.project-osrm.org/route/v1/driving/'
-        + fromSt.lng.toFixed(5) + ',' + fromSt.lat.toFixed(5) + ';'
-        + toSt.lng.toFixed(5)   + ',' + toSt.lat.toFixed(5)
-        + '?overview=false';
-      var resp = await fetch(osrmUrl);
+      var _mbTok2 = (appState && appState.mapboxToken) || MAPBOX_TOKEN || '';
+      var coordPair2 = fromSt.lng.toFixed(5) + ',' + fromSt.lat.toFixed(5) + ';'
+                     + toSt.lng.toFixed(5)   + ',' + toSt.lat.toFixed(5);
+      var routeUrl2 = _mbTok2
+        ? 'https://api.mapbox.com/directions/v5/mapbox/driving/' + coordPair2
+            + '?overview=none&access_token=' + _mbTok2
+        : 'https://router.project-osrm.org/route/v1/driving/' + coordPair2 + '?overview=false';
+      var resp = await fetch(routeUrl2);
       var data = await resp.json();
       if (data.routes && data.routes[0]) {
         var miles = Math.round(data.routes[0].distance / 1609.344);
@@ -20336,14 +20343,18 @@ function initApp() {
   // Auto-fetch real OSRM drive times — fires 5s after init so it doesn't
   // compete with initial render. Skipped if cache already populated.
   setTimeout(function() {
-    /* Recalc real drive day bars if osrmDriveCache is absent or all drive days
-       still have the default placeholder value (200 mi / 4h from trip_data.js) */
-    var _drivedays = TRIP_DAYS.filter(function(d) { return d.driveDay; });
-    var _placeholders = _drivedays.filter(function(d) {
+    /* Recalc real drive day bars if any drive days lack cached values and
+       still have the default placeholder driveHours (4h was the original
+       placeholder used for every leg regardless of actual distance).
+       Previously only triggered on miles===200 AND driveHours===4 which
+       missed long drives with non-default miles but still-default hours. */
+    var _drivedays = TRIP_DAYS.filter(function(d) { return d.driveDay && d.sleepType !== 'home'; });
+    var _needsCalc = _drivedays.filter(function(d) {
       if (appState.osrmDriveCache && appState.osrmDriveCache[d.day]) return false; /* already cached */
-      return d.miles === 200 && d.driveHours === 4;
+      return d.driveHours === 4; /* still at placeholder default */
     });
-    if (_placeholders.length > 0) {
+    /* Trigger if more than a third of drive days still need real values */
+    if (_needsCalc.length > Math.max(1, Math.floor(_drivedays.length / 3))) {
       _recalcDriveMiles(true);
     }
     /* Always prefetch virtual separator routes not yet in cache */
