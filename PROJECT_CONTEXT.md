@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-10 (Session 27 continued 4)
+2026-03-10 (Session 27 continued 5)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -70,6 +70,22 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 27 (continued 5) — 2026-03-10
+
+**Fix removed-stop blind spots in schedule separators and dashboard.**
+
+- **`renderSchedule()` — `lastStopId` not advancing past removed stops** (index.html):
+  - Root cause: lines 12208-12209 updated `lastStopId = d.stopId` unconditionally, even when `d.stopId` was in `removedStopIds`. When the NEXT real stop was processed, `_prevStopForSep = getStop(lastStopId)` referenced the removed stop's ID, and the `!removedStopIds[lastStopId]` guard blocked the separator.
+  - Fix: wrapped `lastPhase`/`lastStopId` update in `if (!removedStopIds[d.stopId])`. `lastStopId` now always points to the last VISIBLE stop, so "PrevVisible → NextVisible" virtual separators render correctly even with removed stops in between.
+
+- **`renderDashboard()` — today card showed removed stop** (index.html):
+  - Root cause: `var dayData = getDay(dayNum)` fetched today's raw TRIP_DAYS entry without checking `removedStops`. If today's scheduled stop was removed, the dashboard still showed "Explore [Removed Stop]".
+  - Fix: replaced with IIFE that returns the raw entry if its stop isn't removed, or walks forward through TRIP_DAYS to find the next non-removed, non-home day.
+
+- **`renderDashboard()` — Up Next showed removed stops** (index.html):
+  - Root cause: `TRIP_DAYS.slice(dayNum, dayNum + 3)` had no removed-stop filter.
+  - Fix: replaced with loop that collects 3 upcoming days while skipping `removedStopIds` and post-arrival home days.
 
 ### Session 27 (continued 4) — 2026-03-10
 

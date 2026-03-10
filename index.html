@@ -8440,12 +8440,22 @@ function renderDashboard() {
   var start    = new Date(CONFIG.startDate);
   var end      = new Date(CONFIG.endDate);
   var dayNum   = tripDay();
-  var dayData  = getDay(dayNum);
+  var _removedSids = appState.removedStops || {};
+  /* Find today's day — skip days whose stop has been removed */
+  var dayData  = (function() {
+    var raw = getDay(dayNum);
+    if (!raw || !_removedSids[raw.stopId]) return raw;
+    /* Today's scheduled stop was removed — advance to the next active day */
+    for (var _fd = 0; _fd < TRIP_DAYS.length; _fd++) {
+      var _c = TRIP_DAYS[_fd];
+      if (_c.day >= dayNum && !_removedSids[_c.stopId] && !(_c.sleepType === 'home' && !_c.driveDay)) return _c;
+    }
+    return null;
+  })();
   var curStop  = dayData ? getStop(dayData.stopId) : null;
-  var sleep    = dayData ? getDaySleep(dayNum)  : '—';
+  var sleep    = dayData ? getDaySleep(dayData.day) : '—';
   /* Compute visible day count first so daysLeft can use it */
   if (!_gVisibleDayCount) {
-    var _removedSids = appState.removedStops || {};
     var _dbCount = 0;
     TRIP_DAYS.forEach(function(d) {
       if (d.sleepType === 'home' && !d.driveDay) return;
@@ -8827,8 +8837,18 @@ function renderDashboard() {
     + '<div class="stat-card"><div class="stat-icon">' + _si('fa-mountain') + '</div><div class="stat-label">Peak Elevation</div><div class="stat-value" style="font-size:1.15rem;">' + _peakElevFt.toLocaleString() + ' ft</div><div class="stat-sub">' + _peakElevStop + '</div></div>'
     + '</div>';
 
-  // ── Up next cards (pre-built, no logic in template) ───────────────
-  var upcoming = TRIP_DAYS.slice(dayNum, Math.min(dayNum + 3, 46));
+  // ── Up next cards — skip removed stops and past days ─────────────
+  var upcoming = (function() {
+    var _res = [], _startIdx = dayNum;
+    for (var _ui = 0; _ui < TRIP_DAYS.length && _res.length < 3; _ui++) {
+      var _ud = TRIP_DAYS[_ui];
+      if (_ud.day <= dayNum) continue;
+      if (_removedSids[_ud.stopId]) continue;
+      if (_ud.sleepType === 'home' && !_ud.driveDay) continue;
+      _res.push(_ud);
+    }
+    return _res;
+  })();
   var upNextHtml = '';
   if (upcoming.length) {
     var upCards = '';
@@ -12205,8 +12225,16 @@ function renderSchedule() {
         html += phaseHeaderHtml(d.phase, d);
         _lastHeaderWasHome = _dIsHome;
       }
-      lastPhase = d.phase;
-      lastStopId = d.stopId;
+      /* Only advance lastStopId / lastPhase when this stop is visible.
+         If we updated lastStopId to a removed stop, the NEXT real stop's
+         virtual separator would look up the removed stop as the origin —
+         finding null (or hitting the removedStopIds guard) — and silently
+         skip the separator.  Keeping lastStopId at the last VISIBLE stop
+         ensures "PrevVisible → NextVisible" separators render correctly.  */
+      if (!removedStopIds[d.stopId]) {
+        lastPhase  = d.phase;
+        lastStopId = d.stopId;
+      }
     }
 
     // Skip this day if it was hidden by the - button or full stop removal
