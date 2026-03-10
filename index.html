@@ -2690,6 +2690,29 @@
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
+<!--  PASSWORD RESET OVERLAY (shown after clicking reset email link) -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="password-reset-overlay" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;">
+  <div class="login-card" style="max-width:380px;width:90%;">
+    <span class="login-rv-icon">🔐</span>
+    <div class="login-title" style="font-size:1.3rem;">Set New Password</div>
+    <div class="login-sub">Enter a new password for your account.</div>
+    <div style="margin-top:18px;">
+      <input type="password" id="reset-password-input" placeholder="New password (min 6 characters)"
+        class="login-input" style="box-sizing:border-box;margin-bottom:10px;"
+        onkeydown="if(event.key==='Enter')document.getElementById('reset-password-confirm').focus()" />
+      <input type="password" id="reset-password-confirm" placeholder="Confirm new password"
+        class="login-input" style="box-sizing:border-box;"
+        onkeydown="if(event.key==='Enter')_doSetNewPassword()" />
+    </div>
+    <div class="login-error" id="reset-password-error"></div>
+    <button class="login-btn" type="button" onclick="_doSetNewPassword()" style="margin-top:14px;">
+      <i class="fa-solid fa-lock"></i> Save New Password
+    </button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
 <!--  PROFILE PICKER OVERLAY (shown after email auth)                -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div id="profile-picker-overlay" style="display:none;position:fixed;inset:0;z-index:9500;background:linear-gradient(135deg,#1a3a5c 0%,#2C5F8A 60%,#1a3a5c 100%);align-items:center;justify-content:center;">
@@ -5751,6 +5774,17 @@ function _initAuth() {
   }
 
   client.auth.onAuthStateChange(function(event, session) {
+    /* ── Password recovery — show set-new-password form ── */
+    if (event === 'PASSWORD_RECOVERY') {
+      _sbUser = session && session.user;
+      var ls = document.getElementById('login-screen');
+      if (ls) ls.classList.remove('hidden');
+      var appEl = document.getElementById('app');
+      if (appEl) appEl.classList.add('hidden');
+      _showPasswordResetForm();
+      return;
+    }
+
     /* ── Signed in or page-reload with existing session ── */
     if (session && session.user) {
       _sbUser = session.user;
@@ -6491,6 +6525,40 @@ async function _doForgotPassword() {
   });
   if (error) { _showLoginError(error.message); return; }
   _showLoginError('✅ Check your email for a password reset link!');
+}
+
+function _showPasswordResetForm() {
+  var overlay = document.getElementById('password-reset-overlay');
+  if (overlay) {
+    overlay.classList.remove('hidden');
+    overlay.style.display = 'flex';
+    setTimeout(function() {
+      var inp = document.getElementById('reset-password-input');
+      if (inp) inp.focus();
+    }, 100);
+  }
+}
+
+async function _doSetNewPassword() {
+  var client = _initSbClient();
+  if (!client) { return; }
+  var pw1 = (document.getElementById('reset-password-input')   || {}).value || '';
+  var pw2 = (document.getElementById('reset-password-confirm') || {}).value || '';
+  var errEl = document.getElementById('reset-password-error');
+  function showErr(msg) { if (errEl) errEl.textContent = msg; }
+
+  if (!pw1 || pw1.length < 6) { showErr('Password must be at least 6 characters.'); return; }
+  if (pw1 !== pw2)             { showErr('Passwords do not match.'); return; }
+
+  showErr('Saving…');
+  var { error } = await client.auth.updateUser({ password: pw1 });
+  if (error) { showErr(error.message); return; }
+
+  // Success — hide overlay and proceed to app
+  var overlay = document.getElementById('password-reset-overlay');
+  if (overlay) { overlay.classList.add('hidden'); overlay.style.display = 'none'; }
+  showToast('✅ Password updated! You are now logged in.', 4000);
+  _showProfilePicker();
 }
 
 function _showLoginError(msg) {
