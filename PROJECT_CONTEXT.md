@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-08 (Session 26 continued 8)
+2026-03-10 (Session 27)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -27,7 +27,17 @@ tripgenie/
 ├── mockup_itinerary_desktop.html # Itinerary desktop mockup
 ├── rv-app.zip                    # Archived version
 ├── CLAUDE.md                     # Persistent Claude session instructions
-└── PROJECT_CONTEXT.md            # This file
+├── PROJECT_CONTEXT.md            # This file
+├── _redirects                    # Netlify SPA routing (/* /index.html 200)
+├── package.json                  # Playwright test runner config
+├── playwright.config.js          # Playwright project config
+├── TripGenie-Test-Plan.docx      # Comprehensive 100+ test-case plan
+├── tripgenie-auth-implementation.md  # Supabase auth implementation notes
+└── tests/
+    ├── helpers.js                # Shared: login(), openTab(), callFn(), waitForToast()
+    ├── auth.setup.js             # Logs in once, saves session to .auth/user.json
+    ├── smoke.spec.js             # 7 fast @smoke tests (no login required)
+    └── unit.spec.js              # Pure function unit tests via page.evaluate()
 ```
 
 ---
@@ -55,6 +65,21 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 27 — 2026-03-10
+
+**Supabase auth, Playwright test framework, password reset fixes.**
+
+- **Supabase migration (Parts 1–13)**: Full Supabase auth integration in index.html. `_initAuth()`, `_sbUser`, `onAuthStateChange`, `PASSWORD_RECOVERY` flow, `_doSetNewPassword()`, profile picker.
+- **Password reset flow (multiple fixes)**:
+  - Fixed Supabase Site URL to `https://www.maass5.com` (was localhost)
+  - Created `_redirects` for Netlify SPA routing
+  - Added `PASSWORD_RECOVERY` handler in `onAuthStateChange`
+  - Removed `setSession()` calls that caused JWT kid errors
+  - **Latest fix (this session)**: `_doSetNewPassword()` now calls `client.auth.getSession()` as a fallback when `_sbUser` is null after polling. This handles cases where `onAuthStateChange` cleared `_sbUser` after initially setting it. Better error message directs user to "Forgot password?" link if truly expired.
+- **Playwright testing framework**: Created `package.json`, `playwright.config.js`, `tests/helpers.js`, `tests/auth.setup.js`, `tests/smoke.spec.js`, `tests/unit.spec.js`.
+  - To run: `npm install && npx playwright install chromium` then `npm test`
+- **TripGenie-Test-Plan.docx**: 20-section, 100+ test-case plan covering all features.
 
 ### Session 26 (continued 8) — 2026-03-08
 

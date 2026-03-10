@@ -6553,21 +6553,32 @@ async function _doSetNewPassword() {
   showErr('Saving…');
 
   // onAuthStateChange (PASSWORD_RECOVERY) sets _sbUser asynchronously.
-  // If the user clicks Save before it fires, poll up to 4s for it.
-  // Do NOT call setSession() manually — Supabase already consumed the URL
-  // token internally; calling it again causes "unrecognized JWT kid" errors.
+  // Poll briefly in case the event hasn't fired yet when the user clicks Save.
   if (!_sbUser) {
     var _waited = 0;
     await new Promise(function(resolve) {
       var _poll = setInterval(function() {
         _waited += 200;
-        if (_sbUser || _waited >= 4000) { clearInterval(_poll); resolve(); }
+        if (_sbUser || _waited >= 3000) { clearInterval(_poll); resolve(); }
       }, 200);
     });
-    if (!_sbUser) {
-      showErr('Session not ready — please wait a moment and try again.');
-      return;
-    }
+  }
+
+  // Fallback: Supabase stores the recovery session in localStorage even if
+  // the onAuthStateChange listener missed it or was cleared by a later event.
+  // getSession() reads directly from storage and is always authoritative.
+  if (!_sbUser) {
+    try {
+      var _gs = await client.auth.getSession();
+      if (_gs && _gs.data && _gs.data.session && _gs.data.session.user) {
+        _sbUser = _gs.data.session.user;
+      }
+    } catch(e) {}
+  }
+
+  if (!_sbUser) {
+    showErr('Reset link expired — please use "Forgot password?" to get a new one.');
+    return;
   }
 
   var { error } = await client.auth.updateUser({ password: pw1 });
