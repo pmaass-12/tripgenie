@@ -7567,6 +7567,20 @@ function _initVersionCheck() {
   // immediately if a valid Supabase session exists (handles page-reload auto-login).
   // Inside _initAuth(), _tryAutoLogin() is called as the fallback when supabase-js
   // is unavailable (offline / CDN blocked).
+  // Check URL hash for password recovery token BEFORE _initAuth().
+  // Supabase puts #access_token=...&type=recovery in the URL when the user
+  // clicks a reset link. We detect it here as a belt-and-suspenders fallback
+  // in case the PASSWORD_RECOVERY onAuthStateChange event fires before the
+  // listener is fully registered.
+  (function() {
+    var hash = window.location.hash || '';
+    if (hash.indexOf('type=recovery') !== -1 && hash.indexOf('access_token') !== -1) {
+      // Show reset form immediately — _initAuth() will also fire PASSWORD_RECOVERY
+      // and call _showPasswordResetForm() again (harmless double call).
+      _showPasswordResetForm();
+    }
+  })();
+
   _initAuth();
 
   // Focus the email field only if we're still on the login screen after a short delay —
@@ -7574,6 +7588,9 @@ function _initVersionCheck() {
   setTimeout(function() {
     var ls = document.getElementById('login-screen');
     if (ls && !ls.classList.contains('hidden')) {
+      // Don't focus email if the password reset overlay is visible
+      var resetOv = document.getElementById('password-reset-overlay');
+      if (resetOv && !resetOv.classList.contains('hidden')) return;
       var e = document.getElementById('email-input');
       if (e) e.focus();
     }
