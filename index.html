@@ -20260,26 +20260,46 @@ function initApp() {
       /* ── Patch missing builtin return-home days ──────────────────────────
          When the New Trip wizard slices TRIP_DAYS to the entered end date,
          the return-journey days (e.g. Yellowstone → Fremont → Home) get cut
-         off.  They still appear on the route map (TRIP_STOPS is unaffected)
-         but disappear from the schedule.  If this custom trip uses the same
-         stops as the builtin trip and has fewer days, silently append the
-         missing days so they show as "over schedule" just as they did before.
-         We only patch if stop counts match (safe guard against user-built trips). */
-      if (ctStops.length === _BUILTIN_TRIP.stops.length && ctDays.length < _BUILTIN_TRIP.days.length) {
+         off.  They still appear on the route map markers (TRIP_STOPS has
+         lat/lng) but disappear from the schedule and sidebar.
+         Fix: for any builtin stop whose days are absent from ctDays, append
+         those days from _BUILTIN_TRIP.  Works regardless of whether the user
+         has added custom stops (no exact-count guard needed). */
+      (function() {
+        /* Build set of stopIds already represented in ctDays */
+        var _ctDayStopIds = {};
+        ctDays.forEach(function(d) { if (d.stopId) _ctDayStopIds[d.stopId] = true; });
+
+        /* Build set of stopIds in ctStops (handles both builtin + custom stops) */
+        var _ctStopIdSet = {};
+        ctStops.forEach(function(s) { _ctStopIdSet[s.id] = true; });
+
+        /* Find builtin day blocks whose stop is present in this trip's stops
+           but has NO days in ctDays yet.  Only patch stops that exist in the
+           trip's stop list (safe guard: won't add stops the user deleted). */
         var _existingDayNums = {};
         ctDays.forEach(function(d) { _existingDayNums[d.day] = true; });
-        var _missingDays = _BUILTIN_TRIP.days.filter(function(d) { return !_existingDayNums[d.day]; });
-        if (_missingDays.length > 0) {
-          ctDays = ctDays.concat(_missingDays);
-          ct.days = ctDays;
-          ct.totalDays = _BUILTIN_TRIP.totalDays;
+
+        var _patchDays = _BUILTIN_TRIP.days.filter(function(d) {
+          return d.stopId
+            && _ctStopIdSet[d.stopId]        /* stop is in this trip */
+            && !_ctDayStopIds[d.stopId]      /* but has no days yet  */
+            && !_existingDayNums[d.day];     /* and day# not a dup   */
+        });
+
+        if (_patchDays.length > 0) {
+          ctDays = ctDays.concat(_patchDays);
+          /* Re-sort by day number so schedule renders in correct order */
+          ctDays.sort(function(a, b) { return (a.day || 0) - (b.day || 0); });
+          ct.days     = ctDays;
+          ct.totalDays = Math.max(ct.totalDays || 0, _BUILTIN_TRIP.totalDays);
           ct.endDate   = _BUILTIN_TRIP.endDate;
           appState.customTripData = ct;
-          /* Persist the patched data so this fix only runs once */
+          /* Persist so the patch only needs to run once per trip */
           saveState(appState);
           setTimeout(function() { if (typeof syncToCloud === 'function') syncToCloud(); }, 2000);
         }
-      }
+      })();
 
       TRIP_DAYS  = ctDays;
       if (ct.startDate) CONFIG.startDate = ct.startDate;
@@ -23542,6 +23562,8 @@ function loadWeather() {
   TRIP_STOPS.forEach(function(stop) {
     var sid = stop.id;
     if (!appState.weather[sid]) appState.weather[sid] = {};
+    /* Skip stops with no coordinates — would produce a 400 from open-meteo */
+    if (!stop.lat || !stop.lng) return;
     var stopDays = TRIP_DAYS.filter(function(d) { return d.stopId === sid; });
     if (!stopDays.length) return;
     var firstDate = stopDays[0].date;

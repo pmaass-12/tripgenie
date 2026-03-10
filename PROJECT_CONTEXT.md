@@ -71,6 +71,19 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 27 (continued 3) — 2026-03-10
+
+**Fix weather null coords 400 error + robust missing-days patch.**
+
+- **`loadWeather()` null-coordinate guard** (index.html):
+  - Root cause: `loadWeather` iterated ALL `TRIP_STOPS` including any with `lat: null / lng: null`. This produced `latitude=null&longitude=null` in the open-meteo URL → 400 Bad Request.
+  - Fix: added `if (!stop.lat || !stop.lng) return;` guard before building the fetch URL.
+
+- **Missing return-home days patch — condition made robust** (index.html `initApp`):
+  - Root cause: previous patch required `ctStops.length === _BUILTIN_TRIP.stops.length`. If the user added a custom stop (or deleted one), this exact-count check failed silently.
+  - New logic: builds `_ctDayStopIds` (stops already in ctDays) and `_ctStopIdSet` (stops in this trip). Finds ALL builtin days whose stop exists in the trip but has no days yet, appends them, re-sorts by day#, saves. No longer requires exact stop count.
+  - Effect: Albert Lea (MN), Wisconsin Dells (WI), Fremont (IN) and any other return-home stops reliably appear in the map sidebar and get numbered on the route map.
+
 ### Session 27 (continued 2) — 2026-03-10
 
 **Add Destination geocoding fix + expanded test coverage.**
