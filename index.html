@@ -6853,7 +6853,10 @@ async function _showMyTrips() {
   var overlay = document.getElementById('my-trips-overlay');
   if (!overlay) { console.error('my-trips-overlay not found'); _doLegacyInitAfterSbAuth(); return; }
   overlay.style.display = 'flex';
-  document.getElementById('login-overlay').style.display = 'none';
+  var _loginOv = document.getElementById('login-overlay');
+  if (_loginOv) _loginOv.style.display = 'none';
+  var _loginSc = document.getElementById('login-screen');
+  if (_loginSc) _loginSc.classList.add('hidden');
   document.getElementById('my-trips-list').innerHTML = '<div style="text-align:center;padding:40px;color:var(--text-2);">Loading your trips…</div>';
 
   var client = _initSbClient();
