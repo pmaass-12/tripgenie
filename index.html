@@ -6945,6 +6945,11 @@ async function _deleteTrip(tripId, btn) {
 
 function _doLegacyInitAfterSbAuth() {
   _saveSession('family', _sbUser ? (_sbUser.email || 'Traveler').split('@')[0] : 'User');
+  /* Ensure #app is visible — it starts hidden and must be shown before initApp renders into it */
+  var _appEl = document.getElementById('app');
+  if (_appEl) _appEl.classList.remove('hidden');
+  var _ls = document.getElementById('login-screen');
+  if (_ls) _ls.classList.add('hidden');
   initApp();
   var _lo = document.getElementById('login-overlay');
   if (_lo) _lo.style.display = 'none';
