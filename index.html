@@ -6955,6 +6955,11 @@ function _doLegacyInitAfterSbAuth() {
   if (_lo) _lo.style.display = 'none';
   var mto = document.getElementById('my-trips-overlay');
   if (mto) mto.style.display = 'none';
+  /* Push a browser history entry so the back button returns to the app
+     instead of jumping back to the login screen (or a previous URL).
+     replaceState replaces the initial bare load; subsequent tab switches
+     reuse the same #app entry so back only pops one level.            */
+  try { history.replaceState({ tgView: 'app' }, '', location.pathname + location.search + '#app'); } catch(e) {}
   /* Start cloud auto-snapshot timer once the user is authenticated */
   if (_sbUser) _startAutoSnapshot();
   /* Start Realtime cross-device sync now that _currentTripId is set */
@@ -7290,6 +7295,28 @@ function _syncToSupabaseTrips(state) {
     .eq('user_id', _sbUser.id);  // belt-and-suspenders alongside RLS
   }, 1200);
 }
+
+/* ── BROWSER BACK BUTTON HANDLER ────────────────────────────────────────
+   Without history management a SPA shows the login screen when the user
+   presses Back (the previous history entry is the bare page load).
+   Strategy:
+     • _doLegacyInitAfterSbAuth() calls history.replaceState({tgView:'app'})
+       so the "app is open" state is in history.
+     • When popstate fires and the incoming state is NOT tgView:'app', the
+       user is navigating away from the app — intercept and treat it as a
+       sign-out / return-to-trips action rather than a full page reload.     */
+window.addEventListener('popstate', function(e) {
+  if (!_sbUser) return;  // not logged in — nothing to intercept
+  var state = e.state || {};
+  if (state.tgView === 'app') return; // moving within app history — fine
+  /* User pressed Back and we're leaving the #app state.
+     Push the app state back so we stay on this page, then show My Trips. */
+  try { history.pushState({ tgView: 'app' }, '', location.pathname + location.search + '#app'); } catch(ex) {}
+  /* Show "Your Trips" overlay (nicer than a hard reload / login flash) */
+  if (typeof _showMyTrips === 'function') {
+    _showMyTrips();
+  }
+});
 
 async function _sbSignOut() {
   var client = _initSbClient();
