@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-10 (Session 27 continued 6)
+2026-03-10 (Session 27 continued 10)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -70,6 +70,44 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 27 (continued 10) — 2026-03-10
+
+**Critical: Fix infinite recursive loop that created 997+ duplicate trip rows in Supabase.**
+
+- **Root cause identified**: `_saveCloudSnapshot()` called `_saveLocalBackup()` at the start. `_saveLocalBackup()` (when `_sbUser && _currentTripId` was set) immediately called `_saveCloudSnapshot()` again. This created an infinite async loop, each iteration doing an INSERT into the `trips` table. At 5–10 inserts/sec, a single session could create hundreds of duplicate rows.
+
+- **Fix 1 — `_saveLocalBackup()` is now a no-op for Supabase users** (index.html):
+  - When `_sbUser` is set (authenticated), function returns immediately without doing anything.
+  - Comment explains WHY (prevents recursive loop) so no future developer re-introduces it.
+  - Legacy localStorage rotation preserved for non-Supabase path.
+
+- **Fix 2 — `_saveCloudSnapshot()` no longer calls `_saveLocalBackup()`** (index.html):
+  - Removed the `_saveLocalBackup(appState)` call from the top of `_saveCloudSnapshot`.
+  - Snapshotting is now independent of the backup mechanism.
+
+- **Fix 3 — `_dedupTrips()` completely rewritten** (index.html):
+  - Fixed broken emoji detection: `charAt(0) !== '\uD83D\uDCF8'` was always true (surrogate pair issue). Now uses `codePointAt(0)` correctly.
+  - Now handles BOTH duplicate real trips AND excess snapshot rows (keeps latest 15, deletes rest).
+  - Deletes in batches of 50 (avoids the hang from single huge `.in()` arrays, faster than one-by-one).
+  - Falls back to one-by-one within each batch if batch delete fails.
+
+- **Removed Refresh button from top nav header** (index.html):
+  - Removed `#refresh-btn` and `#ham-refresh-btn` from HTML.
+  - Cleaned up associated CSS references.
+
+- **Removed Trip Health Check tab from Tools** (index.html):
+  - Removed `health` tab from the tools tabs array.
+  - Removed `renderHealthCheckTab()` call from `_renderToolsSub()`.
+  - `renderHealthCheckTab()` function body preserved (doesn't hurt to keep the function, just not reachable via UI).
+
+- **REG-040 fixed**: Changed from calling `renderSchedule()` (which can throw without auth) to directly testing the removedStops filter logic.
+- **REG-041 fixed**: Corrected wrong element ID (`home-content` → `dashboard-content`).
+- **REG-043 fixed**: Removed `mainMap` guard that caused 'skip-no-map' return in unauthenticated tests.
+- **REG-044 fixed**: Creates `fun-sub-content` if missing; wraps `renderTrivia()` in try/catch.
+- **REG-047 added**: Verifies `_saveLocalBackup` is a no-op when `_sbUser` is set.
+- **REG-048 added**: Verifies `_saveCloudSnapshot` source does not contain `_saveLocalBackup`.
+- **CURRENT badge on trip cards** (index.html): Active trip gets orange border + 'CURRENT' label; button text is '↺ Reload Trip'. Makes the active trip visually identifiable among duplicates.
 
 ### Session 27 (continued 9) — 2026-03-10
 

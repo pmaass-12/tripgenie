@@ -699,9 +699,8 @@
       /* Mode toggle: icon only */
       .hdr-mode-label { display: none !important; }
 
-      /* Help + Refresh: icon only on small screens */
+      /* Help: icon only on small screens */
       .hdr-help-label    { display: none !important; }
-      .hdr-refresh-label { display: none !important; }
 
       /* Header padding */
       #app-header { padding: 0 14px; min-height: 52px; }
@@ -873,9 +872,9 @@
       .logout-btn { width: 30px; height: 30px; font-size: .85rem; }
       #tg-btn { padding: 6px 9px; font-size: .72rem; gap: 4px; border-radius: 100px; }
       .tg-btn-label { display: none; }
-      /* Mobile: hide plan/change/help/refresh/debug — these go into hamburger */
+      /* Mobile: hide plan/change/help/debug — these go into hamburger */
       #plan-trip-btn, #change-plan-btn { display: none !important; }
-      #help-btn, #refresh-btn, #debug-console-btn { display: none !important; }
+      #help-btn, #debug-console-btn { display: none !important; }
       /* Mobile: hide trip selector from header — accessible via hamburger */
       #trip-selector-wrap { display: none !important; }
       /* Mobile: show hamburger */
@@ -885,7 +884,7 @@
       .header-right { gap: 6px; }
       .header-left { gap: 6px; }
       /* Mobile: show trip-name and extra buttons inside hamburger */
-      #ham-trip-name, #ham-switch-trip-btn, #ham-refresh-btn { display: block !important; }
+      #ham-trip-name, #ham-switch-trip-btn { display: block !important; }
 
       /* ── Nav: bottom bar, in-flow (reliable iOS sticky) ────────── */
       #app-nav {
@@ -2875,7 +2874,6 @@
         <span style="background:var(--orange);color:#fff;border-radius:100px;padding:4px 11px;font-size:.72rem;font-weight:800;white-space:nowrap;font-family:var(--font);"><i class="fa-solid fa-sliders"></i><span class="hdr-mode-label"> Planning</span></span>
       </div>
       <button id="help-btn" onclick="openHelpSearch()" title="Search the app — ask anything" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:100px;padding:5px 11px;font-size:.72rem;font-weight:800;cursor:pointer;font-family:var(--font);white-space:nowrap;display:flex;align-items:center;gap:5px;"><i class="fa-solid fa-magnifying-glass"></i><span class="hdr-help-label"> Help</span></button>
-      <button id="refresh-btn" onclick="_refreshAll()" title="Refresh all views — syncs schedule, map, dashboard" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.28);color:#fff;border-radius:100px;padding:5px 12px;font-size:.72rem;font-weight:800;cursor:pointer;line-height:1;display:flex;align-items:center;gap:5px;font-family:var(--font);" aria-label="Refresh"><i class="fa-solid fa-rotate-right"></i><span class="hdr-refresh-label"> Refresh</span></button>
       <button id="dark-mode-btn" onclick="toggleDarkMode()" title="Toggle dark/light mode" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:1rem;cursor:pointer;line-height:1;display:flex;align-items:center;">🌙</button>
       <button id="debug-console-btn" onclick="_dbgOpen()" title="Debug console" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:100px;padding:6px 10px;font-size:.85rem;cursor:pointer;line-height:1;display:flex;align-items:center;position:relative;"><i class="fa-solid fa-terminal"></i><span id="debug-err-badge" style="display:none;position:absolute;top:-3px;right:-3px;background:#e53e3e;color:#fff;border-radius:50%;width:14px;height:14px;font-size:.6rem;font-weight:900;align-items:center;justify-content:center;line-height:1;"></span></button>
       <button class="logout-btn" id="logout-btn" title="Logout">
@@ -2897,9 +2895,6 @@
       </button>
       <button class="ham-menu-btn" onclick="_hamAct(openHelpSearch)">
         <i class="fa-solid fa-magnifying-glass"></i> Help
-      </button>
-      <button class="ham-menu-btn" id="ham-refresh-btn" style="display:none;" onclick="_hamAct(_refreshAll)">
-        <i class="fa-solid fa-rotate-right"></i> Refresh
       </button>
     </div>
   </header>
@@ -6158,14 +6153,12 @@ function syncToCloud(state) {
 }
 
 function _saveLocalBackup(state) {
-  /* When a Supabase user is logged in, delegate to cloud snapshots so
-     backups are cross-device and don't consume localStorage quota.
-     For legacy / offline sessions keep the 3-slot localStorage rotation. */
-  if (_sbUser && _currentTripId) {
-    // Non-blocking cloud snapshot — failures are silent (best-effort)
-    _saveCloudSnapshot('Auto').catch(function() {});
-    return;
-  }
+  /* Supabase users: trip data is safely persisted in the `trips` table via
+     _syncToSupabaseTrips() and the snapshot system.  Do NOT call
+     _saveCloudSnapshot() here — that would create an infinite recursive loop:
+       _saveCloudSnapshot → _saveLocalBackup → _saveCloudSnapshot → …
+     Just return immediately; the cloud is already the source of truth.        */
+  if (_sbUser) return;
   // Legacy offline fallback — rotate up to 3 local slots
   try {
     var now  = new Date().toISOString();
@@ -6896,14 +6889,16 @@ function _renderTripCards(trips) {
     html += '<div style="text-align:center;color:var(--text-2);padding:30px 0;font-size:.9rem;">No trips yet — create your first one!</div>';
   }
   trips.forEach(function(t) {
+    var isActive = (t.id === _currentTripId);
     var dateStr = (t.start_date && t.end_date) ? (t.start_date + ' → ' + t.end_date) : (t.start_date || 'Dates TBD');
     var updStr  = t.updated_at ? 'Updated ' + new Date(t.updated_at).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
-    html += '<div style="background:var(--card);border-radius:14px;padding:18px 18px 14px;box-shadow:0 2px 10px rgba(0,0,0,.07);display:flex;flex-direction:column;gap:8px;position:relative;">'
+    html += '<div style="background:' + (isActive ? '#fff8f0' : 'var(--card)') + ';border:2px solid ' + (isActive ? 'var(--orange)' : 'transparent') + ';border-radius:14px;padding:18px 18px 14px;box-shadow:0 2px 10px rgba(0,0,0,.07);display:flex;flex-direction:column;gap:8px;position:relative;">'
+      + (isActive ? '<div style="position:absolute;top:-1px;right:12px;background:var(--orange);color:#fff;font-size:.6rem;font-weight:900;padding:2px 8px;border-radius:0 0 6px 6px;letter-spacing:.04em;">CURRENT</div>' : '')
       + '<div style="font-weight:900;font-size:1rem;color:var(--text);">🗺 ' + _escHtml(t.name) + '</div>'
       + '<div style="font-size:.78rem;color:var(--text-2);">' + dateStr + '</div>'
       + (updStr ? '<div style="font-size:.72rem;color:var(--text-3);">' + updStr + '</div>' : '')
       + '<div style="display:flex;gap:8px;margin-top:4px;">'
-      + '<button onclick="_openTrip(\'' + t.id + '\')" style="flex:1;background:var(--orange);color:#fff;border:none;border-radius:100px;padding:8px 0;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);">Open Trip</button>'
+      + '<button onclick="_openTrip(\'' + t.id + '\')" style="flex:1;background:var(--orange);color:#fff;border:none;border-radius:100px;padding:8px 0;font-size:.82rem;font-weight:800;cursor:pointer;font-family:var(--font);">' + (isActive ? '↺ Reload Trip' : 'Open Trip') + '</button>'
       + '<button onclick="_deleteTrip(\'' + t.id + '\',this)" style="background:#fff0ef;border:1px solid #fca5a5;color:#dc2626;border-radius:100px;padding:8px 14px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);">Delete</button>'
       + '</div>'
       + '</div>';
@@ -6955,9 +6950,9 @@ async function _dedupTrips() {
   var client = _initSbClient();
   if (!client || !_sbUser) return;
   var btn = document.getElementById('dedup-trips-btn');
-  if (btn) { btn.textContent = '⏳ Removing…'; btn.disabled = true; }
+  if (btn) { btn.textContent = '⏳ Loading…'; btn.disabled = true; }
 
-  /* Load all non-snapshot trips */
+  /* Load ALL trips for this user */
   var { data, error } = await client.from('trips')
     .select('id,name,updated_at')
     .eq('user_id', _sbUser.id)
@@ -6967,52 +6962,83 @@ async function _dedupTrips() {
     if (btn) { btn.textContent = '🧹 Remove Duplicates'; btn.disabled = false; }
     return;
   }
-  var nonSnaps = data.filter(function(t) { return !t.name || t.name.charAt(0) !== '\uD83D\uDCF8'; });
 
-  /* Group by name; first entry per name = most recent (already sorted desc by updated_at).
-     If the currently active trip is in a duplicate group, always keep that one. */
+  /* Properly detect snapshot rows using codePointAt (emoji is a surrogate pair) */
+  var SNAP_CP = '\u{1F4F8}'; // 📸 as a code point
+  function _isSnap(t) { return t.name && t.name.codePointAt(0) === '📸'.codePointAt(0); }
+
+  var snapTrips = data.filter(_isSnap);
+  var realTrips = data.filter(function(t) { return !_isSnap(t); });
+
+  /* Real trips: group by name; keep the active trip or most recent per name */
   var seen = {}, toDelete = [];
-  nonSnaps.forEach(function(t) {
-    var key = t.name || t.id;
+  realTrips.forEach(function(t) {
+    var key = (t.name || '').trim() || t.id;
     if (!seen[key]) {
-      /* Keep this one — prefer the active trip if it appears later in the list */
       seen[key] = t.id;
     } else if (t.id === _currentTripId) {
-      /* Active trip should survive — mark the previously-kept one for deletion instead */
       toDelete.push(seen[key]);
       seen[key] = t.id;
     } else {
       toDelete.push(t.id);
     }
   });
+  /* Make sure the active trip is never in toDelete */
+  toDelete = toDelete.filter(function(id) { return id !== _currentTripId; });
+
+  /* Snapshots: keep only the 15 most recent; delete the rest */
+  var KEEP_SNAPS = 15;
+  if (snapTrips.length > KEEP_SNAPS) {
+    snapTrips.slice(KEEP_SNAPS).forEach(function(t) { toDelete.push(t.id); });
+  }
 
   if (toDelete.length === 0) {
-    alert('No duplicate trips found!');
     if (btn) { btn.textContent = '🧹 Remove Duplicates'; btn.disabled = false; }
+    alert('Nothing to clean up — your trips list is already tidy!');
     return;
   }
 
-  var confirmed = confirm('Delete ' + toDelete.length + ' duplicate trip' + (toDelete.length === 1 ? '' : 's') + '? Your most recently updated trip in each group will be kept.');
+  var confirmed = confirm(
+    'This will delete ' + toDelete.length + ' item(s):\n' +
+    '  • ' + (toDelete.length - (snapTrips.length > KEEP_SNAPS ? snapTrips.length - KEEP_SNAPS : 0)) + ' duplicate trip(s)\n' +
+    '  • ' + (snapTrips.length > KEEP_SNAPS ? snapTrips.length - KEEP_SNAPS : 0) + ' excess snapshot(s) (keeping newest 15)\n\n' +
+    'Your active trip and the 15 most recent snapshots will be kept.'
+  );
   if (!confirmed) {
     if (btn) { btn.textContent = '🧹 Remove Duplicates'; btn.disabled = false; }
     return;
   }
 
-  /* Delete one-by-one using the same pattern as _deleteTrip (batch .in() can hang) */
+  /* Delete in batches of 50 — avoids hanging that occurs with very large .in() arrays */
   var failed = 0;
-  for (var di = 0; di < toDelete.length; di++) {
-    if (btn) btn.textContent = '⏳ ' + (di + 1) + ' / ' + toDelete.length + '…';
+  var BATCH = 50;
+  for (var i = 0; i < toDelete.length; i += BATCH) {
+    var chunk = toDelete.slice(i, i + BATCH);
+    if (btn) btn.textContent = '⏳ ' + Math.min(i + BATCH, toDelete.length) + ' / ' + toDelete.length + '…';
     try {
       var { error: delErr } = await client.from('trips').delete()
-        .eq('id', toDelete[di])
+        .in('id', chunk)
         .eq('user_id', _sbUser.id);
-      if (delErr) failed++;
+      if (delErr) {
+        /* Batch failed — fall back to one-by-one for this chunk */
+        for (var j = 0; j < chunk.length; j++) {
+          try {
+            var { error: soloErr } = await client.from('trips').delete()
+              .eq('id', chunk[j]).eq('user_id', _sbUser.id);
+            if (soloErr) failed++;
+          } catch(e) { failed++; }
+        }
+      }
     } catch(e) { failed++; }
   }
 
   if (btn) { btn.textContent = '🧹 Remove Duplicates'; btn.disabled = false; }
-  if (failed > 0) alert(failed + ' trip(s) could not be deleted — try again.');
-  _showMyTrips(); /* Reload the list */
+  if (failed > 0) {
+    alert(failed + ' item(s) could not be deleted. This may be a permissions issue — try again.');
+  } else {
+    showToast('✅ Cleaned up ' + toDelete.length + ' item(s)', 3000);
+  }
+  _showMyTrips();
 }
 
 function _doLegacyInitAfterSbAuth() {
@@ -7105,8 +7131,6 @@ function _toggleSnapPreview(id) {
 }
 
 async function _saveCloudSnapshot(label) {
-  /* Always take a local backup regardless of cloud state */
-  _saveLocalBackup(appState);
   var client = _initSbClient();
   if (!client || !_sbUser) {
     showToast('📸 Snapshot saved locally (not signed in for cloud)', 3000);
@@ -25588,7 +25612,6 @@ function renderTools() {
     { id:'profiles', icon:'👤', label:'Profiles'      },
     { id:'snapshots',icon:'📸', label:'Snapshots'      },
     { id:'auditlog', icon:'📋', label:'Audit Log'     },
-    { id:'health',   icon:'🩺', label:'Health Check'  },
     { id:'settings', icon:'⚙️', label:'Settings'       },
     { id:'labs',     icon:'🧪', label:'Labs'           }
   ];
@@ -25613,7 +25636,6 @@ function _renderToolsSub() {
   if (_toolsTab === 'profiles') renderProfiles();
   if (_toolsTab === 'snapshots') renderSnapshotsTab();
   if (_toolsTab === 'auditlog') renderAuditLog();
-  if (_toolsTab === 'health')   renderHealthCheckTab();
   if (_toolsTab === 'settings') renderTripSettings();
   if (_toolsTab === 'labs')     renderLabsTools();
 }
