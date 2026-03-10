@@ -12071,6 +12071,11 @@ function renderSchedule() {
 
     // Phase header when phase OR stop changes — each stop gets its own blue bar
     // (handles generic region phases like "Southwest" containing White Sands + Albuquerque)
+    /* Save origin stop ID BEFORE any phase-change update so the departure bookend
+       card can correctly show "Texas Hill Country · Morning departure" rather than
+       the destination stop name (the bug: lastStopId was updated to destination
+       before _originStop was read). */
+    var _originStopId = lastStopId;
     var _phaseJustChanged = (d.phase !== lastPhase || d.stopId !== lastStopId);
     if (_phaseJustChanged) {
       var _dIsHome = d.sleepType === 'home';
@@ -12143,8 +12148,8 @@ function renderSchedule() {
       /* ── "Departure morning" bookend card ──────────────────────────────────
          Shows before the drive separator: the origin stop for the departure morning.
          Gives the traveller visibility into "I'm leaving Nashville this morning."   */
-      var _originStop = lastStopId ? getStop(lastStopId) : null;
-      if (_originStop && !removedStopIds[lastStopId] && _originStop.sleepType !== 'home') {
+      var _originStop = _originStopId ? getStop(_originStopId) : null;
+      if (_originStop && !removedStopIds[_originStopId] && _originStop.sleepType !== 'home') {
         var _dBkg = isToday ? 'background:var(--orange-l);border-left:4px solid var(--orange);' : isBefore ? 'background:#fafaf8;opacity:.75;' : 'background:var(--card);';
         var _depTime = (appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].departTime)
           || (appState.drivingPrefs && appState.drivingPrefs.departureTime) || '08:00';
@@ -19432,16 +19437,19 @@ function lookupDestination() {
   document.getElementById('adm-loading-msg').textContent = 'Verifying \u201c' + city + '\u201d\u2026';
   _admSetStep('loading');
 
-  var prompt = 'A family is planning an RV road trip and typed: "' + city + '".\n\n'
-    + 'Identify the best US destination CITY or REGION they should visit.\n'
-    + 'IMPORTANT: If they typed a specific attraction, venue, or landmark (not a city/region), '
-    + 'return the CITY it is located in \u2014 not the attraction itself.\n\n'
+  var prompt = 'A family is planning an RV road trip and typed this destination: "' + city + '".\n\n'
+    + 'Your job is to CONFIRM the exact place they typed — do NOT suggest a different or "better" destination.\n'
+    + 'Rules:\n'
+    + '1. If they typed a specific city/town/region (e.g. "Hazen, Arkansas"), confirm that exact place.\n'
+    + '2. If they typed a specific attraction or landmark, return the city it is located in.\n'
+    + '3. Only mark VALID as "no" if the place does not exist in the US at all.\n'
+    + '4. Never substitute a different destination — even if the typed place is small or obscure.\n\n'
     + 'Respond in this EXACT format with no extra text:\n'
-    + 'CONFIRMED: [City or Region, e.g. "El Paso, Texas" \u2014 never a specific venue]\n'
-    + 'ATTRACTION: [the specific venue/attraction name if they typed one, otherwise leave blank]\n'
-    + 'VALID: [yes or no \u2014 is this a real visitable place in the US?]\n'
-    + 'DESC: [1-2 sentences about why this city/region is great for a family with young kids on an RV trip]\n'
-    + 'DAYS: [recommended number of days to spend, just a single digit like 2]';
+    + 'CONFIRMED: [The exact city/region they typed, e.g. "Hazen, Arkansas"]\n'
+    + 'ATTRACTION: [specific venue/attraction name if they typed one, otherwise leave blank]\n'
+    + 'VALID: [yes or no \u2014 does this place exist in the US?]\n'
+    + 'DESC: [1-2 sentences about this place — what it is and why an RV traveler might stop there]\n'
+    + 'DAYS: [suggested overnight stops, just a single digit like 1]';
 
   var body = JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{maxOutputTokens:200,temperature:0.3} });
   fetch(GEMINI_URL, { method:'POST', headers:{'Content-Type':'application/json'}, body:body })
