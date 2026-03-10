@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-10 (Session 27 continued 10)
+2026-03-10 (Session 27 continued 11)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -70,6 +70,18 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 27 (continued 11) — 2026-03-10
+
+**Remove snapshot system entirely — Supabase trips table is the source of truth.**
+
+- `_saveCloudSnapshot()` and `_pruneCloudSnapshots()` stubbed to no-ops (disabled comment)
+- `_startAutoSnapshot()` and `_startupSnapshot()` stubbed to no-ops
+- Removed both `_startupSnapshot()` call sites (legacy login path + session-resume path)
+- Removed `_startAutoSnapshot()` call from `_doLegacyInitAfterSbAuth()`
+- Removed Snapshots tab from Tools tab bar + `_renderToolsSub()`
+- `_dedupTrips()` now deletes ALL snapshot rows (not keep 15); confirm dialog updated
+- Use **audit log** for undo/change history going forward
 
 ### Session 27 (continued 10) — 2026-03-10
 

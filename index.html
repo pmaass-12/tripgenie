@@ -6570,7 +6570,6 @@ async function _applyProfile(name, color) {
       loadFromCloud(function() { initApp(); applyFriendMode(); });
     } else {
       showToast('&#9729;&#65039; Loading your trip data…', 1800);
-      _startupSnapshot();
       loadFromCloud(function() { initApp(); _updateHeaderProfile(); if (_userName) { _setSyncStatus('&#9729;', 'Hi ' + _userName + '!', 'rgba(255,255,255,.7)'); setTimeout(function(){ _setSyncStatus('&#9729;','Saved (' + _userName + ')','rgba(255,255,255,.45)'); }, 2500); } });
     }
   }
@@ -6986,11 +6985,8 @@ async function _dedupTrips() {
   /* Make sure the active trip is never in toDelete */
   toDelete = toDelete.filter(function(id) { return id !== _currentTripId; });
 
-  /* Snapshots: keep only the 15 most recent; delete the rest */
-  var KEEP_SNAPS = 15;
-  if (snapTrips.length > KEEP_SNAPS) {
-    snapTrips.slice(KEEP_SNAPS).forEach(function(t) { toDelete.push(t.id); });
-  }
+  /* Snapshots: delete ALL — snapshot system is disabled, Supabase is source of truth */
+  snapTrips.forEach(function(t) { toDelete.push(t.id); });
 
   if (toDelete.length === 0) {
     if (btn) { btn.textContent = '🧹 Remove Duplicates'; btn.disabled = false; }
@@ -6998,11 +6994,13 @@ async function _dedupTrips() {
     return;
   }
 
+  var dupCount  = toDelete.filter(function(id) { return !snapTrips.some(function(t) { return t.id === id; }); }).length;
+  var snapCount = snapTrips.length;
   var confirmed = confirm(
     'This will delete ' + toDelete.length + ' item(s):\n' +
-    '  • ' + (toDelete.length - (snapTrips.length > KEEP_SNAPS ? snapTrips.length - KEEP_SNAPS : 0)) + ' duplicate trip(s)\n' +
-    '  • ' + (snapTrips.length > KEEP_SNAPS ? snapTrips.length - KEEP_SNAPS : 0) + ' excess snapshot(s) (keeping newest 15)\n\n' +
-    'Your active trip and the 15 most recent snapshots will be kept.'
+    '  • ' + dupCount + ' duplicate trip(s)\n' +
+    '  • ' + snapCount + ' old snapshot(s) (snapshots are no longer used)\n\n' +
+    'Your active trip will be kept.'
   );
   if (!confirmed) {
     if (btn) { btn.textContent = '🧹 Remove Duplicates'; btn.disabled = false; }
@@ -7058,8 +7056,6 @@ function _doLegacyInitAfterSbAuth() {
      replaceState replaces the initial bare load; subsequent tab switches
      reuse the same #app entry so back only pops one level.            */
   try { history.replaceState({ tgView: 'app' }, '', location.pathname + location.search + '#app'); } catch(e) {}
-  /* Start cloud auto-snapshot timer once the user is authenticated */
-  if (_sbUser) _startAutoSnapshot();
   /* Start Realtime cross-device sync now that _currentTripId is set */
   _startRealtimeSync();
 }
@@ -7074,21 +7070,10 @@ var _snapAutoTimer = null;
 var _snapCache     = {};  // snapId → state object, populated during renderSnapshotsTab
 var _startupSnapDone = false; // prevent double-fire on session-resume path
 
-/* Called right before loadFromCloud so every device preserves its local state
-   before cloud sync can overwrite it.  Always writes a local backup; also pushes
-   a cloud snapshot (async, non-blocking) when the user is authenticated and the
-   local trip has meaningful data.                                               */
-function _startupSnapshot() {
-  if (_startupSnapDone) return;
-  _startupSnapDone = true;
-  var stops = (appState && appState.customTripData && appState.customTripData.stops) || [];
-  if (stops.length < 2) return; // nothing worth snapshotting
-  _saveLocalBackup(appState);
-  if (_sbUser) {
-    /* Fire-and-forget — don't await, don't block app init */
-    _saveCloudSnapshot('Startup').catch(function() {});
-  }
-}
+/* Snapshot system disabled — Supabase trips table is the source of truth.
+   Snapshots created infinite recursive loops and cluttered the trips table.
+   Use the audit log for undo/history instead.                                */
+function _startupSnapshot() { /* disabled */ }
 
 /* Toggle an inline stop-list preview beneath a snapshot card */
 function _toggleSnapPreview(id) {
@@ -7130,54 +7115,10 @@ function _toggleSnapPreview(id) {
   }
 }
 
-async function _saveCloudSnapshot(label) {
-  var client = _initSbClient();
-  if (!client || !_sbUser) {
-    showToast('📸 Snapshot saved locally (not signed in for cloud)', 3000);
-    return;
-  }
-  var stops = (appState.customTripData && appState.customTripData.stops || []).length;
-  var ts    = new Date();
-  var name  = '\uD83D\uDCF8 '
-    + ts.toLocaleDateString('en-US', {month:'short',day:'numeric',year:'numeric'}) + ' '
-    + ts.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})
-    + (label ? ' \u2014 ' + label : '')
-    + ' (' + stops + ' stops)';
-  try {
-    var insResult = await client.from('trips').insert({
-      user_id:    _sbUser.id,
-      name:       name,
-      trip_data:  appState,
-      start_date: CONFIG && CONFIG.startDate,
-      end_date:   CONFIG && CONFIG.endDate,
-      updated_at: new Date().toISOString()
-    });
-    if (!insResult.error) {
-      _snapLastSaved = Date.now();
-      showToast('\uD83D\uDCF8 Snapshot saved to cloud!', 2500);
-      _pruneCloudSnapshots();
-      if (_toolsTab === 'snapshots') renderSnapshotsTab();
-    } else {
-      showToast('\u274C Snapshot failed: ' + (insResult.error.message || 'unknown'), 3500);
-    }
-  } catch(e) { showToast('\u274C Snapshot failed', 3000); }
-}
-
-async function _pruneCloudSnapshots() {
-  var client = _initSbClient();
-  if (!client || !_sbUser) return;
-  try {
-    var res = await client.from('trips')
-      .select('id, updated_at')
-      .eq('user_id', _sbUser.id)
-      .like('name', '\uD83D\uDCF8%')
-      .order('updated_at', { ascending: false });
-    if (res.data && res.data.length > 15) {
-      var toDelete = res.data.slice(15).map(function(r) { return r.id; });
-      await client.from('trips').delete().in('id', toDelete);
-    }
-  } catch(e) {}
-}
+/* Snapshot system disabled — no new snapshots will be created.
+   Use audit log for undo/history.                               */
+async function _saveCloudSnapshot(label) { /* disabled */ }
+async function _pruneCloudSnapshots()    { /* disabled */ }
 
 async function _restoreFromCloudSnapshot(snapId, safeLabel) {
   var label = decodeURIComponent(safeLabel);
@@ -7294,17 +7235,8 @@ async function renderSnapshotsTab() {
   }
 }
 
-/* Auto-snapshot timer: fires every 20 minutes if data changed */
-function _startAutoSnapshot() {
-  if (_snapAutoTimer) clearInterval(_snapAutoTimer);
-  _snapAutoTimer = setInterval(function() {
-    if (_isTestMode || _isViewer || !_sbUser) return;
-    var lastSave = appState._savedAt ? new Date(appState._savedAt).getTime() : 0;
-    if (lastSave > _snapLastSaved && Date.now() - _snapLastSaved > 19 * 60 * 1000) {
-      _saveCloudSnapshot('Auto');
-    }
-  }, 20 * 60 * 1000);
-}
+/* Auto-snapshot timer disabled — snapshot system removed. */
+function _startAutoSnapshot() { /* disabled */ }
 
 /* ── Cross-device / cross-tab real-time sync ─────────────────────────
    Replaces the localStorage 'storage' event (same-browser-only) with a
@@ -7705,7 +7637,6 @@ function _tryAutoLogin() {
     document.getElementById('login-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     if (s.mode === 'family') {
-      _startupSnapshot();
       loadFromCloud(function() {
         initApp(); _updateHeaderProfile();
         if (_userName) { _setSyncStatus('☁', 'Hi ' + _userName + '!', 'rgba(255,255,255,.7)'); setTimeout(function(){ _setSyncStatus('☁','Saved (' + _userName + ')','rgba(255,255,255,.45)'); }, 2500); }
@@ -25610,7 +25541,6 @@ function renderTools() {
     { id:'rvlog',    icon:'🚐', label:'RV Log'        },
     { id:'membook',  icon:'📖', label:'Memory Book'   },
     { id:'profiles', icon:'👤', label:'Profiles'      },
-    { id:'snapshots',icon:'📸', label:'Snapshots'      },
     { id:'auditlog', icon:'📋', label:'Audit Log'     },
     { id:'settings', icon:'⚙️', label:'Settings'       },
     { id:'labs',     icon:'🧪', label:'Labs'           }
@@ -25634,7 +25564,6 @@ function _renderToolsSub() {
   if (_toolsTab === 'rvlog')    renderRVMaintenance();
   if (_toolsTab === 'membook')  renderMemoryBook();
   if (_toolsTab === 'profiles') renderProfiles();
-  if (_toolsTab === 'snapshots') renderSnapshotsTab();
   if (_toolsTab === 'auditlog') renderAuditLog();
   if (_toolsTab === 'settings') renderTripSettings();
   if (_toolsTab === 'labs')     renderLabsTools();
