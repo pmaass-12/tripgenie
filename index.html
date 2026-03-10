@@ -6883,6 +6883,13 @@ async function _showMyTrips() {
 }
 
 function _renderTripCards(trips) {
+  /* Show/hide the Remove Duplicates button based on whether duplicates exist */
+  var _ddBtn = document.getElementById('dedup-trips-btn');
+  if (_ddBtn) {
+    var _namesSeen = {}, _hasDups = false;
+    trips.forEach(function(t) { var n = t.name || ''; if (_namesSeen[n]) _hasDups = true; _namesSeen[n] = true; });
+    _ddBtn.style.display = _hasDups ? 'inline-block' : 'none';
+  }
   var el = document.getElementById('my-trips-list');
   var html = '';
   if (trips.length === 0) {
@@ -6942,6 +6949,67 @@ async function _deleteTrip(tripId, btn) {
     .eq('user_id', _sbUser.id);  // cannot delete another user's trip
   if (error) { alert('Delete failed: ' + error.message); btn.textContent = 'Delete'; return; }
   _showMyTrips();
+}
+
+async function _dedupTrips() {
+  var client = _initSbClient();
+  if (!client || !_sbUser) return;
+  var btn = document.getElementById('dedup-trips-btn');
+  if (btn) { btn.textContent = '⏳ Removing…'; btn.disabled = true; }
+
+  /* Load all non-snapshot trips */
+  var { data, error } = await client.from('trips')
+    .select('id,name,updated_at')
+    .eq('user_id', _sbUser.id)
+    .order('updated_at', { ascending: false });
+  if (error || !data) {
+    alert('Could not load trips: ' + (error && error.message));
+    if (btn) { btn.textContent = '🧹 Remove Duplicates'; btn.disabled = false; }
+    return;
+  }
+  var nonSnaps = data.filter(function(t) { return !t.name || t.name.charAt(0) !== '\uD83D\uDCF8'; });
+
+  /* Group by name; first entry per name = most recent (already sorted desc by updated_at).
+     If the currently active trip is in a duplicate group, always keep that one. */
+  var seen = {}, toDelete = [];
+  nonSnaps.forEach(function(t) {
+    var key = t.name || t.id;
+    if (!seen[key]) {
+      /* Keep this one — prefer the active trip if it appears later in the list */
+      seen[key] = t.id;
+    } else if (t.id === _currentTripId) {
+      /* Active trip should survive — mark the previously-kept one for deletion instead */
+      toDelete.push(seen[key]);
+      seen[key] = t.id;
+    } else {
+      toDelete.push(t.id);
+    }
+  });
+
+  if (toDelete.length === 0) {
+    alert('No duplicate trips found!');
+    if (btn) { btn.textContent = '🧹 Remove Duplicates'; btn.disabled = false; }
+    return;
+  }
+
+  var confirmed = confirm('Delete ' + toDelete.length + ' duplicate trip' + (toDelete.length === 1 ? '' : 's') + '? Your most recently updated trip in each group will be kept.');
+  if (!confirmed) {
+    if (btn) { btn.textContent = '🧹 Remove Duplicates'; btn.disabled = false; }
+    return;
+  }
+
+  /* Delete in batches of 10 to stay within Supabase URL length limits */
+  var failed = 0;
+  for (var i = 0; i < toDelete.length; i += 10) {
+    var batch = toDelete.slice(i, i + 10);
+    var { error: delErr } = await client.from('trips').delete()
+      .in('id', batch)
+      .eq('user_id', _sbUser.id);
+    if (delErr) failed += batch.length;
+  }
+
+  if (failed > 0) alert(failed + ' trip(s) could not be deleted — try again.');
+  _showMyTrips(); /* Reload the list */
 }
 
 function _doLegacyInitAfterSbAuth() {
@@ -33864,7 +33932,10 @@ function _smRenderAll() {
     <button onclick="_sbSignOut()" style="background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);">Sign Out</button>
   </div>
   <div style="flex:1;overflow-y:auto;padding:20px 16px;">
-    <div style="font-size:1rem;font-weight:900;color:var(--text);margin-bottom:14px;">Your Trips</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+      <div style="font-size:1rem;font-weight:900;color:var(--text);">Your Trips</div>
+      <button id="dedup-trips-btn" onclick="_dedupTrips()" style="display:none;background:#fff0ef;border:1px solid #fca5a5;color:#dc2626;border-radius:100px;padding:5px 13px;font-size:.74rem;font-weight:700;cursor:pointer;font-family:var(--font);">🧹 Remove Duplicates</button>
+    </div>
     <div id="my-trips-list" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start;"></div>
   </div>
 </div>

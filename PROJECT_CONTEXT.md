@@ -71,6 +71,16 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 27 (continued 8) — 2026-03-10
+
+**Add "Remove Duplicates" one-click cleanup for duplicate trips.**
+
+- **My Trips overlay — "Remove Duplicates" button** (index.html):
+  - Added button to the "Your Trips" header row (hidden by default).
+  - `_renderTripCards()` now detects duplicate names and shows the button automatically when dupes exist.
+  - `_dedupTrips()`: loads all non-snapshot trips, groups by name, keeps the most-recently-updated per group (or the currently-active trip if it appears in a duplicate group), prompts user with count, then bulk-deletes in batches of 10. Reloads the trip list after.
+  - Solves the ~25 duplicate trips created before the `_syncToSupabaseTrips` INSERT fix was applied.
+
 ### Session 27 (continued 7) — 2026-03-10
 
 **Fix Drive Mode stale data + removed-stop blindspot.**
