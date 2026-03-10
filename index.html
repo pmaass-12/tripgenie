@@ -6869,8 +6869,8 @@ async function _showMyTrips() {
       '<div style="color:var(--red);padding:10px 0;font-size:.82rem;">⚠️ ' + error.message + '</div>');
     return;
   }
-  /* Filter out snapshot rows (names starting with 📸) so they don't pollute My Trips */
-  var nonSnaps = (data || []).filter(function(t) { return !t.name || t.name.charAt(0) !== '\uD83D\uDCF8'; });
+  /* Filter out legacy snapshot rows (names starting with 📸) */
+  var nonSnaps = (data || []).filter(function(t) { return !t.name || t.name.codePointAt(0) !== '📸'.codePointAt(0); });
   _renderTripCards(nonSnaps);
 }
 
