@@ -6998,16 +6998,19 @@ async function _dedupTrips() {
     return;
   }
 
-  /* Delete in batches of 10 to stay within Supabase URL length limits */
+  /* Delete one-by-one using the same pattern as _deleteTrip (batch .in() can hang) */
   var failed = 0;
-  for (var i = 0; i < toDelete.length; i += 10) {
-    var batch = toDelete.slice(i, i + 10);
-    var { error: delErr } = await client.from('trips').delete()
-      .in('id', batch)
-      .eq('user_id', _sbUser.id);
-    if (delErr) failed += batch.length;
+  for (var di = 0; di < toDelete.length; di++) {
+    if (btn) btn.textContent = '⏳ ' + (di + 1) + ' / ' + toDelete.length + '…';
+    try {
+      var { error: delErr } = await client.from('trips').delete()
+        .eq('id', toDelete[di])
+        .eq('user_id', _sbUser.id);
+      if (delErr) failed++;
+    } catch(e) { failed++; }
   }
 
+  if (btn) { btn.textContent = '🧹 Remove Duplicates'; btn.disabled = false; }
   if (failed > 0) alert(failed + ' trip(s) could not be deleted — try again.');
   _showMyTrips(); /* Reload the list */
 }
