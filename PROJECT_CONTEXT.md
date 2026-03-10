@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-05 (Session 19, fortieth context)
+2026-03-08 (Session 26 continued 8)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -16,7 +16,8 @@ A personal RV trip planner web app for the Maass Family RV Adventure 2026. Stati
 
 ```
 tripgenie/
-├── index.html                    # Main app (primary working file, ~27,400 lines)
+├── index.html                    # Main app (primary working file, ~30,000+ lines)
+├── test.html                     # Comprehensive standalone regression test suite (23+ tests)
 ├── index2.html                   # Alternate version / experiment
 ├── simple-mode.html              # Simplified mode variant
 ├── mockup_desktop_v2.html        # Desktop layout mockup v2
@@ -54,6 +55,426 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 26 (continued 8) — 2026-03-08
+
+**Gallery progressive thumbnail upgrade + full-screen lightbox; schedule scroll-to-today date fix; Drive agenda item synced to OSRM cache.**
+
+- **`_galleryUpgradeFromIDB(container)`** (commit `0d8f9f5`): After the gallery grid renders, this new function progressively replaces blurry 200px thumbnails with full-res images from IndexedDB. Processes 5 tiles per 120ms batch to avoid frame drops. Finds tiles by `[data-photo-id][data-media-type="image"]` selector, calls `_idbGet(photoId)` for each, and swaps `img.src` if a different full-res URL is found in IDB.
+
+- **`_doOpenMediaLightbox` rewrite** (commit `0d8f9f5`): Full-screen overlay now uses `width:min(96vw,1400px)` and `max-height:85vh` on the image element with `object-fit:contain`. Overlay fills the entire viewport (`position:fixed;inset:0`). Added a loading shimmer shown while IDB loads full-res image, Escape key to close (via `_lbEscHandler`), and a more prominent close button. Previously images displayed at ~300px regardless of screen size.
+
+- **Schedule `isToday` / `isBefore` date-string fix** (commit `e037383`): `isToday` was computed as `d.day === tripDay()` — comparing day numbers. This breaks after an AI trip rebuild because day numbers no longer align with ordinal date positions from the original start date. Fixed: added `_todayMidnight` (midnight today) and `_todayDateStr` (YYYY-MM-DD string) at the top of `renderSchedule`. In the loop, `_effDateStr` is built from `_effectiveDate` (already computed for each day). `isToday = _effDateStr === _todayDateStr` and `isBefore = _effectiveDate < _todayMidnight`. Schedule now reliably scrolls to today's card via the `id="sch-today"` target.
+
+- **Drive agenda item synced to OSRM cache** (commit `e037383`): The agenda's `drv` item in `_buildDayItems` was reading `d.miles` and `d.driveHours` — placeholder values hardcoded in `trip_data.js` as 200 mi / 4h for every drive day. The orange drive separator (`_renderDriveSepA`) already reads real values from `appState.osrmDriveCache[d.day]`. Fixed `_buildDayItems` to read the same cache first: `var _osrmHit = appState.osrmDriveCache && appState.osrmDriveCache[d.day]; var _drH = (_osrmHit && _osrmHit.driveHours) || d.driveHours || 0; var _drMi = (_osrmHit && _osrmHit.miles) || d.miles || 0;`. Now when the orange separator shows "247 mi · 4.5h", the agenda Drive item shows the same values.
+
+### Session 26 (continued 7) — 2026-03-08
+
+**Drive day "bookend" cards showing departure morning and arrival evening on same date.**
+
+- **Drive day bookend cards in `renderSchedule`**: For every drive day entry, the schedule now shows:
+  1. A compact "departure morning" card (before the orange drive separator) — shows the origin stop name, the departure time, and a "📦 Morning departure" subtitle. Clicking it opens the Day Detail for that day.
+  2. The orange drive separator (unchanged visual).
+  3. The destination phase header (unchanged).
+  4. A compact "arrival evening" card (after the phase header) — shows the destination stop name, campground/booking name if available, and estimated arrival time. Clicking it opens the Day Detail for that same day.
+
+  Both bookend cards share the same Day Detail when tapped — so they both open the Agenda for the drive day's date. This achieves the "Nashville morning / drive / Memphis evening all on March 9" layout the user wanted.
+
+- **Duplicate `id="sch-today"` prevention**: Added `_schTodayIdAssigned` flag in `renderSchedule`. When the departure morning bookend card assigns `id="sch-today"`, the flag is set and `_renderDriveSepA` + regular day cards skip emitting the same id. `_renderDriveSepA` now takes an optional `skipTodayId` parameter.
+
+### Session 26 (continued 6) — 2026-03-08
+
+**Drive time accuracy (OSRM caching); fuel budget on dashboard; schedule auto-scroll to today.**
+
+- **Drive time accuracy fixed with `osrmDriveCache` + `osrmVirtualCache`**: The root cause was that `trip_data.js` has every drive day hardcoded as `miles: 200, driveHours: 4` (placeholder values). The existing `_recalcDriveMiles` function already calls OSRM correctly, but only saved results to `appState.customTripData.days` — meaning builtin trip users lost the corrections on page reload. Fixed by:
+  - `_recalcDriveMiles` now ALSO saves each leg's result to `appState.osrmDriveCache[dayNum]` (day-number keyed) and `appState.osrmVirtualCache["fromId_toId"]` (stop-pair keyed). Both persist via `saveState`.
+  - `_renderDriveSepA` now reads `appState.osrmDriveCache[d.day]` first, falling back to `d.miles`/`d.driveHours` only if no cached value exists. All mileage/hours/arrival calculations use the cached real values.
+  - New `_prefetchVirtualRoutes()` async function: finds all stop-to-stop transitions that render as virtual separators, filters to uncached legs, calls OSRM for each, saves to `appState.osrmVirtualCache`, then calls `_refreshAll(true)` so the schedule re-renders with real times.
+  - `_renderVirtualDriveSep` now checks `appState.osrmVirtualCache["fromId_toId"]` first — uses those real OSRM distances/times if cached; falls back to Haversine × 1.3 ÷ 55 mph estimate if not yet cached.
+  - Auto-trigger in `initApp()`: 5 seconds after init, checks for drive days still at placeholder values (`miles === 200 && driveHours === 4` and no cache entry) and fires `_recalcDriveMiles(true)` + `_prefetchVirtualRoutes(true)` silently in the background.
+  - Health check condition updated: now also detects placeholder values (200/4), not just 0-mile days, so the Trip Settings → Health Check auto-fix fires correctly for trips using builtin data.
+
+- **Dashboard fuel estimate now pulls from budget**: Changed `fuelEst` in `renderDashboard` to use `appState.catBudgets.fuel` (the value entered in Tools → Budget → Fuel category) when set. Before trip: shows "X budgeted". During trip: shows "current spend estimate / total budget" scaled by trip progress %. Falls back to the mileage-based formula only if no fuel budget has been entered.
+
+- **Schedule tab auto-scrolls to today's card**: Added `id="sch-today"` to the day card div when `isToday === true` (also to `_renderDriveSepA` when `_isToday === true`). New `_schedScrollToToday()` function calls `scrollIntoView({ behavior: 'smooth', block: 'start' })` on that element. Called when the user taps the Schedule tab. No-ops if trip hasn't started yet.
+
+- **Dashboard 0 miles / 0 days on road (user question)**: These show 0 because `appState.tripStarted` hasn't been set yet. The user needs to tap the orange **Start Trip** button on the dashboard's blue Day card to activate live progress tracking. The trip started March 2, 2026 — `tripIsLive()` is true but the app waits for the explicit Start Trip action before counting miles/days on road.
+
+### Session 26 (continued 5) — 2026-03-08
+
+**Agenda "yesterday" fix; Suggestions tab current-stop jump + past-stop hiding.**
+
+- **Agenda always opens to today (`_agInitCollapsed`)**: The collapse state was initialized once per JS session (`if (_agCollapsed) return`). If the app stayed open overnight, the next day it still showed yesterday's section open. Fixed by tracking `_agCollapsedForDate` — if the tracked date differs from today's, the collapse state is fully reset, so reopening the agenda always shows the actual current day expanded.
+
+- **Suggestions tab: hide past stops + auto-scroll to current stop (`_renderFriendSuggestionsFamily`)**: Past stops (those with a `departures` entry in appState) are now hidden by default, replaced by a toggle button "🕐 Show N from past stops". Current stop (arrived but not yet departed, or today's TRIP_DAYS entry as fallback) gets a green card border + "📍 You are here" badge. The view auto-scrolls to the current stop's card on render. A `_frndLastRows` cache allows the toggle to re-render without re-fetching.
+
+- **Data overwrite concern (iPad)**: The smart merge system (`_smartMergeStates`) prevents any device's save from silently overwriting another device's edits — merges are union-based, so no edits are lost. No code change needed.
+
+### Session 26 (continued 4) — 2026-03-08
+
+**Schedule stop card shows booked RV park name; Add Destination network error improved.**
+
+- **Schedule stop card now shows booked property name (`phaseHeaderHtml`)**: When a booking confirmation exists for a stop, the accommodation pill on the blue stop card now shows the actual property name (e.g. "🎫 Memphis KOA") in gold instead of the generic "🏕️ Campground" label. Tapping it opens the booking confirmation modal directly. When no booking exists, the pill works as before (tap cycles through accommodation types).
+
+- **Add Destination "Network error" now shows real cause**: `lookupDestination` previously swallowed all fetch errors into a generic "Network error" toast. Fixed by: (1) checking `r.ok` before `r.json()` — a non-JSON 404/500 page (e.g. Netlify function not found) no longer silently throws a parse error; (2) the `.catch` now receives the actual Error object and maps known server messages (GEMINI_KEY missing, 403 Forbidden, 404, 429 quota) to user-friendly text; (3) the real error is logged to console for debugging.
+
+### Session 26 (continued 3) — 2026-03-08
+
+**Booking confirmations injected into agenda; departure time onclick quoting bug fixed.**
+
+- **Booking confirmations now appear in agenda (`_buildDayItems`)**: The daily agenda now automatically surfaces booking data from `appState.bookingConfirmations[stopId]` — no manual entry needed. Changes:
+  - Added booking lookup at the top of `_buildDayItems`: finds the booking whose `checkInDate`/`checkOutDate` spans the current day (or falls back to first booking for the stop).
+  - `_parseBkgTime(t)`: new helper that parses booking time strings in any format ("3:00 PM", "15:00", "3pm") → "HH:MM" for 24-hour display.
+  - `_withBkg(baseItem)`: new helper that enriches any agenda item with booking data — `propertyName` replaces/fills subtitle, `siteOrRoom` appended as "Site #", `address` and `phone` filled, `notes` set to "Conf #XXXX".
+  - **Drive days**: "Arrive & Check In" now uses `checkInTime` from the booking as its start time (instead of the generic arrival estimate), and `_withBkg` fills all the booking detail fields.
+  - **Stay days**: "Back at Camp" is now enriched by `_withBkg` with property name, site#, address, phone, and confirmation number.
+
+- **Fix ReferenceError: "dallas is not defined" on Schedule tab departure time chip**: The `_departChip` onclick handler (line 11278) interpolated stop IDs directly into the HTML onclick string without quotes. Stop IDs like `dallas-tx` were read as `dallas - tx` (variable minus variable) by JavaScript → ReferenceError. Fixed by wrapping both `prevStop.id` and `destStop.id` in single-quotes inside the onclick string: `openDriveTimeModal(5,'dallas-tx','nashville-tn',1234567890)`. Now correctly passes quoted string IDs.
+
+- **Comprehensive onclick quoting audit — 10 additional unquoted stop ID calls fixed**: A full audit found the same unquoted-stop-ID pattern in 10 more places: `showStopForecastModal` (7 occurrences — curStop.id×2, _fsId×2, _sidAttr, stop.id×2, and 2 template literals using `${stop.id}`), `openAreaInfo` (_sidAttr argument unquoted), and a second `openDriveTimeModal` call (stop.id). All now wrapped in single-quotes so the generated onclick HTML passes the stop ID as a proper JS string literal, not an arithmetic expression.
+
+### Session 26 (continued 2) — 2026-03-08
+
+**IndexedDB photo storage — remove the ~5 photo localStorage limit.**
+
+- **Root cause of "only 2-3 photos" limit**: full-res dataUrls (200–500 KB each base64) were stored in `appState.photoPool` → `localStorage`. Hit the 5 MB quota after ~3–5 photos. Fix: use IndexedDB (device disk, no practical quota) for full-res.
+- **New IDB helpers**: `_idbOpen`, `_idbSave`, `_idbGet`, `_idbDelete` — wrappers over `indexedDB.open('rv_photos', 1)` with `photos` object store keyed by photo ID.
+- **`_afterCompress` new sequence**: compress → generate 200px thumb → save full-res to IDB → read EXIF → save metadata (no dataUrl) to localStorage. `entry.dataUrl` is always `null`.
+- **`renderGalleryTab`**: pool entries carry `photoId`. Grid shows `thumb`. Tiles have `data-photo-id` attribute passed to lightbox.
+- **`_openMediaLightbox(src, type, caption, photoId)`**: if `photoId` provided, loads full-res from IDB on demand. Falls back to thumbnail. Inner logic in `_doOpenMediaLightbox`.
+- **`_idbMigratePool`**: called once at gallery open — moves any legacy `dataUrl` pool entries to IDB, clears from localStorage. Shows toast.
+- **Capacity**: localStorage now holds only thumbs (~5–10 KB each). ~300+ photos can now be stored in localStorage/cloud. Full-res limited only by device disk.
+
+### Session 26 (continued) — 2026-03-08
+
+**Fix gallery photo upload pipeline: dates, thumbnails, map, and empty-state.**
+
+- **Wrong photo dates (showed as upload date not capture date)**: `timestamp` was set to `new Date().toISOString()` — always today. Fixed to `new Date(file.lastModified).toISOString()`. `file.lastModified` is the file modification time, which for phone photos is almost always the camera capture time. Photos now sort into the correct date sections even without EXIF.
+
+- **Mobile photos not appearing on desktop (thumbnail race condition)**: `_compressPhotoThumb` is async (canvas onload), but `_doSave` was triggered from the EXIF promise chain — both ran concurrently and thumb almost always lost the race, so `entry.thumb = null` at save time. Cloud sync strips `dataUrl` (correct) but now also had `thumb: null` → other devices had no image data. Fixed by restructuring `_afterCompress`: generate thumbnail FIRST, then run EXIF, then save. Now `entry.thumb` is always set before hitting the cloud.
+
+- **Gallery map not showing for non-GPS photos**: Location clustering only used EXIF GPS coordinates. Journal photos have `stopId` but no GPS. Fixed: in the clustering loop, if `exif.lat` is null, fall back to `getStop(p.stopId).lat/lng`. Also added `stopId` to the `allPhotos` entries pushed from journal entries (previously missing). Now journal photos show up as stop-location pins on the gallery map.
+
+- **Errant "Add Photos" button at bottom of gallery**: When cloud-synced pool entries had `thumb: null` and `dataUrl: null`, the photo was skipped by `_poolSrc` null check → `allPhotos.length === 0` → empty state rendered with a big "📤 Add Photos" button at the bottom. This looked like a stray/errant button when photos clearly existed. Fixed: distinguish between "no photos at all" vs "photos exist but can't display" — the latter now shows a "☁️ Photos syncing from cloud…" message with guidance to re-upload if needed, not a confusing Add Photos button.
+
+### Session 26 — 2026-03-08
+
+**Gallery share button in Suggestions tab; fix gallery photos disappearing after cloud sync.**
+
+- **Gallery share button in Suggestions tab**: The "Friends & Family Suggestions" tab now has two share buttons: **Share Route** (purple, calls `_copyShareLink()`) and **Share Gallery** (orange, calls `_copyGalleryLink()`). These sit side-by-side in the tab header. The "How it works" description updated to explain both. The Route Map tab retains its original "Share Route" button unchanged.
+
+- **Gallery photos disappearing after cloud round-trip (root cause fix)**: Photos uploaded on the main device were disappearing after a page reload. Root cause: `syncToCloud` → `_makeCloudSafeState` strips `dataUrl` from every photoPool entry before pushing to Supabase (correct, to avoid large payloads). On reload, `loadFromCloud` calls `_smartMergeStates(local, cloud)`. Since the cloud save timestamp is newer than the local save, the cloud version becomes the `base`. Its photoPool entries have no `dataUrl`. `_unionById` sees each photo ID already in the base and skips adding the local entry (which had the `dataUrl`). Result: merged state has photos without `dataUrl` → photos appear as broken/invisible. Fix: after `_unionById` for `photoPool`, added a pass that restores `dataUrl` (and `thumb`) from the "other" (local) side for any merged entry that is missing them:
+  ```javascript
+  var _otherPhotoMap = {};
+  (other.photoPool || []).forEach(function(p) { if (p.id) _otherPhotoMap[p.id] = p; });
+  m.photoPool.forEach(function(p) {
+    if (!p.dataUrl && _otherPhotoMap[p.id] && _otherPhotoMap[p.id].dataUrl)
+      p.dataUrl = _otherPhotoMap[p.id].dataUrl;
+    if (!p.thumb && _otherPhotoMap[p.id] && _otherPhotoMap[p.id].thumb)
+      p.thumb = _otherPhotoMap[p.id].thumb;
+  });
+  ```
+  This ensures the full-resolution image is always restored from whichever state copy has it.
+
+### Session 25 — 2026-03-08
+
+**Waypoint UI consistency, login date fix, gallery share link.**
+
+- **Waypoint UI consistency**: All stops reduced to 0 nights now render as the grey dashed "Waypoint" card regardless of how they reached 0 nights. Previously, stops reduced via the `−` nights button (which set `phaseExtraDays` but NOT `waypointOverrides`) fell through to the full blue stop card showing "Waypoint active" in the toggle — inconsistent with stops set via `_toggleWaypoint`. Two-part fix: (1) `phaseHeaderHtml` now checks for `totalNights === 0` early (before the waypoint branch), setting `_isWpOverride = true` to route to the grey card; (2) `removePhaseDay` now auto-sets `waypointOverrides[stopId] = true` when reducing a stop to 0 nights, so future loads are consistent.
+
+- **Login page effective end date**: The login screen previously showed the raw last TRIP_DAYS date (April 19) regardless of schedule modifications. Fixed: the pre-login init code now reads `phaseExtraDays` from localStorage and applies the total adjustment to the displayed end date and day count. If phaseExtraDays collectively shorten the trip by 5 days, the login screen now correctly shows "Apr 14" as the end date. This means the displayed date always reflects the actual planned schedule.
+
+- **Gallery share link (`?gallery=1`)**: Family friends can now view the photo gallery without logging in. Added `?gallery=1` URL parameter mode: (1) bypasses login screen; (2) loads latest state from Supabase cloud; (3) boots app in viewer/read-only mode; (4) hides all nav tabs except Gallery; (5) shows "📷 Gallery View" badge in header. Share button added to gallery tab header — clicking `🔗 Share` copies the shareable URL (`[base]?gallery=1`) to clipboard. In gallery share mode the "Add Photos" and "Share" buttons are hidden. New functions: `_initGalleryShareMode()`, `_applyGalleryMode()`, `_copyGalleryLink()`, `_copyGalleryLinkFallback()`.
+
+### Session 24 — 2026-03-08
+
+**Photo gallery cross-device sync fix; agenda item click-to-edit and move-between-days.**
+
+- **Photo gallery cross-device sync (`_makeCloudSafeState`)**: Photos uploaded on one device no longer disappear on other devices. Root cause: full-size base64 photo dataUrls (~200-400 KB each) were included in `appState.photoPool` and pushed to Supabase, exceeding payload limits. Fix: `_makeCloudSafeState(state)` strips `dataUrl` from each photoPool entry before cloud sync, keeping only metadata + `thumb` (200px JPEG). `syncToCloud` now uses the cloud-safe copy. `_galleryUpload` generates a `thumb` via `_compressPhotoThumb` for each uploaded photo. `renderGalleryTab` uses `p.dataUrl || p.thumb` so mobile/other devices show thumbnails while the uploading device shows full resolution. Thumbnail entries show a ☁️ badge.
+
+- **Agenda item click-to-edit**: All rows in the agenda view are now clickable (hover highlight + ☁️✏️ indicator). Custom `agendaEvent` items (📌 pinned events): clicking opens `showAddAgendaEventModal(null, ev.id)` with all fields editable. Built-in/override items (Breakfast, Drive, etc.): clicking opens the new `_showMoveItemSheet` bottom sheet.
+
+- **`showAddAgendaEventModal` date field**: When editing an existing event, date is always a dropdown so the user can move it to a different day.
+
+- **`_showMoveItemSheet` + `_saveMoveItem`**: New bottom sheet for editing/moving built-in and override agenda items. Editable title, start/end time, and "Move to Day" dropdown. Removes item from source day's override (builds from `_buildDayItems` if no override exists), adds to target day's override, saves under day-number keys.
+
+- **Stale entry cleanup in `_saveAgendaEvent`**: When an `agendaEvent`'s date changes, old `_fromEvents` override entries on the previous day are cleaned up.
+
+### Session 23 (continued, part 2) — 2026-03-08
+
+**Smart multi-user conflict resolution — no more lost edits.**
+
+- **`_smartMergeStates(a, b)`**: New function that combines two `appState` snapshots so neither person's edits are lost. Strategy: (1) Additive arrays — `customBookings`, `aiSuggestions`, `photoPool`, `journalEntries`, `savedPostcards`, `customListItems.todo/pack` — are merged by unique id (union); (2) Boolean maps — `bookingStatus`, `listChecked`, `listHidden` — merge keys with "true wins over false" (once you check something, it stays checked); (3) Per-key object maps — `arrivals`, `departures`, `dayNotes`, `phaseExtraDays`, `removedStops`, `stayType`, `dayOverrides`, `sleepOverrides`, `customActivities`, `day_*` etc. — merge keys from both sides, newer snapshot wins on collision; (4) Structural data — `customTripData` route, `tripSettings`, `drivingPrefs`, scalar prefs — use the newer `_savedAt` as the base. Merged state gets `_mergedAt` and `_mergedFrom` tags.
+
+- **`_showConflictBanner` updated**: Now calls `_smartMergeStates(myState, theirState)` instead of picking a winner. Both snapshots saved as emergency backups first. Merged state written to localStorage + cloud. Shows "🔀 Merged [name]'s changes — no edits lost" toast.
+
+- **`_resolveConflict` updated**: Legacy manual-banner function also routes through smart merge now.
+
+- **`loadFromCloud` updated**: Normal sync path (remote is newer) now uses `_smartMergeStates(appState, remote)` instead of `appState = remote`. Data-regression check preserved but rephrased as a toast ("Merged: cloud had fewer stops — kept your local route"). No more silent overwrites on startup load.
+
+### Session 23 (continued) — 2026-03-08
+
+**Bookings refresh fix, Add Destination wizard overhaul, gallery per-photo processing, gallery date-sections + always-on map.**
+
+- **Bookings tab refresh fix (`_refreshAll`)**: `_refreshAll()` now calls `renderBookingsTools()` whenever the bookings sub-tab is currently visible. Previously, adding a stop from the map while on the Bookings tab left the stop-selector chip list stale until the user navigated away and back.
+
+- **Add Destination wizard → actual schedule insertion**: The "Add Destination" wizard (Planner → Schedule → ➕ icon) previously saved new destinations only as pending AI suggestions (`appState.aiSuggestions`) rather than as actual schedule stops. Root cause: step 2 confirmation called `analyzeDestination()` which only populated the adjustments list. Fixed by adding a **Step 4 position picker** to the wizard modal:
+  - Step 2 primary button now reads "📍 Add to Schedule" and calls `_admToStep4()` directly (skipping AI analysis)
+  - Step 2 secondary link "✨ Analyze trip fit with AI first" is available for users who want AI analysis
+  - Step 3 (AI analysis result) now has a "📍 Add to Schedule →" primary button that also goes to step 4
+  - Step 4 shows "INSERT AFTER" dropdown (populated from current `TRIP_DAYS` stop order) and "NIGHTS TO STAY" input, then calls `_mapAddStopSave()` which does the actual insertion
+  - `_mapAddStopSave` null-safed for `_mapAddStopLatLng` (wizard doesn't provide GPS coords)
+  - Progress dots updated to 4 steps; `_admSetStep` handles 4-step flow
+
+- **Gallery: per-photo sequential processing + progress pie toast**: Reverted compression to 1200px / 0.82 quality (higher quality than the original 0.70). Photos are now processed one at a time (FileReader → compress → EXIF → save to localStorage), catching quota errors per-photo and continuing. `_galleryProgressToast(current, total)` shows a fixed bottom toast with SVG pie-chart animation displaying "Saving X of Y…". Geocoding is fire-and-forget — resolves asynchronously and updates the already-saved entry.
+
+- **Gallery: date-sectioned layout + always-on map**: Replaced the `[📷 Grid] [🗺 Map]` toggle with:
+  - Leaflet map **always shown at top** (220px) whenever any photos have GPS coordinates
+  - Map pins show photo count per location cluster; clicking a pin sets `_galleryMapFilter` to filter all date sections below to just that location; clicking again or the "✕ Show all" pill deselects
+  - Gallery below is always date-sectioned: each unique date gets a `March 14, 2026 ─────────────── (N photos)` divider, followed by a 3-column photo grid for that date
+  - Dates are sorted newest-first using EXIF DateTimeOriginal → entry.date → upload timestamp
+  - Removed `_galleryTabView` state var and toggle logic (no longer needed)
+
+### Session 23 — 2026-03-08
+
+**Gallery enhancements: EXIF date sorting, location map view, and upload capacity fix.**
+
+- **Upload capacity fix (`_compressImage`)**: Reduced default `maxDim` from 1200 → 800 and `quality` from 0.70 → 0.55. This roughly triples the number of photos that can be stored in the ~5 MB localStorage quota (~200 KB/photo at old settings → ~70 KB/photo at new settings). Users should now be able to upload 10–15 photos per batch instead of 3–4.
+
+- **EXIF reading in `_galleryUpload`**: Gallery uploads now capture GPS coordinates, DateTimeOriginal, and reverse-geocoded location name from JPEG/TIFF files via `exifr`. The new flow restructures `_galleryUpload` to: (1) compress all images first, (2) run `Promise.all()` over EXIF promises for each entry in parallel (including Nominatim reverse-geocode for any GPS-tagged photos), (3) clean up temp `_file` reference from each entry, then (4) save to localStorage once with full EXIF data attached. Photo pool entries now store: `exif: { lat, lon, dt, locationName }`. Previously, gallery uploads had no EXIF data at all — only journal photos did.
+
+- **Date-sorted gallery (`renderGalleryTab`)**: Photos in the Gallery tab are now sorted by actual photo date (newest first) using `exif.dt` (EXIF DateTimeOriginal) when available, falling back to `entry.date` (journal date) or upload timestamp. Previously photos appeared in reverse upload order regardless of when they were actually taken.
+
+- **Gallery map view**: Added `[📷 Grid] [🗺 Map]` segmented toggle in the gallery header (later replaced in Session 23 continued with always-on map). Map view uses Leaflet with circle markers (number = photo count), clustered to 0.05° (~5 km) resolution.
+
+### Session 22 — 2026-03-08
+
+**Explore/Waypoint toggle, agenda header overflow fix, weather lookup fix, cross-tab sync fix.**
+
+- **Explore/Waypoint segmented toggle**: Replaced the single "Make Waypoint" / "📍 Waypoint — Restore?" button in the Schedule phase header with a proper `[🗺 Explore] [📍 Waypoint]` segmented control. The active option is highlighted white; the inactive option is dim and clickable. Clicking "Waypoint" calls `_toggleWaypoint(stopId)`; clicking "Explore" when in waypoint state also calls `_toggleWaypoint` to restore. In the grey waypoint card (`_isWpOverride = true`), the toggle shows with "Waypoint" active; clicking "Explore" restores the stop. Built-in waypoints (not user-toggled) keep the existing remove button.
+
+- **Agenda header overflow on narrow/tablet screens**: The agenda day card header left side (date pill + weekday + location) was pushing the right-side buttons (✏️ Edit, 🗺 Map, ▾) off the screen edge on iPad/narrow desktop. Fixed by adding `min-width:0; overflow:hidden` to the left container and `white-space:nowrap; overflow:hidden; text-overflow:ellipsis` to the day/location text. Added CSS class `ag-wx-badge` to weather display and a `@media (max-width:540px)` rule to hide it on mobile (so buttons always stay visible).
+
+- **Weather missing on TODAY's agenda card**: The agenda weather lookup used `_eStr` (effective date after pause/phaseExtraDays offsets) but weather is stored by `d.date` (raw trip date). If these differ, no weather was shown. Fixed by using `_wxStore[_eStr] || _wxStore[d.date]` as fallback. Also applied same fix in the calendar view (second weather lookup around line 23279).
+
+- **Stop changes not updating all tabs**: `_doRemoveStop`, `restoreStopToTrip`, and `_mapAddStopSave` only called `renderSchedule()` — they skipped Agenda, Day Planner, Dashboard, and Stop Navigator. Fixed by replacing those individual render calls with `_refreshAll(true)` in all three functions. Also fixed `_toggleTransitDay` which only called `renderSchedule()`. Now ALL tab views stay in sync when stops are added, removed, restored, or toggled.
+
+### Session 21 — 2026-03-08
+
+**Day map feature + Schedule modal deprecation.**
+
+- **Day map in Agenda**: Each day card in Planner → Agenda now has a 🗺️ (FA `fa-map-location-dot`) button that toggles an inline Leaflet map. Numbered orange pins show agenda items in chronological order.
+  - LAT/LNG added to `_aaeExtractPrompt()`, `_agendaLookupInfo` prompt (5 lines now), `_aaeApplyExtracted`, hidden `aae-lat`/`aae-lng` inputs in modal, `_saveAgendaEvent` (record + `_agSched.push`).
+  - `_agGetMappableItems(eStr, dayNum)` collects all items with addresses/coords for a day.
+  - `_agInitDayMap(eStr, dayNum)` builds map canvas, geocodes items, plots numbered markers.
+  - `_agGeocodeItems(items, callback)` — sequential geocoder: uses stored lat/lng first, then Nominatim with in-memory `_agGeoCache` and 350ms inter-request delay (respects 1 req/sec limit).
+  - Map container `<div id="ag-day-map-{eStr}">` inserted at top of each day body (above items list).
+- **Schedule modal deprecated**: Clicking a day bar (ds-wrap) now calls `openAgendaDay(dayNum)` instead of `openDayDetail`. Navigates to Planner → Agenda, expands the day card, scrolls to it with an orange outline pulse. `_ddmDayNum` still set so long-press time-edit works.
+  - `_agDayNumToEStr(dayNum)` computes effective date string for a day (phase + pause offsets).
+  - DDM HTML retained for drive-mode dashboard and adjustments game-card mode.
+- **Arrived / Left on blue stop header**: Replaced the `+ nights −` button group with inline `arr-btn-{stopId}` and `dep-btn-{stopId}` buttons. Show time when set. Long-press calls `_barLongPress(type, dayNum)` → `startLongPress` → `openTimeEdit`.
+  - `_barArrived(dayNum)` / `_barDeparted(dayNum)` — mirror `recordArrival`/`recordDeparture` but target inline buttons; set `_ddmDayNum` for context.
+  - `confirmTimeEdit` updated to also refresh inline bar buttons (by stopId) when time is edited retroactively.
+
+### Session 20 — 2026-03-08
+
+**Lookup, sort, dismiss-X, image upload, and Add Item modal fixes.**
+
+- **Gemini lookup now fetches the URL**: `_agendaLookupInfo` now passes `tools: [{ urlContext: {} }]` when a URL is provided. Gemini 2.0 Flash (used by the Netlify proxy) fetches the actual page and returns accurate address/hours from it, instead of guessing from training data. Prompt now says "Use ONLY what is on the page."
+- **× dismiss button on AI result panel**: The green result box now has a small ✕ button (top-right corner) to clear the extracted details. Inner content is now in `aae-ai-result-inner` div; all `.innerHTML` setters updated to target the inner div.
+- **Sort fix — events no longer stuck at bottom**: Root cause was `agendaEvents` (events saved without "Add to Day Schedule" checked) being always rendered at the bottom regardless of time.
+  - `_saveAgendaEvent`: When ANY `date` is set (i.e., modal opened from a specific day), `_toSchedule = true` regardless of checkbox state. Events from the "Add event this day" button now always go to `agendaItemOverrides` with proper sort.
+  - Modal UI: "Add to Day Schedule" checkbox is now hidden when `prefillDate` is set (it was always going to override path anyway).
+  - Render: Override items path now merges any existing `agendaEvents` items for the day into `_ovItems`, sorts the combined list, and renders together. Auto-gen path renders `_dayManual` items sorted inline too.
+- **"+ Add Item" modal z-index fix**: `showAddAgendaEventModal` now uses `z-index:100001` (was 99999), so it always appears on top of the Edit Day modal (z-index:99999).
+
+### Session 19 (fifty-eighth context) — 2026-03-07
+
+**Time selector overhaul + Extract section redesigned with image upload.**
+
+- **Custom time selects in Edit Day list**: Replaced the two native `<input type="time">` fields in `_refreshEditDayItemsList` with `_timeSelectHtml(...)` calls. No more truncated "03:3" display — shows clean "3:30 AM" in a styled select.
+- **Custom time selects in Add Event modal**: Replaced `<input id="aae-start" type="time">` and `<input id="aae-end" type="time">` in `showAddAgendaEventModal` with `_timeSelectHtml('aae-start', ...)` and `_timeSelectHtml('aae-end', ...)`. Values still stored as 24h "HH:MM" internally.
+- **`_calFmtTime` fixed**: Always shows `:MM` (e.g. "9:00 AM" not "9 AM").
+- **Agenda items show start–end time range**: Override item time label now shows start + end on two lines with a faded second line.
+- **Extract section redesigned**: "📧 Auto-fill from confirmation email" collapsed section replaced with always-visible "✨ Auto-fill from confirmation" panel with two tabs:
+  - **📋 Paste Text** — paste any confirmation text (OpenTable, email, etc.)
+  - **📸 Upload Image** — upload a photo, screenshot, or PDF; Gemini reads it via vision API
+- **`_aaeExtractPrompt()`**: Shared extraction prompt builder; explicitly instructs Gemini to extract the venue name (not the booking platform), convert times to 24h format, and return "Not found" for unknowns.
+- **`_aaeApplyExtracted(txt2)`**: Shared field-filler called by both text and image extraction paths.
+- **`_agendaExtractFromImage()`**: New function — reads the selected file as a base64 DataURL, sends it to Gemini 1.5 Flash as an inline_data vision request, then calls `_aaeApplyExtracted`.
+- **`_aaeImageSelected(input)`**: Shows file name + size preview in the image panel and enables the extract button.
+- **`_aaeTab(tab)`**: Switches between text/image panels and styles tabs accordingly.
+- **Improved extraction prompt**: Now correctly handles restaurant confirmations (e.g. OpenTable) — extracts venue name (not "OpenTable"), converts "7:00 PM" → "19:00", etc.
+
+### Session 19 (fifty-seventh context) — 2026-03-07
+
+**Agenda date bugs fixed: unsorted _agPhaseOffset, _getStopEffectiveDates loop, agendaItemOverrides key migration.**
+
+- **Bug 1 (Agenda dates wrong — Mar 7 pushed to Mar 8, Nashville missing)**: `renderPlannerAgenda._agPhaseOffset` was computed from unsorted `TRIP_DAYS`, causing every stop's phase offset to be wrong whenever `customTripData.days` is out of date order. Fixed by computing `_agPhaseOffset` from `_agSorted` (date-sorted), matching `renderSchedule._schPhaseOffset` exactly.
+- **Bug 2 (showEditDayAgenda could find wrong day)**: Same unsorted-TRIP_DAYS issue in `showEditDayAgenda._phOff`. Fixed to sort before computing.
+- **Bug 3 (_getStopEffectiveDates included subsequent stops in cumOffset)**: The `forEach` loop only did `return` (skip current iteration) when hitting `stopId`, so it continued and added phaseExtraDays for stops AFTER the current stop into cumOffset — logically wrong. Fixed by changing to a `for` loop that `break`s when `stopId` is hit. Now cumOffset only includes stops strictly before the current stop, matching `renderSchedule._schPhaseOffset`.
+- **Bug 4 (Planner suggestions / agenda items "deleted" after date edits)**: `agendaItemOverrides` was keyed by effective-date strings. When `phaseExtraDays` changed (e.g., after editing arrive dates), effective dates shifted and items appeared to vanish. Fixed by keying all new saves by `d.day` (day number, stable through date changes). Added `_migrateAgendaItemOverrideKeys()` — called at the top of `renderPlannerAgenda()` — which remaps any legacy date-string keys to day-number keys on first run.
+
+### Session 19 (fifty-sixth context) — 2026-03-07
+
+**Fix date cascade for out-of-order TRIP_DAYS (blue bar / modal inconsistency, GSM not cascading).**
+
+- **Root cause**: `_getStopEffectiveDates`, `phaseHeaderHtml._phCumOffset`, `renderSchedule._schPhaseOffset`, and `_editStopDays` prev-stop detection all iterated `TRIP_DAYS` in raw array order. AI-generated or edited `customTripData.days` can have entries in a different order than their dates, causing wrong cumulative offsets (e.g. GSM appearing before Winchester → Winchester extras not counted for GSM).
+- **Fix 1**: `_getStopEffectiveDates` now sorts `TRIP_DAYS` by date before computing `cumOffset` and filtering `phaseDays`.
+- **Fix 2**: `phaseHeaderHtml` now calls `_getStopEffectiveDates(firstDay.stopId)` directly — blue bar always matches modal.
+- **Fix 3**: `renderSchedule._schPhaseOffset` computed from `_sortedDays` (date-sorted) not raw `TRIP_DAYS`.
+- **Fix 4**: `_editStopDays` prev-stop detection sorts `TRIP_DAYS` before building the stop list.
+
+### Session 19 (fifty-fifth context) — 2026-03-07
+
+**Three schedule date fixes: blue bar depart off-by-one, first stop arrival editable, Settings date sync.**
+
+- **Blue bar depart date fixed**: `_phLastDate` formula changed from `_phCumOffset + totalNights - 1` (which showed the last *night* date, not the departure day, and showed the same date as arrival for 1-night stays) to `_phCumOffset + totalNights`. Now "Depart Wed Mar 4" for a 2-night stay starting Mon Mar 2. Also changed condition from `totalNights > 1` to `totalNights > 0` so 1-night stays correctly show a depart date.
+- **First stop arrival now editable**: Removed the "First stop — read-only" restriction in `_editStopDays`. All stops now show an editable arrive date picker. For the first stop, the hint text reads "Changing this updates the trip start date in Settings." In `_saveStopDays`, when `_sdePrevStopId` is null (first stop), changing the arrive date re-dates all TRIP_DAYS from the new date and updates both `CONFIG.startDate` and `appState.tripSettings.startDate` (same logic as `saveTripSettings`).
+- **Settings start date synced with schedule**: `renderTripSettings` now derives `startVal` from `TRIP_DAYS[0].date` and `endVal` from `TRIP_DAYS[last].date` as ground truth, falling back to saved settings / CONFIG. This ensures the Settings form always reflects the actual first/last dates in the schedule, even if `appState.tripSettings` is stale.
+
+### Session 19 (fifty-fourth context) — 2026-03-07
+
+**Agenda smart modal UX overhaul: date label, email paste, Escape, auto-sort, 2-row Edit Day items, Gemini hours fix.**
+
+- **Date dropdown removed** from smart modal when opened from a specific day — shows fixed date label + hidden input instead of a full dropdown.
+- **+Add Item in Edit Day modal** now opens the full smart modal (Gemini lookup + email paste) instead of adding a blank inline row.
+- **Smart modal refreshes Edit Day list** after save: when `_saveAgendaEvent` saves to `agendaItemOverrides[date]` and the Edit Day modal is open for the same date, it refreshes `window._editDayItems` and re-renders the list.
+- **Email paste → auto-fill**: new collapsible "📧 Auto-fill from confirmation email" section in smart modal. User pastes email text, clicks "Extract Info with Gemini" — Gemini returns NAME, ADDRESS, PHONE, HOURS, DATE, START_TIME, END_TIME and fills all form fields.
+- **Escape closes all modals**: added `add-agenda-event-modal`, `edit-day-agenda-modal`, `full-sched-editor`, `plan-day-modal`, `stop-days-overlay` to the global Escape handler. Smart modal also attaches its own `_aaeEscHandler` on open.
+- **Auto-sort chronologically**: `_saveAgendaEvent` sorts items by `time` before writing to `agendaItemOverrides`. `_saveEditDayAgenda` also sorts before saving.
+- **Edit Day item rows redesigned**: 2-row layout per item — Row 1: arrows | emoji | title | ✕. Row 2 (indented): Start [time] End [time]. Prevents time inputs from falling off screen edge. Items now also store/edit `endTime`.
+- **Gemini hours lookup fixed**: prompt previously said `"Check website"` as a fallback, which was then filtered out. Changed fallback to `"Not found"` and added explicit instruction "Do not say 'Check website' — give your best answer from training data."
+
+### Session 19 (fifty-third context) — 2026-03-07
+
+**Arrive date now editable in single-stop date editor.**
+
+- **`_editStopDays`**: Arrive row is now an editable `<input type="date">` for any stop that has a prior stop. First stop still shows arrival as read-only (trip start). Helper note explains "Changing this also adjusts the prior stop's departure".
+- **`_sdeArrChanged()`**: New handler — when arrive date changes, slides depart forward/backward to preserve the same number of nights, updates depart `min`, keeps `_sdeArrMs` in sync.
+- **`_sdeUpdateNights()`**: Now reads from `sde-arr-date` input if present, falling back to `_sdeOrigArrMs` if arrive is read-only.
+- **`_saveStopDays()`**: If arrive date changed, computes the delta (days) and applies it to the **previous stop's** `phaseExtraDays`. This shifts the arrival of the current stop without breaking the cascade (all subsequent stops shift the same amount). Current stop's nights = (dep − new_arr) stored normally.
+- Modal now auto-focuses the arrive input (if editable).
+
+### Session 19 (fifty-second context) — 2026-03-07
+
+**Restaurant interactivity, openPlaceInfo/openPlanPicker aiRestaurants fallback, confirmPlan encoding fix, Agenda "Add to Day Schedule" default checked.**
+
+- **`loadStopRestaurants` refactor**: Now stores each parsed restaurant into `appState.aiRestaurants[stopId][]` so other functions can access them. Each card now has `onclick="openPlaceInfo('r', stopId, ri)"` and a green `+ Plan` button with `onclick="openPlanPicker(stopId, 'r', ri)"`. All stopId values HTML-escaped via `.replace(/"/g,'&quot;')`.
+- **`openPlaceInfo` fallback**: Now falls back to `appState.aiRestaurants[stopId][idx]` when `stop.restaurants[idx]` is undefined. This makes Gemini-fetched restaurants clickable and openable in the place info modal.
+- **`openPlanPicker` fallback**: Same aiRestaurants fallback added for the restaurant path. Item name shown in modal title correctly even for Gemini-fetched restaurants.
+- **`confirmPlan` onclick encoding**: Raw `stopId` in `openPlanPicker`'s generated HTML was unescaped (another instance of the master double-quote bug). Fixed with `JSON.stringify(stopId).replace(/"/g,'&quot;')`.
+- **Stop detail "undefined" guard**: `stop.description` directly concatenated without null check (line ~11806). Added `if (stop.description)` guard.
+- **Attraction search broadened**: Filter previously only checked `name`, `type`, `desc`. Changed to search all string fields via `Object.keys(it).some(k => typeof v === 'string' && v.includes(q))`. Fixes "honky tonk" and similar searches returning no results.
+- **Agenda "Add to Day Schedule" default checked**: The `📋 Add to Day Schedule (reorderable)` checkbox now defaults to `checked`. Previously it was unchecked, causing users to miss it and have events land only in the pinned `agendaEvents` section (bottom of day) instead of the reorderable main schedule.
+
+### Session 19 (fifty-first context) — 2026-03-07
+
+**Critical root-cause fix: ALL blue phase bar buttons broken for string-ID stops. Rich Gemini event → schedule integration. Comprehensive regression test suite.**
+
+- **ROOT CAUSE FIX — HTML attribute double-quote escaping (`_sidAttr`)**: `JSON.stringify("nashville-tn")` returns `"nashville-tn"` WITH outer double-quotes. When injected directly into `onclick="removePhaseDay("nashville-tn")"`, the HTML parser terminated the attribute at the 2nd `"` — the JS was truncated and every click produced `SyntaxError: Unexpected end of input`. Only string-ID stops were affected (nashville-tn, dallas-tx, winnemucca, etc.); numeric IDs were fine. Fix: added `var _sidAttr = _sid.replace(/"/g, '&quot;')` in `phaseHeaderHtml()` and replaced all 12 onclick usages of `_sid` with `_sidAttr`. Browser decodes `&quot;` → `"` before JS runs, so the call executes correctly. Also added `_pStopAttr` for the edit city name call.
+- **All 5 remaining `openBookingModal` call sites fixed**: Dashboard sleep button, first-stop sleep button, day detail modal booking card, day detail modal booking button, and planner next-card booking chip — all were missing `.replace(/"/g,'&quot;')`. Now consistently HTML-safe for string stop IDs.
+- **Escape key closes booking modal**: Added `_bcEscHandler` keydown listener attached when `openBookingModal()` is called; auto-removes itself when modal closes.
+- **Waypoint section buttons fixed**: Removed leftover `event.stopPropagation()` and fixed `_sid` → `_sidAttr` in `toggleWaypointOverride` and `removeStopFromTrip` buttons in the waypoint section of `phaseHeaderHtml`.
+- **Rich Gemini event → main schedule ("Titanic feature")**: In `showAddAgendaEventModal`, added "📋 Add to Day Schedule (reorderable)" checkbox toggle for new events. When checked, `_saveAgendaEvent` writes to `appState.agendaItemOverrides[date]` instead of `agendaEvents`. Builds default day items first (via `_buildDayItems`) then appends the rich item, so the full day schedule is preserved. Item stored with `{id, time, icon, title, subtitle, address, phone, hours, url, notes}`.
+- **Override item renderer in `renderPlannerAgenda` updated**: Shows `address`, `phone`, `hours`, `url` as sub-rows when present on an override item.
+- **`_refreshEditDayItemsList` updated**: Shows rich fields (address, phone, hours, url) as a read-only sub-row below each item in the Edit Day bottom sheet.
+- **NEW `test.html`**: Comprehensive standalone regression test suite (no external dependencies, works offline). 23+ automated tests across 5 sections: (1) TRIP_DATA static validation, (2) effective date computation simulation (mirrors `_schPhaseOffset` algorithm), (3) date logic checks (no duplicates, consecutive diffs, drive day sequences), (4) localStorage/appState live reads, (5) manual UI smoke test checklist. TRIP_DAYS and TRIP_STOPS inlined directly from index.html.
+
+### Session 19 (fiftieth context) — 2026-03-07
+
+**Bug fixes + Day Planner agenda auto-collapse and full item editing.**
+
+- **UTC date bug** (4 locations): `toISOString().slice(0,10)` returns UTC date, wrong for US timezones at night. Fixed in `renderDashboard`, `renderPlannerAgenda`, `renderCalendar`, and history log label — all now use `getFullYear()/getMonth()/getDate()`.
+- **"undefined Nashville, TN" on dashboard**: `curStop.emoji` was undefined for stops without emoji field. Fixed with null guard.
+- **"nts" → "nights"** in hotel booking widget on blue phase bar: `totalNights + 'nt'` → `totalNights + ' night' + (totalNights !== 1 ? 's' : '')`.
+- **Phase bar buttons not working**: Outer div had `onclick="_editStopDays(...)"` which competed with inner button clicks. Fixed by removing onclick from outer div + removing all `event.stopPropagation()` calls from inner buttons.
+- **"ideal: 1 day" badge moved** from blue phase header to Area Info modal. Added `aim-ideal-badge` span in modal; `openAreaInfo()` and `loadStopMinVisit` now populate it. Removed IIFE from `phaseHeaderHtml`.
+- **Bookings: "nashville is not defined"** — `stop.id` used unquoted as JS identifier. Fixed with `JSON.stringify(stop.id)`.
+- **Duplicate `renderBookings()` function**: Tools tab version overwrote Lists tab version. Renamed to `renderBookingsTools()`.
+- **Day Planner not updating dates**: `_refreshAll()` only called `renderPlannerAgenda()` when `agenda-content` was visible. Fixed to always call it, plus calendar refresh.
+- **Agenda auto-collapse past days**: New `_agCollapsed` module-level object. `_agInitCollapsed(todayStr, allDates)` sets all past days to collapsed on first render. State persists across re-renders.
+- **Agenda day editing**: `showEditDayAgenda(dateStr)` bottom sheet with icon/time/title fields for each item; ▲▼ reorder, ✕ delete, + Add Item, Reset to default. Saves to `appState.agendaItemOverrides[dateStr]`.
+- **renderPlannerAgenda changes**: Day card headers now collapsible with onclick toggle + ▾ arrow + ✏️ Edit button. Body div has `id="ag-day-body-{date}"`. Checks `agendaItemOverrides[date]` and renders from custom items when present.
+- **New functions**: `_agCollapsed`, `_agInitCollapsed`, `_agToggleDay`, `_fmtTime24`, `_buildDayItems`, `showEditDayAgenda`, `_refreshEditDayItemsList`, `_moveEditDayItem`, `_removeEditDayItem`, `_addEditDayItem`, `_saveEditDayAgenda`, `_resetEditDayAgenda`.
+
+### Session 19 (forty-eighth context) — 2026-03-05
+
+**Auto-resolve sync conflicts by timestamp instead of showing banner.**
+- `_showConflictBanner` replaced: no longer shows the red "Keep Mine / Load Saved" banner. Instead, auto-resolves silently — compares `_savedAt` timestamps and picks the newest version.
+- Before resolving, snapshots of both sides are written to `rv_conflict_mine` and `rv_conflict_theirs` in localStorage as emergency backups (accessible in the Backup Restore panel if ever needed).
+- Shows a brief toast instead of the blocking banner.
+- `_resolveConflict` (the old manual path) also updated to re-render Stops, Navigator, and Agenda — which were previously missing from its render list.
+
+### Session 19 (forty-seventh context) — 2026-03-05
+
+**Add manual events to Agenda (Add Event modal with Gemini lookup).**
+- `showAddAgendaEventModal(prefillDate, editId)` — bottom-sheet modal with place name, date selector, start/end time, URL, notes, and AI lookup button. Also handles edit mode.
+- `_agendaLookupInfo()` — fires Gemini prompt to extract address, phone, hours from the place name + URL. Stores results in hidden fields and displays them in the modal before saving.
+- `_saveAgendaEvent(editId)` — writes to `appState.agendaEvents[]`; each event: `{id, date, name, startTime, endTime, url, address, phone, hours, notes}`.
+- `_deleteAgendaEvent(id)` — removes from `appState.agendaEvents` with confirm dialog.
+- `renderPlannerAgenda`: now injects manual events per day (sorted by startTime, shown in purple) + a "📌 + Add event this day" button in each day footer.
+- Agenda header: added "📅 + Add Event" orange button.
+
+### Session 19 (forty-sixth context) — 2026-03-05
+
+**Fix attractions button regression + missing days date display in phase headers.**
+- `toggleStopAttractions`: removed `_stopAttractionsLoaded` guard — always calls `loadStopAttractions` when panel opens. `loadStopAttractions` already checks `_attractionsCache` first so no extra API calls. Fixes regression where `renderStops()` rebuilt DOM but flag stayed `true`, leaving panel empty on re-open.
+- `_renderAttractionsBody`: fixed "No attractions match ''" shown on empty cache with no search. Now only shows no-match error when there's an active search term; otherwise shows spinner and triggers load.
+- `phaseHeaderHtml`: fixed date range display (e.g. "Jun 15 – Jun 18") not reflecting +/- days changes. Added cumulative `phaseExtraDays` offset computation (same algorithm as `renderSchedule`'s `_schPhaseOffset`) so effective dates match what the schedule actually shows.
+
+### Session 19 (forty-fifth context) — 2026-03-05
+
+**fetchCampInfo: surface real Gemini API errors in the campground info modal.**
+
+Previously `fetchCampInfo` showed only "Error loading info" with no details, hiding the actual cause (quota exceeded, invalid API key, rate limit, content block, etc.). Fixed:
+- `.then(r => r.json())` now also captures HTTP status code via a wrapper object
+- `if (!text)` block now inspects `data.error`, `data.promptFeedback.blockReason`, `data.candidates[0].finishReason`, falling back to stringifying the full response — same pattern as `fetchGeminiInfo`
+- Error display now shows `(HTTP 429) ...` or similar with the actual message
+- `.catch()` now shows the actual network error message
+- Both error states include an inline **↺ Retry** button that re-calls `fetchCampInfo` directly
+
+### Session 19 (forty-fourth context) — 2026-03-05
+
+**Voice fixes, waypoint toggle, attractions overhaul + restaurants.**
+
+- **Voice hands-free loop**: Fixed two silent killers: (1) `utt.onerror` no longer skips `_tgAfterSpeak()` on 'interrupted' — iOS fires this when speech is blocked from async context, which was permanently killing the full-duplex loop. (2) `askTripGenie` catch handler now calls `_tgAfterSpeak()` when in voice mode so API errors don't drop the loop.
+- **ElevenLabs not being used**: Added one-time toast in `_tgSpeak` when no EL key is configured — "Using device voice — add ElevenLabs key in Trip Settings". Clears once key is set.
+- **Waypoint override toggle**: Added `toggleWaypointOverride(stopId)` + `appState.waypointOverrides` object. Any regular stop can now be toggled to "drive-through waypoint" (pin on map, dashed header in Schedule) without removing it from trip. "📍 Make Waypoint" button added to each stop card expanded details row. "↩ Stop" button in waypoint header reverts it. Map marker builder and `phaseHeaderHtml` both check `appState.waypointOverrides`.
+- **Attractions: Search box**: Added `<input id="attr-search-{stopId}">` in the green panel header. `_filterAttractions(stopId)` filters `_attractionsCache[stopId]` client-side — instant, no re-fetch.
+- **Attractions: Load More**: Now fetches 12 attractions (was 6), shows first 6, shows "Load N more ↓" button. `_loadMoreAttractions` increments `_attractionsShown[stopId]` by 6. When all shown, offers "Load different attractions" to re-fetch a fresh batch.
+- **Attractions: Fix reload**: Added `_attractionsCache` object. Refresh button clears cache + reloads. Opening panel re-uses cache if present (no extra API call). Error states now show inline "Retry" button.
+- **Restaurants button**: Added "🍽️ Restaurants" button to stop card button row. Separate panel + `loadStopRestaurants(stopId)` asks Gemini for 8 family-friendly restaurants with type, price ($/$$/$$$), and one-line description.
+
+### Session 19 (forty-third context) — 2026-03-05
+
+**Booking confirmations now sync into Driving/Directions modal.**
+
+- **`openDriveDirections`**: Looks up `appState.bookingConfirmations[stopId]`, prefers booking with address, falls back to one with just property name. Passes to `_showDirectionsModal`.
+- **`_buildGoogleMapsUrl` / `_buildAppleMapsUrl`**: Accept optional `bookingAddress` — routes to actual property address instead of city lat/lng when available.
+- **`_showDirectionsModal`**: Shows booking `propertyName` as destination header. New blue booking info strip shows address, conf #, check-in/out, site, hookups, cost, phone. Note shown if no address found in booking.
+
+### Session 19 (forty-second context) — 2026-03-05
+
+**Photo multi-select fix (iOS) + Schedule stop day editor.**
+
+- **Photo upload iOS multi-select still broken**: Root cause was the gallery modal's `overflow:hidden` silently dropping the `change` event for multi-file selection on iOS Safari. Fix: replaced all three "Add Photos" label+input pairs with `_openGalleryFilePicker()`, which creates a fresh `<input type="file" multiple>` each call, appends it directly to `document.body` (outside any clipping container), `.click()`s it in the user-gesture call stack, listens for both `change` and `input` events with a `_handled` guard, then removes the input after 2 s.
+
+- **Schedule stop day editor**: Tap any blue phase header bar in Schedule to open a popover with a large number input + ±1 steppers to set nights directly. The `− X nts +` widget's count is also directly tappable. On save, computes `phaseExtraDays[stopId] = newTotal - baseDays` and calls `_refreshAll()`. Added `_editStopDays()` and `_saveStopDays()` functions. Enter saves, Escape/backdrop closes.
+
+### Session 19 (forty-first context) — 2026-03-05
+
+**Photo upload fixes + storage hardening.**
+
+- **Gallery photo upload broken on iOS (`display:none` → proper hidden input)**: All three gallery file inputs (`gallery-upload-input` in static HTML, `gallery-tab-upload`, `gallery-tab-upload-empty` in dynamically rendered gallery tab) used `style="display:none"`, which is unreliable on iOS Safari — the photo picker opens but the `change` event sometimes silently does not fire after the user taps the checkmark. Changed all three to `style="position:absolute;opacity:0;width:1px;height:1px;overflow:hidden;"`, matching the pattern already used by the working `j-photos` journal input.
+
+- **New `_compressImage()` utility**: Added before `_galleryUpload`. Uses an off-screen canvas to resize images exceeding 1200px and re-encode as JPEG at 0.70 quality. Full-res iPhone photos (~5MB each) compress to ~100–200KB — a ~95% reduction. Videos and already-small images pass through unchanged.
+
+- **`_galleryUpload` rewrite — compress & batch save**: The old implementation called `_addToPhotoPool()` (and therefore `saveState()` → `localStorage.setItem()`) for every single photo. With 34 photos, that's 34 growing writes, each larger than the last, eventually crashing with a silent `QuotaExceededError`. New flow: all files are read and compressed concurrently; a `newEntries[]` array accumulates results; state is saved exactly once when all files are done. Also removed the per-photo `saveState` from `_addToPhotoPool` for gallery-upload paths.
+
+- **`saveState` — QuotaExceededError guard**: Wrapped `localStorage.setItem()` in try/catch. On `QuotaExceededError` (or `NS_ERROR_DOM_QUOTA_REACHED`, error code 22), shows a 5-second toast: "⚠️ Storage full — photos saved to session only. Try adding fewer photos at once or remove old ones." and returns early rather than throwing. All other errors re-throw normally.
+
+- **Mapbox 403 / SyntaxError console errors**: The 403 errors from the Mapbox Directions API are a pre-existing issue (token URL allowlist or scope). The app correctly falls back to OSRM for routing. The `Uncaught SyntaxError: Unexpected end of input (at index.html:1:40)` is likely a secondary effect of a non-JSON Mapbox 403 response body — the existing `.catch()` handler on the fetch chain should suppress this; no code change made here. User should update their Mapbox token allowlist if they want Mapbox routing.
 
 ### Session 19 (fortieth context) — 2026-03-05
 
@@ -678,3 +1099,22 @@ tripgenie/
 - Test voice chat on actual iPhone/iPad — may need microphone permission prompt handling
 - `_initDragDrop` is guarded but never implemented — drag-to-reorder time blocks in DDM could be a future feature
 - **Drive-home planning**: Help Paul figure out actual drive-time per day for the return trip (days 40–43). Currently 3 explore days + 1 drive day; likely needs 2–3 transit days with overnight hotel/campground stops.
+
+### Session 22 (continued) — 2026-03-08 (Production Hardening)
+
+**Full regression audit + production fixes.**
+
+- **Audit log coverage**: Added `_audit()` calls to all major state-change functions that were previously untracked: `_doRemoveStop` (stop removed), `restoreStopToTrip` (stop restored), `_toggleWaypoint` (waypoint set/cleared), `_toggleTransitDay` (transit day set/cleared), `_mapAddStopSave` (stop added via map). Every significant user action is now timestamped in the Change History log.
+- **iOS input auto-zoom fix**: Added `@media (max-width:768px) { input, select, textarea { font-size: max(16px, 1em) !important; } }` — prevents iOS Safari from zooming in when tapping any of the 74+ inline-styled inputs that were below the 16px zoom threshold.
+- **Leaflet memory leak fixed**: `renderPlannerAgenda()` now iterates `window._agMap_*` keys and calls `.remove()` on each Leaflet instance before replacing the DOM. Prevents orphaned map instances from accumulating on every `_refreshAll` call.
+- **What's New updated**: Added "Today's Updates" card (Mar 8, 2026) covering all 7 session changes.
+- **Regression audit confirmed**:
+  - Node.js `--check` syntax: ✅ clean (27,670 JS lines)
+  - 695 function definitions, all critical functions present
+  - All onclick references resolve to defined functions  
+  - No `eval()` usage, no `document.write()` to main doc
+  - `saveState()` has try/catch for localStorage quota errors
+  - `_isViewer` blocks all write operations for read-only links
+  - All 77 fetch() calls have `.catch()` handlers
+  - Supabase snapshot save/restore working with conflict detection
+  - Supabase saves a local backup BEFORE applying any cloud restore
