@@ -5871,12 +5871,18 @@ function _initAuth() {
     _authed        = false;
     _userName      = '';
 
+    // Hide every full-screen overlay and return to the login screen
     var appEl = document.getElementById('app');
-    if (appEl && !appEl.classList.contains('hidden')) {
-      appEl.classList.add('hidden');
-      var ls = document.getElementById('login-screen');
-      if (ls) ls.classList.remove('hidden');
-    }
+    if (appEl) appEl.classList.add('hidden');
+
+    var myTripsOv = document.getElementById('my-trips-overlay');
+    if (myTripsOv) myTripsOv.style.display = 'none';
+
+    var loginOv = document.getElementById('login-overlay');
+    if (loginOv) loginOv.style.display = 'none';
+
+    var ls = document.getElementById('login-screen');
+    if (ls) ls.classList.remove('hidden');
   });
 }
 
@@ -6857,7 +6863,11 @@ async function _showMyTrips() {
     .eq('user_id', _sbUser.id)           // belt-and-suspenders alongside RLS
     .order('updated_at', { ascending: false });
   if (error) {
-    document.getElementById('my-trips-list').innerHTML = '<div style="color:var(--red);padding:20px;">Error loading trips: ' + error.message + '</div>';
+    console.error('[MyTrips] load error:', error.message, error.code);
+    // Still render the New Trip button even on error so user isn't stuck
+    _renderTripCards([]);
+    document.getElementById('my-trips-list').insertAdjacentHTML('afterbegin',
+      '<div style="color:var(--red);padding:10px 0;font-size:.82rem;">⚠️ ' + error.message + '</div>');
     return;
   }
   /* Filter out snapshot rows (names starting with 📸) so they don't pollute My Trips */
