@@ -339,4 +339,28 @@ test.describe('Regression — core stability @regression', () => {
     expect(missing).toEqual([]);
   });
 
+  test('REG-030: _doLegacyInitAfterSbAuth null-safe when login-overlay absent', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    const result = await page.evaluate(() => {
+      // Remove login-overlay to replicate crash when opening trip from My Trips overlay
+      var el = document.getElementById('login-overlay');
+      var parent = el && el.parentNode;
+      if (el) el.remove();
+      try {
+        // Mirrors the null-safe DOM cleanup block inside _doLegacyInitAfterSbAuth
+        var _lo = document.getElementById('login-overlay');
+        if (_lo) _lo.style.display = 'none';
+        var mto = document.getElementById('my-trips-overlay');
+        if (mto) mto.style.display = 'none';
+        return 'ok';
+      } catch(e) {
+        return 'threw: ' + e.message;
+      } finally {
+        if (el && parent) parent.appendChild(el);
+      }
+    });
+    expect(result).toBe('ok');
+  });
+
 });

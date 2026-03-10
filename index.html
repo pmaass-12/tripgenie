@@ -6946,7 +6946,8 @@ async function _deleteTrip(tripId, btn) {
 function _doLegacyInitAfterSbAuth() {
   _saveSession('family', _sbUser ? (_sbUser.email || 'Traveler').split('@')[0] : 'User');
   initApp();
-  document.getElementById('login-overlay').style.display = 'none';
+  var _lo = document.getElementById('login-overlay');
+  if (_lo) _lo.style.display = 'none';
   var mto = document.getElementById('my-trips-overlay');
   if (mto) mto.style.display = 'none';
   /* Start cloud auto-snapshot timer once the user is authenticated */
