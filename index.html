@@ -2693,22 +2693,32 @@
 <!--  PASSWORD RESET OVERLAY (shown after clicking reset email link) -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div id="password-reset-overlay" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;z-index:9999;">
-  <div class="login-card" style="max-width:380px;width:90%;">
+  <div class="login-card" style="max-width:380px;width:90%;position:relative;">
+    <!-- Close / cancel button -->
+    <button onclick="_closePasswordResetOverlay()" title="Cancel"
+      style="position:absolute;top:12px;right:12px;background:none;border:none;color:var(--text-3);font-size:1.2rem;cursor:pointer;padding:4px 8px;border-radius:6px;line-height:1;"
+      onmouseover="this.style.background='rgba(0,0,0,.08)'" onmouseout="this.style.background='none'">
+      <i class="fa-solid fa-xmark"></i>
+    </button>
     <span class="login-rv-icon">🔐</span>
     <div class="login-title" style="font-size:1.3rem;">Set New Password</div>
     <div class="login-sub">Enter a new password for your account.</div>
     <div style="margin-top:18px;">
       <input type="password" id="reset-password-input" placeholder="New password (min 6 characters)"
         class="login-input" style="box-sizing:border-box;margin-bottom:10px;"
-        onkeydown="if(event.key==='Enter')document.getElementById('reset-password-confirm').focus()" />
+        onkeydown="if(event.key==='Escape')_closePasswordResetOverlay();else if(event.key==='Enter')document.getElementById('reset-password-confirm').focus()" />
       <input type="password" id="reset-password-confirm" placeholder="Confirm new password"
         class="login-input" style="box-sizing:border-box;"
-        onkeydown="if(event.key==='Enter')_doSetNewPassword()" />
+        onkeydown="if(event.key==='Escape')_closePasswordResetOverlay();else if(event.key==='Enter')_doSetNewPassword()" />
     </div>
     <div class="login-error" id="reset-password-error"></div>
     <button class="login-btn" type="button" onclick="_doSetNewPassword()" style="margin-top:14px;">
       <i class="fa-solid fa-lock"></i> Save New Password
     </button>
+    <div style="text-align:center;margin-top:10px;">
+      <a href="#" onclick="event.preventDefault();_closePasswordResetOverlay()"
+        style="color:var(--text-3);font-size:.78rem;text-decoration:none;">Cancel — back to sign in</a>
+    </div>
   </div>
 </div>
 
@@ -5751,6 +5761,7 @@ var SUPA_ROW   = 'maass_family';
 var _sbClient = null;   // supabase-js v2 client, initialized once
 var _sbUser   = null;   // currently signed-in user (or null)
 var _currentTripId = null; // UUID of the active trip row in `trips` table
+var _isRecoveryMode = false; // true while the password-reset overlay is active
 
 function _initSbClient() {
   if (_sbClient) return _sbClient;
@@ -5776,6 +5787,7 @@ function _initAuth() {
   client.auth.onAuthStateChange(function(event, session) {
     /* ── Password recovery — show set-new-password form ── */
     if (event === 'PASSWORD_RECOVERY') {
+      _isRecoveryMode = true;
       _sbUser = session && session.user;
       var ls = document.getElementById('login-screen');
       if (ls) ls.classList.remove('hidden');
@@ -5788,6 +5800,8 @@ function _initAuth() {
     /* ── Signed in or page-reload with existing session ── */
     if (session && session.user) {
       _sbUser = session.user;
+      // Don't redirect to profile picker while the reset form is active
+      if (_isRecoveryMode) return;
       var loginEl = document.getElementById('login-screen');
       var loginOv = document.getElementById('login-overlay');
       // INITIAL_SESSION fires on every page load when a valid session exists.
@@ -5802,6 +5816,12 @@ function _initAuth() {
     }
 
     /* ── Signed out or session expired ── */
+    // Guard: never clear _sbUser while the password-reset overlay is shown.
+    // Supabase sometimes fires a SIGNED_OUT after PASSWORD_RECOVERY because the
+    // one-time recovery token is consumed, but the user still needs to call
+    // updateUser(). We preserve _sbUser until the password is successfully saved.
+    if (_isRecoveryMode) return;
+
     _sbUser        = null;
     _currentTripId = null;
     _authed        = false;
@@ -6528,6 +6548,7 @@ async function _doForgotPassword() {
 }
 
 function _showPasswordResetForm() {
+  _isRecoveryMode = true;
   var overlay = document.getElementById('password-reset-overlay');
   if (overlay) {
     overlay.classList.remove('hidden');
@@ -6537,6 +6558,18 @@ function _showPasswordResetForm() {
       if (inp) inp.focus();
     }, 100);
   }
+}
+
+function _closePasswordResetOverlay() {
+  _isRecoveryMode = false;
+  var overlay = document.getElementById('password-reset-overlay');
+  if (overlay) { overlay.classList.add('hidden'); overlay.style.display = 'none'; }
+  // Clear any error message
+  var errEl = document.getElementById('reset-password-error');
+  if (errEl) errEl.textContent = '';
+  // Return to normal login screen
+  var ls = document.getElementById('login-screen');
+  if (ls) ls.classList.remove('hidden');
 }
 
 async function _doSetNewPassword() {
@@ -6554,19 +6587,19 @@ async function _doSetNewPassword() {
 
   // onAuthStateChange (PASSWORD_RECOVERY) sets _sbUser asynchronously.
   // Poll briefly in case the event hasn't fired yet when the user clicks Save.
+  // Note: _isRecoveryMode prevents onAuthStateChange(SIGNED_OUT) from clearing
+  // _sbUser while the reset overlay is active, so this poll will find it.
   if (!_sbUser) {
     var _waited = 0;
     await new Promise(function(resolve) {
       var _poll = setInterval(function() {
         _waited += 200;
-        if (_sbUser || _waited >= 3000) { clearInterval(_poll); resolve(); }
+        if (_sbUser || _waited >= 4000) { clearInterval(_poll); resolve(); }
       }, 200);
     });
   }
 
-  // Fallback: Supabase stores the recovery session in localStorage even if
-  // the onAuthStateChange listener missed it or was cleared by a later event.
-  // getSession() reads directly from storage and is always authoritative.
+  // Final fallback: read the session directly from Supabase's localStorage store
   if (!_sbUser) {
     try {
       var _gs = await client.auth.getSession();
@@ -6577,14 +6610,15 @@ async function _doSetNewPassword() {
   }
 
   if (!_sbUser) {
-    showErr('Reset link expired — please use "Forgot password?" to get a new one.');
+    showErr('Session expired — request a new reset email via "Forgot password?".');
     return;
   }
 
   var { error } = await client.auth.updateUser({ password: pw1 });
   if (error) { showErr(error.message); return; }
 
-  // Success — hide overlay and proceed to app
+  // Success — exit recovery mode, hide overlay, proceed to app
+  _isRecoveryMode = false;
   var overlay = document.getElementById('password-reset-overlay');
   if (overlay) { overlay.classList.add('hidden'); overlay.style.display = 'none'; }
   showToast('✅ Password updated! You are now logged in.', 4000);
@@ -7425,6 +7459,10 @@ document.addEventListener('keydown', function(e) {
   if (e.key !== 'Escape') return;
   /* Close modals in priority order */
   var closers = [
+    function() {
+      var m = document.getElementById('password-reset-overlay');
+      if (m && !m.classList.contains('hidden')) { _closePasswordResetOverlay(); return true; }
+    },
     function() {
       var m = document.getElementById('ai-info-modal');
       if (m && !m.classList.contains('hidden')) { closePlaceInfo(); return true; }
