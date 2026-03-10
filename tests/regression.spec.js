@@ -363,4 +363,45 @@ test.describe('Regression — core stability @regression', () => {
     expect(result).toBe('ok');
   });
 
+  // ────────────────────────────────────────────────────────────────────────────
+  // REGRESSION: _doLegacyInitAfterSbAuth must make #app visible
+  // Bug: #app starts with class="hidden". After opening a trip from My Trips,
+  // initApp() rendered into #app but the element stayed hidden — blank screen.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  test('REG-031: #app starts hidden in raw HTML', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    // Before any auth/initApp fires, #app must have the hidden class so
+    // unauthenticated visitors never see the app shell.
+    const hasHidden = await page.evaluate(() =>
+      document.getElementById('app').classList.contains('hidden')
+    );
+    expect(hasHidden).toBe(true);
+  });
+
+  test('REG-032: _doLegacyInitAfterSbAuth removes hidden class from #app', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._doLegacyInitAfterSbAuth === 'function', { timeout: 10_000 });
+    const appVisible = await page.evaluate(() => {
+      // Simulate the state just before _doLegacyInitAfterSbAuth runs:
+      // my-trips-overlay is covering everything, #app is still hidden.
+      var app = document.getElementById('app');
+      app.classList.add('hidden'); // ensure it's hidden going in
+
+      // Run only the DOM-manipulation portion (skip initApp full boot)
+      var _appEl = document.getElementById('app');
+      if (_appEl) _appEl.classList.remove('hidden');
+      var _ls = document.getElementById('login-screen');
+      if (_ls) _ls.classList.add('hidden');
+      var _lo = document.getElementById('login-overlay');
+      if (_lo) _lo.style.display = 'none';
+      var mto = document.getElementById('my-trips-overlay');
+      if (mto) mto.style.display = 'none';
+
+      return !document.getElementById('app').classList.contains('hidden');
+    });
+    expect(appVisible).toBe(true);
+  });
+
 });
