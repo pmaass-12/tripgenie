@@ -11250,10 +11250,12 @@ async function _recalcDriveMiles(silent) {
 
   if (!silent) showToast('⏳ Calculating real drive distances…', 3000);
 
-  /* Build legs: { fromStopId, toStopId, dayIdx } for each drive day */
+  /* Build legs: { fromStopId, toStopId, dayIdx } for each drive day — skip removed stops */
+  var _rcRem = (appState && appState.removedStops) || {};
   var legs = [];
   var prevStopId = homeId;
   days.forEach(function(d, i) {
+    if (_rcRem[d.stopId]) return; // skip removed stops — don't advance prevStopId either
     if (d.driveDay && String(d.stopId) !== String(prevStopId)) {
       legs.push({ fromId: prevStopId, toId: d.stopId, dayIdx: i });
     }
@@ -18768,11 +18770,13 @@ function setListsTab(tab) {
 /* ── BOOKINGS RENDERER ───────────────────────────────────────────── */
 function renderBookings() {
   if (!appState.bookingStatus) appState.bookingStatus = {};
-  // Build unique lodging list from TRIP_DAYS
+  var _bkRem = (appState && appState.removedStops) || {};
+  // Build unique lodging list from TRIP_DAYS — skip removed stops
   var lodgings = [];
   var seen = {};
   for (var di = 0; di < TRIP_DAYS.length; di++) {
     var d = TRIP_DAYS[di];
+    if (_bkRem[d.stopId]) continue; // skip removed stops
     if (!d.sleep || d.sleepType === 'home' || d.sleep === 'HOME!') continue;
     if (!seen[d.sleep]) {
       seen[d.sleep] = {
@@ -25263,8 +25267,10 @@ function renderBookingsTools() {
       + '<div style="font-size:.8rem;line-height:1.5;">Tap the 🎫 button on any stop in the Schedule to upload a booking confirmation PDF or photo. Gemini will extract all the details automatically.</div>'
       + '</div>';
   } else {
-    /* Group by stop */
+    var _bktRem = (appState && appState.removedStops) || {};
+    /* Group by stop — skip removed stops */
     TRIP_STOPS.forEach(function(stop) {
+      if (_bktRem[stop.id]) return; // skip removed stops
       var bcs = allBc[stop.id] || [];
       if (!bcs.length) return;
       html += '<div style="margin-bottom:20px;">'
@@ -25277,12 +25283,13 @@ function renderBookingsTools() {
     });
   }
 
-  /* Add buttons for each stop */
+  /* Add buttons for each stop — skip removed stops */
   html += '<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">'
     + '<div style="font-weight:700;font-size:.82rem;color:var(--text-3);margin-bottom:10px;">ADD CONFIRMATION FOR A STOP</div>'
     + '<div style="display:flex;flex-wrap:wrap;gap:8px;">';
   TRIP_STOPS.forEach(function(stop) {
     if (stop.id === 15) return; // skip home
+    if (_bktRem[stop.id]) return; // skip removed stops
     var cnt = (allBc[stop.id] || []).length;
     html += '<button onclick="openBookingModal(' + JSON.stringify(stop.id).replace(/"/g,'&quot;') + ')" style="background:var(--card);border:1.5px solid ' + (cnt ? 'var(--blue)' : 'var(--border)') + ';border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);color:' + (cnt ? 'var(--blue)' : 'var(--text-2)') + ';white-space:nowrap;">'
       + _sn(stop) + (cnt ? ' <span style="background:var(--blue);color:#fff;border-radius:100px;font-size:.6rem;padding:1px 5px;">' + cnt + '</span>' : ' <i class="fa-solid fa-plus" style="font-size:.65rem;opacity:.6;"></i>')
@@ -27144,13 +27151,11 @@ function refreshTripPlan() {
     if (appState.osrmDriveCache && appState.osrmDriveCache[d.day]) return false; /* already cached */
     return (!d.miles || d.miles === 0) || (d.miles === 200 && d.driveHours === 4);
   });
-  if (_placeholderDriveDays.length > 2) {
-    issues.push({ type:'fix', msg: _placeholderDriveDays.length + ' drive legs have placeholder or uncalculated distances — running real road distance calculation via OSRM to fix mileage accuracy. This may take 30–60 seconds.' });
+  if (_placeholderDriveDays.length > 0) {
+    issues.push({ type:'fix', msg: _placeholderDriveDays.length + ' drive leg' + (_placeholderDriveDays.length === 1 ? '' : 's') + ' have placeholder or uncalculated distances — running real road distance calculation to fix mileage accuracy. This may take 30–60 seconds.' });
     fixCount++;
     /* Kick off async recalc — runs in background while health check report renders */
     setTimeout(function() { _recalcDriveMiles(true); _prefetchVirtualRoutes(true); }, 500);
-  } else if (_placeholderDriveDays.length > 0) {
-    issues.push({ type:'warn', msg: _placeholderDriveDays.length + ' drive day(s) have placeholder distances. Go to Trip Settings → Recalculate Drive Miles to fix.' });
   }
 
   /* ── 12d. Schedule date gaps — verify no calendar holes in visible schedule ── */
