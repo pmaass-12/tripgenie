@@ -6858,6 +6858,9 @@ async function _showMyTrips() {
   var client = _initSbClient();
   if (!client || !_sbUser) { _doLegacyInitAfterSbAuth(); return; }
 
+  /* Silently purge any legacy snapshot rows before fetching the trip list */
+  await _purgeAllSnapshots();
+
   var { data, error } = await client.from('trips').select('id,name,start_date,end_date,updated_at')
     .eq('user_id', _sbUser.id)           // belt-and-suspenders alongside RLS
     .order('updated_at', { ascending: false });
@@ -6945,13 +6948,34 @@ async function _deleteTrip(tripId, btn) {
   _showMyTrips();
 }
 
+/* One-shot background cleanup: deletes all legacy snapshot rows for the current user.
+   Called silently on login — no UI feedback needed since snapshots are disabled.     */
+async function _purgeAllSnapshots() {
+  var client = _initSbClient();
+  if (!client || !_sbUser) return;
+  try {
+    /* Single server-side DELETE with LIKE filter — far more reliable than .in() */
+    await client.from('trips').delete()
+      .eq('user_id', _sbUser.id)
+      .like('name', '\uD83D\uDCF8%');  // matches all "📸 …" rows
+  } catch(e) { /* silent — background cleanup, non-critical */ }
+}
+
 async function _dedupTrips() {
   var client = _initSbClient();
   if (!client || !_sbUser) return;
   var btn = document.getElementById('dedup-trips-btn');
   if (btn) { btn.textContent = '⏳ Loading…'; btn.disabled = true; }
 
-  /* Load ALL trips for this user */
+  /* Step 1: nuke ALL snapshot rows with a single server-side query */
+  if (btn) btn.textContent = '⏳ Clearing snapshots…';
+  try {
+    await client.from('trips').delete()
+      .eq('user_id', _sbUser.id)
+      .like('name', '\uD83D\uDCF8%');
+  } catch(e) { /* ignore — continue to dedup real trips */ }
+
+  /* Step 2: load remaining (real) trips and dedup by name */
   var { data, error } = await client.from('trips')
     .select('id,name,updated_at')
     .eq('user_id', _sbUser.id)
@@ -6962,16 +6986,9 @@ async function _dedupTrips() {
     return;
   }
 
-  /* Properly detect snapshot rows using codePointAt (emoji is a surrogate pair) */
-  var SNAP_CP = '\u{1F4F8}'; // 📸 as a code point
-  function _isSnap(t) { return t.name && t.name.codePointAt(0) === '📸'.codePointAt(0); }
-
-  var snapTrips = data.filter(_isSnap);
-  var realTrips = data.filter(function(t) { return !_isSnap(t); });
-
-  /* Real trips: group by name; keep the active trip or most recent per name */
+  /* Group real trips by name; keep active trip or most recent per name */
   var seen = {}, toDelete = [];
-  realTrips.forEach(function(t) {
+  data.forEach(function(t) {
     var key = (t.name || '').trim() || t.id;
     if (!seen[key]) {
       seen[key] = t.id;
@@ -6982,59 +6999,24 @@ async function _dedupTrips() {
       toDelete.push(t.id);
     }
   });
-  /* Make sure the active trip is never in toDelete */
   toDelete = toDelete.filter(function(id) { return id !== _currentTripId; });
 
-  /* Snapshots: delete ALL — snapshot system is disabled, Supabase is source of truth */
-  snapTrips.forEach(function(t) { toDelete.push(t.id); });
-
-  if (toDelete.length === 0) {
-    if (btn) { btn.textContent = '🧹 Remove Duplicates'; btn.disabled = false; }
-    alert('Nothing to clean up — your trips list is already tidy!');
-    return;
-  }
-
-  var dupCount  = toDelete.filter(function(id) { return !snapTrips.some(function(t) { return t.id === id; }); }).length;
-  var snapCount = snapTrips.length;
-  var confirmed = confirm(
-    'This will delete ' + toDelete.length + ' item(s):\n' +
-    '  • ' + dupCount + ' duplicate trip(s)\n' +
-    '  • ' + snapCount + ' old snapshot(s) (snapshots are no longer used)\n\n' +
-    'Your active trip will be kept.'
-  );
-  if (!confirmed) {
-    if (btn) { btn.textContent = '🧹 Remove Duplicates'; btn.disabled = false; }
-    return;
-  }
-
-  /* Delete in batches of 50 — avoids hanging that occurs with very large .in() arrays */
+  /* Delete duplicate real trips one-by-one (reliable pattern) */
   var failed = 0;
-  var BATCH = 50;
-  for (var i = 0; i < toDelete.length; i += BATCH) {
-    var chunk = toDelete.slice(i, i + BATCH);
-    if (btn) btn.textContent = '⏳ ' + Math.min(i + BATCH, toDelete.length) + ' / ' + toDelete.length + '…';
+  for (var di = 0; di < toDelete.length; di++) {
+    if (btn) btn.textContent = '⏳ ' + (di + 1) + ' / ' + toDelete.length + '…';
     try {
       var { error: delErr } = await client.from('trips').delete()
-        .in('id', chunk)
-        .eq('user_id', _sbUser.id);
-      if (delErr) {
-        /* Batch failed — fall back to one-by-one for this chunk */
-        for (var j = 0; j < chunk.length; j++) {
-          try {
-            var { error: soloErr } = await client.from('trips').delete()
-              .eq('id', chunk[j]).eq('user_id', _sbUser.id);
-            if (soloErr) failed++;
-          } catch(e) { failed++; }
-        }
-      }
+        .eq('id', toDelete[di]).eq('user_id', _sbUser.id);
+      if (delErr) failed++;
     } catch(e) { failed++; }
   }
 
   if (btn) { btn.textContent = '🧹 Remove Duplicates'; btn.disabled = false; }
   if (failed > 0) {
-    alert(failed + ' item(s) could not be deleted. This may be a permissions issue — try again.');
+    alert(failed + ' duplicate trip(s) could not be deleted — try again.');
   } else {
-    showToast('✅ Cleaned up ' + toDelete.length + ' item(s)', 3000);
+    showToast('✅ All cleaned up!', 3000);
   }
   _showMyTrips();
 }
