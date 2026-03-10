@@ -1,0 +1,151 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - text:    
+  - generic [ref=e3]:
+    - button "" [ref=e4] [cursor=pointer]:
+      - generic [ref=e5]: 
+    - generic [ref=e6]: 🔐
+    - generic [ref=e7]: Set New Password
+    - generic [ref=e8]: Enter a new password for your account.
+    - generic [ref=e9]:
+      - generic [ref=e10]:
+        - textbox "New password (min 6 characters)" [disabled] [ref=e11]: ValidPass1!
+        - button "" [ref=e12] [cursor=pointer]:
+          - generic [ref=e13]: 
+      - generic [ref=e14]:
+        - textbox "Confirm new password" [disabled] [ref=e15]: ValidPass1!
+        - button "" [ref=e16] [cursor=pointer]:
+          - generic [ref=e17]: 
+    - generic [ref=e18]: ⚠️ This reset link has expired.
+    - button " Save New Password" [disabled] [ref=e19] [cursor=pointer]:
+      - generic [ref=e20]: 
+      - text: Save New Password
+    - generic [ref=e21]:
+      - generic [ref=e22]:
+        - generic [ref=e23]: 
+        - text: Get a fresh reset link
+      - generic [ref=e24]:
+        - textbox "Your email address" [ref=e25]
+        - button "" [ref=e26] [cursor=pointer]:
+          - generic [ref=e27]: 
+    - link "Cancel — back to sign in" [ref=e30] [cursor=pointer]:
+      - /url: "#"
+  - text: 
+  - generic [ref=e31]:
+    - banner [ref=e32]:
+      - generic [ref=e33]:
+        - button "" [ref=e34] [cursor=pointer]:
+          - generic [ref=e35]: 
+        - button "✨ Ask TripGenie" [ref=e36] [cursor=pointer]:
+          - generic [ref=e37]: ✨
+          - generic [ref=e38]: Ask TripGenie
+        - button " Change the plan" [ref=e39] [cursor=pointer]:
+          - generic [ref=e40]: 
+          - generic [ref=e41]: Change the plan
+        - text: 
+      - generic [ref=e42]:
+        - generic [ref=e43] [cursor=pointer]:
+          - generic [ref=e44]: Maass Family RV 2026
+          - generic [ref=e45]: ▾
+        - generic "Cloud sync status" [ref=e46]: ↑ Saving…
+        - generic "Switch view" [ref=e47]:
+          - generic [ref=e48] [cursor=pointer]:
+            - generic [ref=e49]: 
+            - text: Driving
+          - generic [ref=e50]:
+            - generic [ref=e51]: 
+            - text: Planning
+        - button " Help" [ref=e52] [cursor=pointer]:
+          - generic [ref=e53]: 
+          - generic [ref=e54]: Help
+        - button "Refresh" [ref=e55] [cursor=pointer]:
+          - generic [ref=e56]: 
+          - generic [ref=e57]: Refresh
+        - button "🌙" [ref=e58] [cursor=pointer]
+        - button "" [ref=e59] [cursor=pointer]:
+          - generic [ref=e60]: 
+        - button "" [ref=e61] [cursor=pointer]:
+          - generic [ref=e62]: 
+      - text:     
+    - text:       
+    - navigation [ref=e63]:
+      - generic [ref=e65]: 🚐 Maass Family RV 2026
+      - button " Dashboard" [ref=e66] [cursor=pointer]:
+        - generic [ref=e67]: 
+        - generic [ref=e68]: Dashboard
+      - button " Route Map" [ref=e69] [cursor=pointer]:
+        - generic [ref=e70]: 
+        - generic [ref=e71]: Route Map
+      - button " Planner" [ref=e72] [cursor=pointer]:
+        - generic [ref=e73]: 
+        - generic [ref=e74]: Planner
+      - button " School" [ref=e75] [cursor=pointer]:
+        - generic [ref=e76]: 
+        - generic [ref=e77]: School
+      - button " Journal" [ref=e78] [cursor=pointer]:
+        - generic [ref=e79]: 
+        - generic [ref=e80]: Journal
+      - button " Gallery" [ref=e81] [cursor=pointer]:
+        - generic [ref=e82]: 
+        - generic [ref=e83]: Gallery
+      - button " Postcards" [ref=e84] [cursor=pointer]:
+        - generic [ref=e85]: 
+        - generic [ref=e86]: Postcards
+      - button " Lists" [ref=e87] [cursor=pointer]:
+        - generic [ref=e88]: 
+        - generic [ref=e89]: Lists
+      - text: 
+      - button " Tips" [ref=e90] [cursor=pointer]:
+        - generic [ref=e91]: 
+        - generic [ref=e92]: Tips
+      - button " Alerts" [ref=e93] [cursor=pointer]:
+        - generic [ref=e94]: 
+        - generic [ref=e95]: Alerts
+      - button " Fun" [ref=e96] [cursor=pointer]:
+        - generic [ref=e97]: 
+        - generic [ref=e98]: Fun
+      - button " Updates" [ref=e99] [cursor=pointer]:
+        - generic [ref=e100]: 
+        - generic [ref=e102]: Updates
+      - button " Tools" [ref=e103] [cursor=pointer]:
+        - generic [ref=e104]: 
+        - generic [ref=e105]: Tools
+      - button " Ideas" [ref=e106] [cursor=pointer]:
+        - generic [ref=e107]: 
+        - generic [ref=e108]: Ideas
+    - main [ref=e109]:      +           
+  - dialog "TripGenie AI Assistant" [ref=e111]:
+    - generic [ref=e112]:
+      - generic [ref=e113]: ✨
+      - generic [ref=e114]:
+        - generic [ref=e115]: TripGenie
+        - generic [ref=e116]: Your AI road-trip assistant — ask anything!
+      - button "🗑️" [ref=e117] [cursor=pointer]
+      - button "× Close" [ref=e118] [cursor=pointer]
+    - generic [ref=e120]:
+      - generic [ref=e121]:
+        - button "How do I empty the gray water tank?" [ref=e122] [cursor=pointer]
+        - button "What's the best RV park check-in tip?" [ref=e123] [cursor=pointer]
+        - button "How do I unhook the sewer connection safely?" [ref=e124] [cursor=pointer]
+        - button "What should I do if a tire looks low?" [ref=e125] [cursor=pointer]
+        - button "What's a good campfire dinner recipe?" [ref=e126] [cursor=pointer]
+        - button "Activities near Sedona for kids?" [ref=e127] [cursor=pointer]
+      - generic [ref=e128]:
+        - textbox "Ask anything — RV tips, local spots, what's in this photo…" [ref=e129]
+        - button " Photo" [ref=e130] [cursor=pointer]:
+          - generic [ref=e131]: 
+          - generic [ref=e132]: Photo
+        - button " Speak" [ref=e133] [cursor=pointer]:
+          - generic [ref=e135]: 
+          - generic [ref=e136]: Speak
+        - button "Auto" [ref=e137] [cursor=pointer]:
+          - img [ref=e138]
+          - generic [ref=e144]: Auto
+        - button "Send" [ref=e145] [cursor=pointer]:
+          - img [ref=e146]
+      - generic [ref=e149]: TripGenie is AI and can make mistakes. Please double-check important details.
+  - generic [ref=e150]: "❌ Snapshot failed: invalid input syntax for type uuid: \"real-user\""
+  - text:                                                      
+```

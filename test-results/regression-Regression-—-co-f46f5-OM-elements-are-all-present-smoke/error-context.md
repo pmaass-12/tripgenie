@@ -1,0 +1,63 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e1]:
+  - generic [ref=e3]:
+    - generic [ref=e4]: 🚐
+    - generic [ref=e5]:
+      - text: Maass Family
+      - text: RV 2026
+    - generic [ref=e6]: Your 49-day cross-country road trip
+    - generic [ref=e7]:
+      - generic [ref=e8]: 
+      - generic [ref=e9]: Mar 2 – Apr 19, 2026
+    - generic [ref=e10]:
+      - generic [ref=e11]:
+        - button "Sign In" [ref=e12] [cursor=pointer]
+        - button "Create Account" [ref=e13] [cursor=pointer]
+      - textbox "Email address" [active] [ref=e15]
+      - generic [ref=e16]:
+        - textbox "Password" [ref=e17]
+        - button "" [ref=e18] [cursor=pointer]:
+          - generic [ref=e19]: 
+      - link "Forgot password?" [ref=e21] [cursor=pointer]:
+        - /url: "#"
+      - button " Continue" [ref=e23] [cursor=pointer]:
+        - generic [ref=e24]: 
+        - text: Continue
+    - button " Test" [ref=e25] [cursor=pointer]:
+      - generic [ref=e26]: 
+      - text: Test
+  - text:                                                 +           
+  - dialog "TripGenie AI Assistant" [ref=e27]:
+    - generic [ref=e28]:
+      - generic [ref=e29]: ✨
+      - generic [ref=e30]:
+        - generic [ref=e31]: TripGenie
+        - generic [ref=e32]: Your AI road-trip assistant — ask anything!
+      - button "🗑️" [ref=e33] [cursor=pointer]
+      - button "× Close" [ref=e34] [cursor=pointer]
+    - generic [ref=e36]:
+      - generic [ref=e37]:
+        - button "How do I empty the gray water tank?" [ref=e38] [cursor=pointer]
+        - button "What's the best RV park check-in tip?" [ref=e39] [cursor=pointer]
+        - button "How do I unhook the sewer connection safely?" [ref=e40] [cursor=pointer]
+        - button "What should I do if a tire looks low?" [ref=e41] [cursor=pointer]
+        - button "What's a good campfire dinner recipe?" [ref=e42] [cursor=pointer]
+        - button "Activities near Sedona for kids?" [ref=e43] [cursor=pointer]
+      - generic [ref=e44]:
+        - textbox "Ask anything — RV tips, local spots, what's in this photo…" [ref=e45]
+        - button " Photo" [ref=e46] [cursor=pointer]:
+          - generic [ref=e47]: 
+          - generic [ref=e48]: Photo
+        - button " Speak" [ref=e49] [cursor=pointer]:
+          - generic [ref=e51]: 
+          - generic [ref=e52]: Speak
+        - button "Auto" [ref=e53] [cursor=pointer]:
+          - img [ref=e54]
+          - generic [ref=e60]: Auto
+        - button "Send" [ref=e61] [cursor=pointer]:
+          - img [ref=e62]
+      - generic [ref=e65]: TripGenie is AI and can make mistakes. Please double-check important details.
+  - text:                                                      
+```
