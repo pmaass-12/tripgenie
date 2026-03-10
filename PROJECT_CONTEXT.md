@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-10 (Session 27)
+2026-03-10 (Session 27 continued 4)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -70,6 +70,22 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 27 (continued 4) — 2026-03-10
+
+**Fix trip duplication + drive separator estimates + geocoding fallback.**
+
+- **`_syncToSupabaseTrips` — remove auto-INSERT** (index.html):
+  - Root cause: when `_currentTripId` is null, every `saveState()` call (including during `initApp`) triggered an INSERT into the `trips` table, creating 25+ duplicate trips.
+  - Fix: removed the INSERT block entirely. Function now returns immediately when `_currentTripId` is null. Only `_saveMyTrip()` (explicit user action) creates new trips.
+
+- **`_geocodeMissingStopCoords()` — new startup function** (index.html):
+  - Root cause: custom stops added via "Add Destination" before the geocoding fix were saved with `lat: null, lng: null` in `customTripData.stops`. These show up in the schedule but their virtual drive separators can't compute haversine estimates → minimal "est." pill with no miles/hours.
+  - Fix: new async function called at init (alongside `_prefetchVirtualRoutes`). Iterates `customTripData.stops`, finds any with null lat/lng, geocodes via Nominatim (US first, then global fallback), updates both `customTripData.stops` AND the live `TRIP_STOPS` array, saves state, re-renders schedule and refetches OSRM virtual routes.
+
+- **`_admInsertDest()` geocoding — multi-strategy fallback** (index.html):
+  - Root cause: Nominatim is strict; approximate names or names without exact spelling fail with `countrycodes=us`.
+  - Fix: now tries 3 strategies in sequence: (1) exact name + US restriction, (2) exact name, no country filter, (3) first part of name only (before comma) + US restriction. Stops at first success.
 
 ### Session 27 (continued 3) — 2026-03-10
 

@@ -7271,19 +7271,9 @@ function _syncToSupabaseTrips(state) {
   if (_sbSyncTimer) clearTimeout(_sbSyncTimer);
   _sbSyncTimer = setTimeout(async function() {
     var client = _initSbClient();
-    if (!client || !_sbUser) return;
-    if (!_currentTripId) {
-      var { data, error } = await client.from('trips').insert({
-        user_id:    _sbUser.id,
-        name:       (CONFIG && CONFIG.tripName) || (state.customTripData && state.customTripData.tripName) || 'My Trip',
-        trip_data:  state,
-        start_date: CONFIG && CONFIG.startDate,
-        end_date:   CONFIG && CONFIG.endDate,
-        updated_at: new Date().toISOString()
-      }).select('id').single();
-      if (!error && data) { _currentTripId = data.id; }
-      return;
-    }
+    // Only auto-save when we have an active trip — never auto-create new trips.
+    // New trips are created explicitly via _saveMyTrip() only.
+    if (!client || !_sbUser || !_currentTripId) return;
     await client.from('trips').update({
       trip_data:  state,
       name:       (CONFIG && CONFIG.tripName) || (state.customTripData && state.customTripData.tripName) || 'My Trip',
@@ -11226,6 +11216,59 @@ async function _recalcDriveMiles(silent) {
     showToast('✅ Updated ' + updated + ' drive legs — ' + _newTotal.toLocaleString() + ' mi total' + (failed ? ' (' + failed + ' failed)' : ''), 3500);
   } else {
     showToast('⚠️ Could not reach routing service — try again later', 2500);
+  }
+}
+
+/* ── GEOCODE MISSING CUSTOM STOP COORDINATES ─────────────────────────────
+   Runs on startup. Finds custom stops in customTripData.stops that have no
+   lat/lng (e.g. added before the geocoding fix) and populates them via
+   Nominatim. Once done, re-renders the schedule so virtual drive separators
+   show real haversine estimates instead of the minimal "est." badge.       */
+async function _geocodeMissingStopCoords() {
+  var ct = appState.customTripData;
+  if (!ct || !ct.stops) return;
+  var missing = ct.stops.filter(function(s) { return !s.lat || !s.lng; });
+  if (missing.length === 0) return;
+
+  var updated = 0;
+  for (var mi = 0; mi < missing.length; mi++) {
+    var s = missing[mi];
+    if (!s.name) continue;
+    try {
+      /* Try with US restriction first; fall back to global if no result */
+      var _geoUrl = 'https://nominatim.openstreetmap.org/search?q='
+        + encodeURIComponent(s.name)
+        + '&format=json&limit=1&countrycodes=us';
+      var r = await fetch(_geoUrl, { headers: { 'Accept-Language': 'en', 'User-Agent': 'TripGenie/1.0' } });
+      var d = await r.json();
+      if (!d || d.length === 0) {
+        /* Retry without country restriction */
+        r = await fetch('https://nominatim.openstreetmap.org/search?q='
+          + encodeURIComponent(s.name)
+          + '&format=json&limit=1',
+          { headers: { 'Accept-Language': 'en', 'User-Agent': 'TripGenie/1.0' } });
+        d = await r.json();
+      }
+      if (d && d.length > 0) {
+        s.lat = parseFloat(d[0].lat);
+        s.lng = parseFloat(d[0].lon);
+        updated++;
+      }
+    } catch(e) { /* silently skip on network error */ }
+  }
+
+  if (updated > 0) {
+    appState.customTripData = ct;
+    /* Also patch the live TRIP_STOPS array so renderSchedule sees the coords immediately */
+    ct.stops.forEach(function(cs) {
+      if (!cs.lat || !cs.lng) return;
+      var live = TRIP_STOPS.find(function(s) { return s.id === cs.id; });
+      if (live) { live.lat = cs.lat; live.lng = cs.lng; }
+    });
+    saveState(appState);
+    /* Re-render schedule so virtual separators pick up the new coords */
+    if (typeof renderSchedule === 'function') renderSchedule();
+    if (typeof _prefetchVirtualRoutes === 'function') _prefetchVirtualRoutes(true);
   }
 }
 
@@ -19448,19 +19491,28 @@ async function _admInsertDest() {
   var insertBtn = document.getElementById('adm-insert-btn');
   if (insertBtn) { insertBtn.disabled = true; insertBtn.textContent = '📍 Locating…'; }
 
-  /* Geocode via Nominatim to get real coordinates */
+  /* Geocode via Nominatim — tries multiple strategies to handle approximate or
+     partial names. Strategy order:
+       1. Exact name + US restriction  (e.g. "White Sands, New Mexico")
+       2. Exact name, no country filter (catches territories / alt spellings)
+       3. First part of name only       (e.g. "White Sands" from "White Sands, New Mexico")  */
   _mapAddStopLatLng = null;
   try {
-    var geoResp = await fetch(
-      'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(_admConfirmedName)
-      + '&format=json&limit=1&countrycodes=us',
-      { headers: { 'Accept-Language': 'en', 'User-Agent': 'TripGenie/1.0' } }
-    );
-    var geoData = await geoResp.json();
-    if (geoData && geoData.length > 0) {
-      _mapAddStopLatLng = { lat: parseFloat(geoData[0].lat), lng: parseFloat(geoData[0].lon) };
+    var _geoHeaders = { 'Accept-Language': 'en', 'User-Agent': 'TripGenie/1.0' };
+    var _geoBase = 'https://nominatim.openstreetmap.org/search?format=json&limit=1';
+    var _geoQueries = [
+      _geoBase + '&countrycodes=us&q=' + encodeURIComponent(_admConfirmedName),
+      _geoBase + '&q=' + encodeURIComponent(_admConfirmedName),
+      _geoBase + '&countrycodes=us&q=' + encodeURIComponent(_admConfirmedName.split(',')[0].trim())
+    ];
+    for (var _qi = 0; _qi < _geoQueries.length && !_mapAddStopLatLng; _qi++) {
+      var _gr = await fetch(_geoQueries[_qi], { headers: _geoHeaders });
+      var _gd = await _gr.json();
+      if (_gd && _gd.length > 0) {
+        _mapAddStopLatLng = { lat: parseFloat(_gd[0].lat), lng: parseFloat(_gd[0].lon) };
+      }
     }
-  } catch(e) { /* proceed without coords if geocode fails */ }
+  } catch(e) { /* proceed without coords if all geocode attempts fail */ }
 
   if (insertBtn) { insertBtn.disabled = false; insertBtn.textContent = '📍 Add to My Trip'; }
   closeAddDest();
@@ -20426,6 +20478,8 @@ function initApp() {
     }
     /* Always prefetch virtual separator routes not yet in cache */
     _prefetchVirtualRoutes(true);
+    /* Backfill any custom stops that are missing lat/lng (pre-geocoding-fix saves) */
+    _geocodeMissingStopCoords();
   }, 5000);
 }
 
