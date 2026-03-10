@@ -404,4 +404,136 @@ test.describe('Regression — core stability @regression', () => {
     expect(appVisible).toBe(true);
   });
 
+  // ────────────────────────────────────────────────────────────────────────────
+  // REGRESSION: Add Destination feature
+  //
+  // Bugs fixed:
+  //   1. AI returned the wrong place (Yellowstone for "Hazen, Arkansas") —
+  //      prompt now explicitly instructs the AI to confirm the exact typed place.
+  //   2. New stops saved with null lat/lng — _admInsertDest now geocodes via
+  //      Nominatim before calling _mapAddStopSave, so stops get real coordinates.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  test('REG-033: _admInsertDest exists and is a function', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._admInsertDest !== 'undefined', { timeout: 10_000 });
+    const isFunc = await page.evaluate(() => typeof window._admInsertDest === 'function');
+    expect(isFunc).toBe(true);
+  });
+
+  test('REG-034: _admInsertDest returns early without crashing when _admConfirmedName is empty', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._admInsertDest === 'function', { timeout: 10_000 });
+    const result = await page.evaluate(async () => {
+      // Ensure _admConfirmedName is falsy so the function exits immediately
+      window._admConfirmedName = '';
+      try {
+        await window._admInsertDest();
+        return 'ok';
+      } catch(e) {
+        return 'threw: ' + e.message;
+      }
+    });
+    expect(result).toBe('ok');
+  });
+
+  test('REG-035: Add Destination modal DOM elements are all present', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    const missing = await page.evaluate(() => {
+      const ids = [
+        'add-dest-modal', 'adm-city', 'adm-confirm-card',
+        'adm-insert-btn', 'adm-after-stop', 'adm-nights', 'adm-loading-msg',
+      ];
+      return ids.filter(id => !document.getElementById(id));
+    });
+    expect(missing).toEqual([]);
+  });
+
+  test('REG-036: _mapAddStopLatLng is initialised to null (no stale coords from previous call)', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._mapAddStopLatLng !== 'undefined', { timeout: 10_000 });
+    const val = await page.evaluate(() => window._mapAddStopLatLng);
+    expect(val).toBeNull();
+  });
+
+  test('REG-037: openAddDest() resets _admConfirmedName to empty string', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.openAddDest === 'function', { timeout: 10_000 });
+    const name = await page.evaluate(() => {
+      // Pre-load a stale value to verify it gets cleared
+      window._admConfirmedName = 'Stale Place';
+      openAddDest();
+      return window._admConfirmedName;
+    });
+    expect(name).toBe('');
+  });
+
+  test('REG-038: _mapAddStopSave inserts a stop with lat/lng from _mapAddStopLatLng', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof window._mapAddStopSave === 'function' && typeof window.TRIP_STOPS !== 'undefined',
+      { timeout: 10_000 }
+    );
+    const result = await page.evaluate(() => {
+      // Set known coords (mimics what Nominatim geocoding would provide)
+      window._mapAddStopLatLng = { lat: 34.7867, lng: -91.5626 }; // Hazen, AR approx
+
+      var beforeLen = window.TRIP_STOPS.length;
+
+      // Insert with afterIdx=-1 (prepend), 2 nights
+      window._mapAddStopSave('Hazen, Arkansas', -1, 2);
+
+      var afterLen = window.TRIP_STOPS.length;
+      var newStop  = window.TRIP_STOPS[afterLen - 1]; // was pushed to end of array
+
+      // Clean up: remove the injected stop so we don't pollute other tests
+      window.TRIP_STOPS.splice(window.TRIP_STOPS.indexOf(newStop), 1);
+
+      return {
+        addedOne:  afterLen === beforeLen + 1,
+        hasLat:    newStop.lat === 34.7867,
+        hasLng:    newStop.lng === -91.5626,
+        name:      newStop.name,
+        state:     newStop.state,
+        emoji:     newStop.emoji,
+      };
+    });
+    expect(result.addedOne).toBe(true);
+    expect(result.hasLat).toBe(true);
+    expect(result.hasLng).toBe(true);
+    expect(result.name).toBe('Hazen');
+    expect(result.state).toBe('Arkansas');
+    expect(result.emoji).toBe('📍');
+  });
+
+  test('REG-039: _mapAddStopSave uses null coords when _mapAddStopLatLng is null (graceful fallback)', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(
+      () => typeof window._mapAddStopSave === 'function' && typeof window.TRIP_STOPS !== 'undefined',
+      { timeout: 10_000 }
+    );
+    const result = await page.evaluate(() => {
+      window._mapAddStopLatLng = null; // simulate geocode failure
+
+      var beforeLen = window.TRIP_STOPS.length;
+      window._mapAddStopSave('Nowhere Town, TX', -1, 1);
+      var afterLen = window.TRIP_STOPS.length;
+      var newStop  = window.TRIP_STOPS[afterLen - 1];
+
+      // Clean up
+      window.TRIP_STOPS.splice(window.TRIP_STOPS.indexOf(newStop), 1);
+
+      return {
+        addedOne: afterLen === beforeLen + 1,
+        lat:      newStop.lat,
+        lng:      newStop.lng,
+      };
+    });
+    // Stop is still created — it just won't appear on the map until coords are added
+    expect(result.addedOne).toBe(true);
+    expect(result.lat).toBeNull();
+    expect(result.lng).toBeNull();
+  });
+
 });

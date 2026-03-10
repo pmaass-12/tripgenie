@@ -19435,14 +19435,34 @@ function _admToStep4() {
   _admSetStep(4);
 }
 
-/* Actually insert the confirmed destination into the schedule */
-function _admInsertDest() {
+/* Actually insert the confirmed destination into the schedule.
+   Geocodes the confirmed city name first so the new stop gets real
+   coordinates — otherwise it would be pinless on the map and drive
+   distances for that leg couldn't be calculated.                   */
+async function _admInsertDest() {
   if (!_admConfirmedName) return;
   var afterIdx = parseInt((document.getElementById('adm-after-stop') || {}).value || '-1');
   var nights   = parseInt((document.getElementById('adm-nights')     || {}).value || '2');
   if (isNaN(nights) || nights < 0) nights = 2;
-  /* _mapAddStopSave needs _mapAddStopLatLng; set to null so it skips GPS */
+
+  var insertBtn = document.getElementById('adm-insert-btn');
+  if (insertBtn) { insertBtn.disabled = true; insertBtn.textContent = '📍 Locating…'; }
+
+  /* Geocode via Nominatim to get real coordinates */
   _mapAddStopLatLng = null;
+  try {
+    var geoResp = await fetch(
+      'https://nominatim.openstreetmap.org/search?q=' + encodeURIComponent(_admConfirmedName)
+      + '&format=json&limit=1&countrycodes=us',
+      { headers: { 'Accept-Language': 'en', 'User-Agent': 'TripGenie/1.0' } }
+    );
+    var geoData = await geoResp.json();
+    if (geoData && geoData.length > 0) {
+      _mapAddStopLatLng = { lat: parseFloat(geoData[0].lat), lng: parseFloat(geoData[0].lon) };
+    }
+  } catch(e) { /* proceed without coords if geocode fails */ }
+
+  if (insertBtn) { insertBtn.disabled = false; insertBtn.textContent = '📍 Add to My Trip'; }
   closeAddDest();
   _mapAddStopSave(_admConfirmedName, afterIdx, nights);
 }

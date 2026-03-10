@@ -39,10 +39,10 @@ tripgenie/
     ├── helpers.js                # Shared: login(), openTab(), callFn(), waitForToast()
     ├── auth.setup.js             # Logs in once, saves session to .auth/user.json
     ├── smoke.spec.js             # 7 fast @smoke tests (no login required)
-    ├── unit.spec.js              # 25 groups, 130+ pure function tests
+    ├── unit.spec.js              # 26 groups, 140+ pure function tests
     ├── integration.spec.js       # 9 groups testing data flow, auth, permissions
     ├── e2e.spec.js               # 10 groups testing full user workflows
-    └── regression.spec.js        # 25 REG-* checks — run before every deploy
+    └── regression.spec.js        # 39 REG-* checks — run before every deploy
 ```
 
 ---
@@ -70,6 +70,36 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 27 (continued 2) — 2026-03-10
+
+**Add Destination geocoding fix + expanded test coverage.**
+
+- **`_admInsertDest()` geocoding fix** (index.html):
+  - Root cause: function called `_mapAddStopSave()` without setting `_mapAddStopLatLng` — new stops saved with `lat: null, lng: null`, making them invisible on the map and preventing drive distance calculations.
+  - Fix: changed `_admInsertDest` from sync to `async`, added Nominatim geocoding call (`https://nominatim.openstreetmap.org/search?q=...&format=json&limit=1&countrycodes=us`) before calling `_mapAddStopSave`. If geocoding fails, function proceeds without coords (graceful fallback) rather than crashing.
+  - Button shows "📍 Locating…" while geocoding, restored to "📍 Add to My Trip" after.
+- **`lookupDestination()` AI prompt fix** (index.html, from prior session):
+  - AI (Gemini) was returning Yellowstone when user typed "Hazen, Arkansas" — prompt said "identify the BEST destination".
+  - Rewrote prompt to explicitly confirm the exact place typed, never substitute alternatives. Added rule: only mark VALID as "no" if the place doesn't exist in the US at all.
+- **New unit tests added** (`tests/unit.spec.js`):
+  - Group 26: "Add Destination — AI response parsing" — 10 tests covering:
+    - CONFIRMED/VALID/DESC/DAYS/ATTRACTION regex extraction from typical AI response
+    - Fallback: CONFIRMED falls back to typed city when field absent
+    - DAYS defaults to 2 when field missing
+    - Quote-stripping on CONFIRMED field
+    - Case-insensitive regex matching
+- **New regression tests added** (`tests/regression.spec.js`):
+  - REG-033: `_admInsertDest` exists and is a function
+  - REG-034: `_admInsertDest` returns early without crashing when `_admConfirmedName` is empty
+  - REG-035: All Add Destination modal DOM elements present (`add-dest-modal`, `adm-city`, `adm-confirm-card`, `adm-insert-btn`, `adm-after-stop`, `adm-nights`, `adm-loading-msg`)
+  - REG-036: `_mapAddStopLatLng` is initialised to `null` (no stale coords)
+  - REG-037: `openAddDest()` resets `_admConfirmedName` to empty string
+  - REG-038: `_mapAddStopSave` inserts stop with correct lat/lng from `_mapAddStopLatLng`
+  - REG-039: `_mapAddStopSave` gracefully creates stop with null coords when `_mapAddStopLatLng` is null
+- Test file counts updated:
+  - `unit.spec.js`: 26 groups, 140+ unit test cases
+  - `regression.spec.js`: 39 REG-* checks (REG-001 to REG-039)
 
 ### Session 27 (continued) — 2026-03-10
 

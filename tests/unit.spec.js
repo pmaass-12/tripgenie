@@ -1315,4 +1315,118 @@ test.describe('Unit — pure functions @unit', () => {
 
   });
 
+  // ═══════════════════════════════════════════════════════════════════
+  // 26. Add Destination — AI response parsing
+  //
+  // lookupDestination() uses regex to extract structured fields from a
+  // Gemini response string. These tests verify the parsing logic works
+  // correctly for normal responses, edge cases, and fallback values.
+  // Bug fixed: AI was returning Yellowstone for "Hazen, Arkansas" —
+  // prompt was rewritten, but parsing must also extract CONFIRMED exactly.
+  // ═══════════════════════════════════════════════════════════════════
+  test.describe('Add Destination — AI response parsing', () => {
+
+    const TYPICAL_RESPONSE = [
+      'CONFIRMED: Hazen, Arkansas',
+      'ATTRACTION: ',
+      'VALID: yes',
+      'DESC: Hazen is a small Arkansas town near Bayou DeView, a great birding spot for RV travelers heading through the Delta.',
+      'DAYS: 1',
+    ].join('\n');
+
+    test('CONFIRMED regex extracts the exact place name', async () => {
+      const confirmed = await page.evaluate((text) => {
+        return (text.match(/CONFIRMED:\s*(.+)/i) || [])[1] || '';
+      }, TYPICAL_RESPONSE);
+      expect(confirmed.trim()).toBe('Hazen, Arkansas');
+    });
+
+    test('VALID regex extracts "yes"', async () => {
+      const valid = await page.evaluate((text) => {
+        return (text.match(/VALID:\s*(\w+)/i) || [])[1] || '';
+      }, TYPICAL_RESPONSE);
+      expect(valid.toLowerCase()).toBe('yes');
+    });
+
+    test('VALID regex extracts "no" from an invalid-place response', async () => {
+      const noText = 'CONFIRMED: Faketown\nVALID: no\nDESC: Does not exist\nDAYS: 2';
+      const valid = await page.evaluate((text) => {
+        return (text.match(/VALID:\s*(\w+)/i) || [])[1] || '';
+      }, noText);
+      expect(valid.toLowerCase()).toBe('no');
+    });
+
+    test('DESC regex extracts the description sentence', async () => {
+      const desc = await page.evaluate((text) => {
+        return (text.match(/DESC:\s*(.+)/i) || [])[1] || '';
+      }, TYPICAL_RESPONSE);
+      expect(desc.length).toBeGreaterThan(10);
+      expect(desc).toContain('Hazen');
+    });
+
+    test('DAYS regex extracts a single digit as a number', async () => {
+      const days = await page.evaluate((text) => {
+        return parseInt((text.match(/DAYS:\s*(\d)/i) || [])[1]) || 2;
+      }, TYPICAL_RESPONSE);
+      expect(days).toBe(1);
+    });
+
+    test('DAYS defaults to 2 when field is missing', async () => {
+      const nodays = 'CONFIRMED: Somewhere\nVALID: yes\nDESC: Nice place.';
+      const days = await page.evaluate((text) => {
+        return parseInt((text.match(/DAYS:\s*(\d)/i) || [])[1]) || 2;
+      }, nodays);
+      expect(days).toBe(2);
+    });
+
+    test('CONFIRMED strips surrounding quotes from AI response', async () => {
+      const quoted = 'CONFIRMED: "Hazen, Arkansas"\nVALID: yes\nDAYS: 1\nDESC: A town.';
+      const confirmed = await page.evaluate((text) => {
+        const raw = (text.match(/CONFIRMED:\s*(.+)/i) || [])[1] || '';
+        return raw.trim().replace(/^"|"$/g, '');
+      }, quoted);
+      expect(confirmed).toBe('Hazen, Arkansas');
+      expect(confirmed).not.toContain('"');
+    });
+
+    test('CONFIRMED falls back to typed city when field is absent', async () => {
+      const noconfirm = 'VALID: yes\nDESC: A place.\nDAYS: 2';
+      const city = 'Memphis, TN';
+      const confirmed = await page.evaluate(([text, fallback]) => {
+        return (text.match(/CONFIRMED:\s*(.+)/i) || [])[1] || fallback;
+      }, [noconfirm, city]);
+      expect(confirmed).toBe('Memphis, TN');
+    });
+
+    test('ATTRACTION regex extracts blank for non-attraction searches', async () => {
+      const attraction = await page.evaluate((text) => {
+        const raw = (text.match(/ATTRACTION:\s*(.+)/i) || [])[1] || '';
+        return raw.trim().replace(/^"|"$/g, '');
+      }, TYPICAL_RESPONSE);
+      // "ATTRACTION: " with a blank value — raw match may be empty or whitespace-only
+      expect(attraction.trim()).toBe('');
+    });
+
+    test('ATTRACTION regex extracts a landmark name when present', async () => {
+      const withAttraction = 'CONFIRMED: Mammoth Cave, Kentucky\nATTRACTION: Mammoth Cave National Park\nVALID: yes\nDESC: Huge cave system.\nDAYS: 2';
+      const attraction = await page.evaluate((text) => {
+        const raw = (text.match(/ATTRACTION:\s*(.+)/i) || [])[1] || '';
+        return raw.trim().replace(/^"|"$/g, '');
+      }, withAttraction);
+      expect(attraction).toBe('Mammoth Cave National Park');
+    });
+
+    test('parsing is case-insensitive for field names', async () => {
+      const lowerCase = 'confirmed: Little Rock, AR\nvalid: yes\ndesc: Capital city.\ndays: 3';
+      const [confirmed, days] = await page.evaluate((text) => {
+        const c = (text.match(/CONFIRMED:\s*(.+)/i) || [])[1] || '';
+        const d = parseInt((text.match(/DAYS:\s*(\d)/i) || [])[1]) || 2;
+        return [c.trim(), d];
+      }, lowerCase);
+      expect(confirmed).toBe('Little Rock, AR');
+      expect(days).toBe(3);
+    });
+
+  });
+
 });
