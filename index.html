@@ -7509,7 +7509,12 @@ async function _createTripFromSettings(opts) {
   }
 
   _hideNewTripWizard();
-  document.getElementById('my-trips-overlay').style.display = 'none';
+  var _mto = document.getElementById('my-trips-overlay');
+  if (_mto) _mto.style.display = 'none';
+  var _ls = document.getElementById('login-screen');
+  if (_ls) _ls.classList.add('hidden');
+  var _appEl = document.getElementById('app');
+  if (_appEl) _appEl.classList.remove('hidden');
   initApp();
 }
 
