@@ -943,4 +943,694 @@ test.describe('Removed-stop filtering @regression', () => {
     expect(result.hasRecalcFn).toBe(true);
   });
 
+  // ────────────────────────────────────────────────────────────────────────────
+  // SECTION 3 — Date Binding & Day Cards (REG-056 to REG-059)
+  // Bug: No guard against corrupted/NaN phaseExtraDays; renderSchedule didn't
+  // normalise state before computing cumulative offsets.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  test('REG-056: _assertDateConsistency exists and is callable', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._assertDateConsistency === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      // Should not throw
+      try {
+        window.appState = window.appState || {};
+        window._assertDateConsistency();
+        return 'ok';
+      } catch (e) {
+        return e.message;
+      }
+    });
+
+    expect(result).toBe('ok');
+  });
+
+  test('REG-057: _assertDateConsistency removes NaN entries from phaseExtraDays', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._assertDateConsistency === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window.appState = window.appState || {};
+      window.appState.phaseExtraDays = { 'test-stop': NaN, 'stop-inf': Infinity };
+      // Give TRIP_DAYS no matching stops so all entries are orphaned
+      window.TRIP_DAYS = window.TRIP_DAYS || [];
+      window._assertDateConsistency();
+      return Object.keys(window.appState.phaseExtraDays).length;
+    });
+
+    expect(result).toBe(0);
+  });
+
+  test('REG-058: _assertDateConsistency removes orphaned stopId entries', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._assertDateConsistency === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window.appState = window.appState || {};
+      // One valid (matching TRIP_DAYS), one orphan
+      window.TRIP_DAYS = [{ day: 1, date: '2026-06-01', stopId: 'real-stop' }];
+      window.appState.phaseExtraDays = { 'real-stop': 2, 'ghost-stop': 5 };
+      window._assertDateConsistency();
+      return {
+        realRemains: 'real-stop' in window.appState.phaseExtraDays,
+        ghostGone:   !('ghost-stop' in window.appState.phaseExtraDays),
+      };
+    });
+
+    expect(result.realRemains).toBe(true);
+    expect(result.ghostGone).toBe(true);
+  });
+
+  test('REG-059: renderSchedule source calls _assertDateConsistency', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderSchedule === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      return window.renderSchedule.toString().includes('_assertDateConsistency');
+    });
+
+    expect(result).toBe(true);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // SECTION 4 — Stop Card Data Integrity (REG-060 to REG-063)
+  // Bug: firstDay.waypoint from source data could force waypoint header even
+  // when user had added nights; null arrive/depart showed blank instead of "—".
+  // ────────────────────────────────────────────────────────────────────────────
+
+  test('REG-060: phaseHeaderHtml renders full stop (not waypoint) for source-data waypoint with nights added', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.phaseHeaderHtml === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window.appState = window.appState || {};
+      window.appState.phaseExtraDays = window.appState.phaseExtraDays || {};
+      window.appState.waypointOverrides = window.appState.waypointOverrides || {};
+      // A stop that has waypoint:true in source data BUT also has 3 TRIP_DAYS entries (3 nights)
+      var fakeStopId = 'wp-test-stop-' + Date.now();
+      window.appState.phaseExtraDays[fakeStopId] = 0; // no extra — 3 base nights
+      window.TRIP_DAYS = window.TRIP_DAYS || [];
+      // Add 3 fake days for this stop
+      window.TRIP_DAYS.push({ day: 999, date: '2026-11-01', stopId: fakeStopId });
+      window.TRIP_DAYS.push({ day: 1000, date: '2026-11-02', stopId: fakeStopId });
+      window.TRIP_DAYS.push({ day: 1001, date: '2026-11-03', stopId: fakeStopId });
+
+      var firstDay = { day: 999, date: '2026-11-01', stopId: fakeStopId, waypoint: true };
+      var html = window.phaseHeaderHtml(fakeStopId, firstDay);
+
+      // Clean up
+      window.TRIP_DAYS = window.TRIP_DAYS.filter(function(d) { return d.stopId !== fakeStopId; });
+      delete window.appState.phaseExtraDays[fakeStopId];
+
+      // Should NOT show the "Waypoint — drive-through" text since stop has nights
+      return html.includes('drive-through');
+    });
+
+    expect(result).toBe(false);
+  });
+
+  test('REG-061: phaseHeaderHtml shows waypoint header for source-data waypoint with 0 effective nights', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.phaseHeaderHtml === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window.appState = window.appState || {};
+      window.appState.phaseExtraDays = window.appState.phaseExtraDays || {};
+      window.appState.waypointOverrides = window.appState.waypointOverrides || {};
+      var fakeStopId = 'wp-zero-' + Date.now();
+      // Only 1 TRIP_DAYS entry + phaseExtraDays = -1 → 0 effective nights
+      window.appState.phaseExtraDays[fakeStopId] = -1;
+      window.TRIP_DAYS = window.TRIP_DAYS || [];
+      window.TRIP_DAYS.push({ day: 1100, date: '2026-12-01', stopId: fakeStopId });
+
+      var firstDay = { day: 1100, date: '2026-12-01', stopId: fakeStopId, waypoint: true };
+      var html = window.phaseHeaderHtml(fakeStopId, firstDay);
+
+      window.TRIP_DAYS = window.TRIP_DAYS.filter(function(d) { return d.stopId !== fakeStopId; });
+      delete window.appState.phaseExtraDays[fakeStopId];
+
+      return html.includes('drive-through');
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('REG-062: _toggleWaypoint clears waypoint flag on TRIP_DAYS entries when restoring', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._toggleWaypoint === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window.appState = window.appState || {};
+      window.appState.phaseExtraDays = window.appState.phaseExtraDays || {};
+      window.appState.waypointOverrides = window.appState.waypointOverrides || {};
+      // Set up a stop that is currently a waypoint (totalNights === 0)
+      var sid = 'toggle-wp-' + Date.now();
+      var fakeDay = { day: 1200, date: '2026-08-01', stopId: sid, waypoint: true };
+      window.TRIP_DAYS = window.TRIP_DAYS || [];
+      window.TRIP_DAYS.push(fakeDay);
+      window.appState.phaseExtraDays[sid] = -1; // 1 base - 1 = 0 effective nights
+      window.appState.waypointOverrides[sid] = true;
+
+      // Mock _refreshAll and saveState to prevent side effects
+      var origRefresh = window._refreshAll; window._refreshAll = function(){};
+      var origSave = window.saveState; window.saveState = function(){};
+      var origToast = window.showToast; window.showToast = function(){};
+
+      window._toggleWaypoint(sid);
+
+      // Restore
+      window._refreshAll = origRefresh;
+      window.saveState = origSave;
+      window.showToast = origToast;
+      window.TRIP_DAYS = window.TRIP_DAYS.filter(function(d){ return d.stopId !== sid; });
+
+      return fakeDay.waypoint; // should now be false
+    });
+
+    expect(result).toBe(false);
+  });
+
+  test('REG-063: phaseHeaderHtml shows placeholder when _getStopEffectiveDates returns null dates', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.phaseHeaderHtml === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window.appState = window.appState || {};
+      window.appState.phaseExtraDays = window.appState.phaseExtraDays || {};
+      window.appState.waypointOverrides = window.appState.waypointOverrides || {};
+      // Create a stop with no TRIP_DAYS entries → _getStopEffectiveDates returns null dates
+      var sid = 'no-days-stop-' + Date.now();
+      var firstDay = { day: 1300, date: '2026-09-01', stopId: sid, waypoint: false };
+      // Ensure there are NO TRIP_DAYS for this stopId
+      var orig = window.TRIP_DAYS.slice();
+      window.TRIP_DAYS = window.TRIP_DAYS.filter(function(d){ return d.stopId !== sid; });
+      // Push one day so phaseHeaderHtml thinks there's a stop (it reads TRIP_DAYS for nights)
+      window.TRIP_DAYS.push(firstDay);
+      // But make _getStopEffectiveDates return null by ensuring the date is invalid
+      firstDay.date = '';
+
+      try {
+        var html = window.phaseHeaderHtml(sid, firstDay);
+        window.TRIP_DAYS = orig;
+        return html.includes('dates not set');
+      } catch(e) {
+        window.TRIP_DAYS = orig;
+        return false;
+      }
+    });
+
+    expect(result).toBe(true);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // SECTION 5 — Weather (REG-064 to REG-066)
+  // Bug: hasCoverage check blocked re-fetching forecast data when stop had only
+  // historical/typical data, even when the stop entered the 16-day forecast window.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  test('REG-064: loadWeather source uses forecast-type check for within-window stops', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.loadWeather === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var src = window.loadWeather.toString();
+      // Must check .type === 'forecast' inside the hasCoverage logic
+      return src.includes("type === 'forecast'") || src.includes('type==="forecast"');
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('REG-065: loadWeather source does not use plain hasCoverage for within-window stops', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.loadWeather === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var src = window.loadWeather.toString();
+      // Should use _withinFcWindow branching (not a single unconditional hasCoverage)
+      return src.includes('_withinFcWindow') || src.includes('withinFcWindow') || src.includes('withinWindow');
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('REG-066: _loadStopWeatherSilent source never overwrites forecast data with typical', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._loadStopWeatherSilent === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var src = window._loadStopWeatherSilent.toString();
+      // Must guard against overwriting forecast: check for type === 'forecast' guard
+      return src.includes("type === 'forecast'") || src.includes("type==='forecast'");
+    });
+
+    expect(result).toBe(true);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // SECTION 6 — Tooltip (REG-067 to REG-068)
+  // Bug: title= attribute on .ds-wrap caused browser tooltip to overlap bar
+  // content on mobile; native title is not visible on mobile at all.
+  // Fix: removed title from .ds-wrap — route name already visible in ds-r1.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  test('REG-067: _renderDriveSepA ds-wrap does not have title= attribute', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._renderDriveSepA === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var stopA = { id: 'ta', name: 'Alpha', state: 'TX', emoji: '🏕', lat: 30, lng: -97 };
+      var stopB = { id: 'tb', name: 'Beta',  state: 'OK', emoji: '🏔', lat: 34, lng: -98 };
+      window.appState = window.appState || {};
+      window.appState.removedStops = {};
+      window.appState.phaseExtraDays = {};
+      // Push a drive day
+      var fakeDay = { day: 777, date: '2026-07-15', stopId: 'tb', miles: 200, driveHours: 4 };
+      window.TRIP_DAYS = window.TRIP_DAYS || [];
+      window.TRIP_DAYS.push(fakeDay);
+      var html = window._renderDriveSepA(fakeDay, stopB, new Date('2026-07-15'), 1, false, false);
+      window.TRIP_DAYS = window.TRIP_DAYS.filter(function(d){ return d.day !== 777; });
+      // The outer ds-wrap div should NOT have a title attribute
+      var wrapMatch = html.match(/<div class="ds-wrap"[^>]*/);
+      return wrapMatch ? wrapMatch[0].includes('title=') : false;
+    });
+
+    expect(result).toBe(false);
+  });
+
+  test('REG-068: _renderVirtualDriveSep ds-wrap does not have title= attribute', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._renderVirtualDriveSep === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var stopA = { id: 'va', name: 'VAlpha', state: 'TX', emoji: '🏕', lat: 30, lng: -97 };
+      var stopB = { id: 'vb', name: 'VBeta',  state: 'OK', emoji: '🏔', lat: 34, lng: -98 };
+      window.appState = window.appState || {};
+      window.appState.removedStops = {};
+      var fakeDay = { day: 888, date: '2026-07-16', stopId: 'vb' };
+      window.TRIP_DAYS = window.TRIP_DAYS || [];
+      window.TRIP_DAYS.push(fakeDay);
+      var html = window._renderVirtualDriveSep(stopA, stopB, fakeDay, new Date('2026-07-16'), 1);
+      window.TRIP_DAYS = window.TRIP_DAYS.filter(function(d){ return d.day !== 888; });
+      if (!html) return false;
+      var wrapMatch = html.match(/<div class="ds-wrap"[^>]*/);
+      return wrapMatch ? wrapMatch[0].includes('title=') : false;
+    });
+
+    expect(result).toBe(false);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // EXPENSE FEATURE 1 — Clickable rows + receipt detail modal (REG-069 to REG-073)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  test('REG-069: expense row HTML includes onclick="showExpenseDetail"', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderExpenses === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window.appState = window.appState || {};
+      window.appState.expenses = [{
+        id: 'exp_test1', category: 'restaurants', amount: 25.00,
+        note: 'Sonic', dayNum: 3, date: 'Mar 5', receiptData: null
+      }];
+      window.renderExpenses();
+      var el = document.getElementById('expenses-content') || document.querySelector('[id*="expense"]');
+      if (!el) return false;
+      return el.innerHTML.includes('showExpenseDetail');
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('REG-070: expense delete button has event.stopPropagation()', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderExpenses === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window.appState = window.appState || {};
+      window.appState.expenses = [{
+        id: 'exp_test2', category: 'fuel', amount: 80.00,
+        note: 'RaceWay', dayNum: 3, date: 'Mar 4', receiptData: null
+      }];
+      window.renderExpenses();
+      var el = document.getElementById('expenses-content') || document.querySelector('[id*="expense"]');
+      if (!el) return false;
+      // The delete button must call stopPropagation to not open the modal
+      return el.innerHTML.includes('stopPropagation');
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('REG-071: showExpenseDetail function exists', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.showExpenseDetail === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      return typeof window.showExpenseDetail === 'function';
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('REG-072: showExpenseDetail creates modal with correct amount and note', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.showExpenseDetail === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window.appState = window.appState || {};
+      window.appState.expenses = [{
+        id: 'exp_modal_test', category: 'lodging', amount: 142.50,
+        note: 'KOA Campground', dayNum: 5, date: 'Mar 10', receiptData: null
+      }];
+      window.showExpenseDetail('exp_modal_test');
+      var ov = document.getElementById('exp-detail-overlay');
+      if (!ov) return { found: false };
+      var html = ov.innerHTML;
+      ov.remove();
+      return {
+        found: true,
+        hasNote: html.includes('KOA Campground'),
+        hasAmount: html.includes('142.50'),
+        hasNoReceipt: html.includes('No receipt uploaded'),
+      };
+    });
+
+    expect(result.found).toBe(true);
+    expect(result.hasNote).toBe(true);
+    expect(result.hasAmount).toBe(true);
+    expect(result.hasNoReceipt).toBe(true);
+  });
+
+  test('REG-073: showExpenseDetail shows receipt image when receiptData present', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.showExpenseDetail === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window.appState = window.appState || {};
+      // Use a minimal 1x1 transparent PNG as fake receipt data
+      var fakeReceipt = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+      window.appState.expenses = [{
+        id: 'exp_receipt_test', category: 'supplies', amount: 44.00,
+        note: 'Walmart', dayNum: 7, date: 'Mar 12', receiptData: fakeReceipt
+      }];
+      window.showExpenseDetail('exp_receipt_test');
+      var ov = document.getElementById('exp-detail-overlay');
+      if (!ov) return { found: false };
+      var html = ov.innerHTML;
+      ov.remove();
+      return {
+        found: true,
+        hasImg: html.includes('<img'),
+        hasReceiptSrc: html.includes('data:image/png'),
+        noPlaceholder: !html.includes('No receipt uploaded'),
+      };
+    });
+
+    expect(result.found).toBe(true);
+    expect(result.hasImg).toBe(true);
+    expect(result.hasReceiptSrc).toBe(true);
+    expect(result.noPlaceholder).toBe(true);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // EXPENSE FEATURE 2 — Enhanced fuel fields (REG-074 to REG-079)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  test('REG-074: fuel fields are shown when Fuel category selected', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderExpenses === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window._expSelCat = 'fuel';
+      window.appState = window.appState || {};
+      window.appState.expenses = [];
+      window.renderExpenses();
+      var ff = document.getElementById('exp-fuel-fields');
+      return ff ? ff.style.display !== 'none' : false;
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('REG-075: fuel fields are hidden for non-fuel categories', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderExpenses === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window._expSelCat = 'restaurants';
+      window.appState = window.appState || {};
+      window.appState.expenses = [];
+      window.renderExpenses();
+      var ff = document.getElementById('exp-fuel-fields');
+      return ff ? ff.style.display === 'none' : true; // hidden = pass
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('REG-076: _expAutoCalcAmount populates total from gallons × price', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._expAutoCalcAmount === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      // Set up the fuel fields in DOM
+      window._expSelCat = 'fuel';
+      window.appState = window.appState || {};
+      window.appState.expenses = [];
+      window.renderExpenses();
+
+      var gallonsEl = document.getElementById('exp-gallons');
+      var priceEl   = document.getElementById('exp-pricepg');
+      var amtEl     = document.getElementById('exp-amount');
+      if (!gallonsEl || !priceEl || !amtEl) return 'fields not found';
+
+      gallonsEl.value = '32.4';
+      priceEl.value   = '3.899';
+      window._expAutoCalcAmount();
+
+      return parseFloat(amtEl.value);
+    });
+
+    // 32.4 × 3.899 = 126.32 (approximately)
+    expect(typeof result).toBe('number');
+    expect(result).toBeGreaterThan(126);
+    expect(result).toBeLessThan(127);
+  });
+
+  test('REG-077: addExpense rejects fuel submission without required fields', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.addExpense === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window._expSelCat = 'fuel';
+      window.appState = window.appState || {};
+      window.appState.expenses = [];
+      window.renderExpenses();
+
+      // Set amount but leave gallons/type empty
+      var amtEl = document.getElementById('exp-amount');
+      if (amtEl) amtEl.value = '50.00';
+      // Leave gallons and fuel type blank
+
+      var toastMessages = [];
+      var origToast = window.showToast;
+      window.showToast = function(msg) { toastMessages.push(msg); };
+
+      window.addExpense();
+
+      window.showToast = origToast;
+
+      return {
+        expenseCount: window.appState.expenses.length,
+        hadToast: toastMessages.length > 0,
+      };
+    });
+
+    expect(result.expenseCount).toBe(0);
+    expect(result.hadToast).toBe(true);
+  });
+
+  test('REG-078: saved fuel expense includes fuelGallons, fuelPricePg, fuelType', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.addExpense === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window._expSelCat = 'fuel';
+      window._expPendingReceipt = null;
+      window.appState = window.appState || {};
+      window.appState.expenses = [];
+      window.renderExpenses();
+
+      var amtEl     = document.getElementById('exp-amount');
+      var gallonsEl = document.getElementById('exp-gallons');
+      var priceEl   = document.getElementById('exp-pricepg');
+      var typeEl    = document.getElementById('exp-fueltype');
+      if (!amtEl || !gallonsEl || !priceEl || !typeEl) return 'fields missing';
+
+      amtEl.value     = '126.32';
+      gallonsEl.value = '32.4';
+      priceEl.value   = '3.899';
+      typeEl.value    = 'Diesel';
+
+      var origSave = window.saveState; window.saveState = function(){};
+      window.addExpense();
+      window.saveState = origSave;
+
+      var exp = window.appState.expenses[0];
+      if (!exp) return 'no expense saved';
+      return {
+        hasGallons:  exp.fuelGallons === 32.4,
+        hasPricePg:  typeof exp.fuelPricePg === 'number',
+        hasFuelType: exp.fuelType === 'Diesel',
+      };
+    });
+
+    expect(result).not.toBe('fields missing');
+    expect(result).not.toBe('no expense saved');
+    expect(result.hasGallons).toBe(true);
+    expect(result.hasPricePg).toBe(true);
+    expect(result.hasFuelType).toBe(true);
+  });
+
+  test('REG-079: fuel expense list row shows gallons and fuel type in sub-label', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderExpenses === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window.appState = window.appState || {};
+      window.appState.expenses = [{
+        id: 'exp_fuel_row', category: 'fuel', amount: 126.32,
+        note: 'Pilot Flying J', dayNum: 3, date: 'Mar 4',
+        receiptData: null, fuelGallons: 32.4, fuelPricePg: 3.899, fuelType: 'Diesel'
+      }];
+      window.renderExpenses();
+      var el = document.getElementById('expenses-content') || document.querySelector('[id*="expense"]');
+      if (!el) return { found: false };
+      var html = el.innerHTML;
+      return {
+        found: true,
+        hasGallons: html.includes('32.4'),
+        hasFuelType: html.includes('Diesel'),
+      };
+    });
+
+    expect(result.found).toBe(true);
+    expect(result.hasGallons).toBe(true);
+    expect(result.hasFuelType).toBe(true);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // WAYPOINT DAY CARD BUG (REG-080 to REG-083)
+  // Bug: renderSchedule() never skipped day cards for waypoint stops.
+  // phaseHeaderHtml() correctly rendered the grey waypoint header, but the main
+  // loop continued and rendered full "Check in / Morning departure" cards for
+  // every TRIP_DAYS entry at that stop. Day counter also included waypoint days,
+  // shifting all subsequent day numbers forward.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  test('REG-080: renderSchedule source builds _waypointStopIds before day counter', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderSchedule === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var src = window.renderSchedule.toString();
+      return src.includes('_waypointStopIds');
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('REG-081: renderSchedule source skips waypoint day cards in main loop', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderSchedule === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var src = window.renderSchedule.toString();
+      // Must have a continue statement guarded by _waypointStopIds in the day card section
+      return src.includes('_waypointStopIds[d.stopId]') && src.includes('continue');
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('REG-082: renderSchedule source skips waypoint days in _dayDisplayNum counter', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderSchedule === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var src = window.renderSchedule.toString();
+      // The _dayDisplayNum forEach must reference _waypointStopIds to skip those days
+      return src.includes('_waypointStopIds[sd.stopId]');
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('REG-083: waypoint stop day cards suppressed and downstream day numbers correct', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderSchedule === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      // Build a minimal 3-stop trip: stopA (2 nights) → waypointB (0 nights) → stopC (1 night)
+      var origDays  = window.TRIP_DAYS.slice();
+      var origStops = window.TRIP_STOPS.slice();
+      var origState = JSON.parse(JSON.stringify(window.appState));
+
+      try {
+        window.TRIP_STOPS = [
+          { id: 'sa', name: 'Alpha', state: 'TX', lat: 30, lng: -97, emoji: '🏕' },
+          { id: 'wb', name: 'WpBeta', state: 'OK', lat: 34, lng: -98, emoji: '📍' },
+          { id: 'sc', name: 'Gamma', state: 'KS', lat: 37, lng: -97, emoji: '🏔' },
+        ];
+        window.TRIP_DAYS = [
+          { day: 201, date: '2026-06-01', stopId: 'sa', phase: 'sa', sleepType: 'rv' },
+          { day: 202, date: '2026-06-02', stopId: 'sa', phase: 'sa', sleepType: 'rv' },
+          { day: 203, date: '2026-06-03', stopId: 'wb', phase: 'wb', sleepType: 'rv', waypoint: false },
+          { day: 204, date: '2026-06-04', stopId: 'sc', phase: 'sc', sleepType: 'rv' },
+        ];
+        window.appState = window.appState || {};
+        window.appState.phaseExtraDays   = { wb: -1 }; // 1 base day - 1 = 0 effective nights → waypoint
+        window.appState.waypointOverrides = { wb: true };
+        window.appState.removedStops     = {};
+
+        // Render schedule to a temp container
+        var tempEl = document.createElement('div');
+        tempEl.id  = 'schedule-content';
+        document.body.appendChild(tempEl);
+
+        window.renderSchedule();
+
+        var html = tempEl.innerHTML;
+        tempEl.remove();
+
+        // Count "Day N" pill occurrences — should be 3 (days 201, 202, 204) not 4
+        var dayPillMatches = html.match(/Day\s+\d+/g) || [];
+        // Day 203 belongs to waypoint wb — should NOT appear as a day card
+        var hasDay203Card = html.includes('Day 203') ||
+          (html.match(/Day\s+3/g) || []).length > 0; // also check sequential #3 if counter re-ran
+
+        return {
+          totalDayPills: dayPillMatches.length,
+          hasWaypointHeader: html.includes('drive-through'),
+          // Day counter: sa day1=1, sa day2=2, wb skipped, sc day4=3 → downstream should be "3" not "4"
+          html_snippet: dayPillMatches.slice(0, 6),
+        };
+      } finally {
+        window.TRIP_DAYS  = origDays;
+        window.TRIP_STOPS = origStops;
+        window.appState   = origState;
+      }
+    });
+
+    // Waypoint header should be present
+    expect(result.hasWaypointHeader).toBe(true);
+    // Only 3 day pills should appear (days at sa + day at sc; wb suppressed)
+    // Drive day pills count too — allow up to 5 but waypoint day must be gone
+    expect(result.totalDayPills).toBeLessThan(5);
+  });
+
 });

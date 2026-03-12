@@ -10347,15 +10347,17 @@ function phaseHeaderHtml(phase, firstDay) {
      Numeric IDs are unaffected (JSON.stringify(2) = "2", no quotes to escape). */
   var _sidAttr = _sid.replace(/"/g, '&quot;');
   /* ── Waypoint: lightweight header, no nights/days controls ── */
-  var _isWpOverride = appState.waypointOverrides && appState.waypointOverrides[firstDay.stopId];
-  /* Also treat as waypoint if phaseExtraDays reduced stop to 0 nights (e.g. via minus button)
-     without going through _toggleWaypoint — ensures consistent grey-card UI in all cases. */
-  if (!_isWpOverride && !firstDay.waypoint) {
-    var _wpEarlyDays   = TRIP_DAYS.filter(function(d) { return d.stopId === firstDay.stopId; });
-    var _wpEarlyNights = Math.max(0, _wpEarlyDays.length + ((appState.phaseExtraDays && appState.phaseExtraDays[firstDay.stopId]) || 0));
-    if (_wpEarlyNights === 0) _isWpOverride = true;
-  }
-  if (firstDay.waypoint || _isWpOverride) {
+  var _isWpOverride = !!(appState.waypointOverrides && appState.waypointOverrides[firstDay.stopId]);
+  /* Always compute effective nights — needed both for the 0-night auto-waypoint check
+     AND to guard against source-data waypoint flag on a stop that now has nights added. */
+  var _wpEarlyDays   = TRIP_DAYS.filter(function(d) { return d.stopId === firstDay.stopId; });
+  var _wpEarlyNights = Math.max(0, _wpEarlyDays.length + ((appState.phaseExtraDays && appState.phaseExtraDays[firstDay.stopId]) || 0));
+  /* Treat as waypoint if: user explicitly set it (override), OR nights were reduced to 0
+     without going through _toggleWaypoint (ensures consistent grey-card UI in all cases).
+     firstDay.waypoint from source data is only honoured when the stop still has 0 effective
+     nights — a user can add nights to a source-data waypoint and it becomes a full stop. */
+  if (!_isWpOverride && _wpEarlyNights === 0) _isWpOverride = true;
+  if ((firstDay.waypoint && _wpEarlyNights === 0) || _isWpOverride) {
     var _wpStop = getStop(firstDay.stopId);
     var _wpName = _wpStop ? (_wpStop.name || phase) : phase;
     var _wpState = _wpStop && _wpStop.state ? ', ' + _wpStop.state : '';
@@ -10487,7 +10489,7 @@ function phaseHeaderHtml(phase, firstDay) {
     + (_hasOverride ? '<div style="font-size:.72rem;opacity:.75;font-weight:600;margin-top:1px;">📍 ' + _cityDisp + '</div>' : '')
     + '<div style="margin-top:5px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
     + (function() {
-        if (!_phFirstDate) return '';
+        if (!_phFirstDate) return '<span style="font-size:.72rem;opacity:.55;font-weight:600;padding:2px 6px;">— dates not set —</span>';
         /* Hotel-booking check-in / check-out widget */
         var _fmtShort = function(ds) {
           var _d = new Date(ds + 'T12:00:00');
@@ -10661,9 +10663,12 @@ function _toggleWaypoint(stopId) {
   var totalNights  = Math.max(0, phaseDays.length + extras);
   var _wpStopName = (function(){ var s = (typeof getStop === 'function') ? getStop(stopId) : null; return s ? _sn(s) : String(stopId); })();
   if (totalNights === 0) {
-    /* Already a waypoint — restore by clearing the offset and waypoint override */
+    /* Already a waypoint — restore by clearing the offset and waypoint override.
+       Also clear the source-data waypoint flag on TRIP_DAYS entries so the stop
+       renders as a full stop card even if it was originally a built-in waypoint. */
     delete appState.phaseExtraDays[stopId];
     if (appState.waypointOverrides) delete appState.waypointOverrides[stopId];
+    phaseDays.forEach(function(d) { d.waypoint = false; });
     if (typeof _audit === 'function') _audit('Waypoint restored', _wpStopName + ' → overnight stop (' + phaseDays.length + ' night' + (phaseDays.length !== 1 ? 's' : '') + ')');
     showToast('✅ Restored to ' + phaseDays.length + ' night' + (phaseDays.length !== 1 ? 's' : ''), 2000);
   } else {
@@ -10755,6 +10760,22 @@ function _migrateAgendaItemOverrideKeys() {
     appState.agendaItemOverrides = _newOv;
     saveState(appState);
   }
+}
+
+/* Normalise phaseExtraDays — remove invalid entries (NaN, Infinity, orphaned stopIds).
+   Called at the top of renderSchedule() to guard against corrupted state that could
+   cause infinite offsets or wrong dates in the schedule view.                        */
+function _assertDateConsistency() {
+  if (!appState.phaseExtraDays) return;
+  var _knownStopIds = {};
+  TRIP_DAYS.forEach(function(d) { _knownStopIds[d.stopId] = true; });
+  Object.keys(appState.phaseExtraDays).forEach(function(sid) {
+    var val = appState.phaseExtraDays[sid];
+    /* Remove entries that are NaN, infinite, or belong to stops no longer in TRIP_DAYS */
+    if (typeof val !== 'number' || !isFinite(val) || isNaN(val) || !_knownStopIds[sid]) {
+      delete appState.phaseExtraDays[sid];
+    }
+  });
 }
 
 /* Compute cumulative phaseExtraDays offset for a stopId (from prior stops only) */
@@ -11698,7 +11719,7 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow, skipTo
 
   /* Responsive: dashed-line + pill on desktop; full-width stacked card on mobile */
   var _lineSt = 'background:repeating-linear-gradient(90deg,' + _clr + ' 0,' + _clr + ' 8px,transparent 8px,transparent 16px);';
-  return '<div class="ds-wrap" ' + (_isToday && !skipTodayId ? 'id="sch-today" ' : '') + 'onclick="openDriveTimeModal(' + d.day + ',null,' + (stop ? '\'' + stop.id + '\'' : 'null') + ',' + effectiveDate.getTime() + ')" title="' + _title.replace(/'/g, "&#39;") + ' — tap to edit departure time">'
+  return '<div class="ds-wrap" ' + (_isToday && !skipTodayId ? 'id="sch-today" ' : '') + 'onclick="openDriveTimeModal(' + d.day + ',null,' + (stop ? '\'' + stop.id + '\'' : 'null') + ',' + effectiveDate.getTime() + ')">'
     + '<div class="ds-line" style="' + _lineSt + '"></div>'
     + '<div class="ds-pill" style="background:' + _pillBg + ';color:#fff;box-shadow:' + _shadow + ';">'
     + '<div class="ds-r1"><i class="fa-solid fa-rv" style="font-size:.85rem;flex-shrink:0;"></i><span>' + _title + '</span></div>'
@@ -12021,7 +12042,7 @@ function _renderVirtualDriveSep(prevStop, destStop, d, effectiveDate, displayNum
     + _vSplitIcon + 'Split</button>';
 
   var _lineSt2 = 'background:repeating-linear-gradient(90deg,' + _clr + ' 0,' + _clr + ' 8px,transparent 8px,transparent 16px);';
-  return '<div class="ds-wrap" onclick="openDriveTimeModal(' + d.day + ',\'' + prevStop.id + '\',' + (destStop ? '\'' + destStop.id + '\'' : 'null') + ',' + effectiveDate.getTime() + ')" title="' + _title.replace(/'/g,"&#39;") + ' — tap to edit departure time">'
+  return '<div class="ds-wrap" onclick="openDriveTimeModal(' + d.day + ',\'' + prevStop.id + '\',' + (destStop ? '\'' + destStop.id + '\'' : 'null') + ',' + effectiveDate.getTime() + ')">'
     + '<div class="ds-line" style="' + _lineSt2 + '"></div>'
     + '<div class="ds-pill" style="background:' + _pillBg + ';color:#fff;box-shadow:' + _shadow + ';">'
     + '<div class="ds-r1"><i class="fa-solid fa-rv" style="font-size:.85rem;flex-shrink:0;"></i><span>' + _title + '</span></div>'
@@ -12046,6 +12067,8 @@ function _schedScrollToToday() {
 function renderSchedule() {
   var el = document.getElementById('schedule-content');
   if (!el) return;
+
+  _assertDateConsistency(); /* normalise phaseExtraDays before computing offsets */
 
   var todayNum  = tripDay();
   var _live     = tripIsLive(); // only mark "Today" if trip has actually started
@@ -12086,8 +12109,30 @@ function renderSchedule() {
     });
   }
 
+  /* Pre-compute which stopIds are waypoints (drive-through, no overnight stay).
+     Used to suppress day cards and exclude those days from the display counter.
+     Mirrors phaseHeaderHtml()'s detection logic in one shared place (TD-3 fix). */
+  var _waypointStopIds = {};
+  (function() {
+    var _seenWpIds = [];
+    TRIP_DAYS.forEach(function(td) {
+      if (td.driveDay) return;
+      if (_seenWpIds.indexOf(td.stopId) !== -1) return;
+      _seenWpIds.push(td.stopId);
+      var _pDays  = TRIP_DAYS.filter(function(x) { return x.stopId === td.stopId; });
+      var _extras = (appState.phaseExtraDays && appState.phaseExtraDays[td.stopId]) || 0;
+      var _nights = Math.max(0, _pDays.length + _extras);
+      var _wpOvr  = !!(appState.waypointOverrides && appState.waypointOverrides[td.stopId]);
+      /* A stop is a waypoint when user explicitly set it OR effective nights == 0.
+         Source-data waypoint flag (td.waypoint) is only honoured while nights == 0. */
+      if ((td.waypoint && _nights === 0) || _wpOvr || _nights === 0) {
+        _waypointStopIds[td.stopId] = true;
+      }
+    });
+  })();
+
   /* Pre-compute sequential display numbers so the schedule never shows gaps (Day 1, 2, 5…).
-     Each visible day gets the next integer; skipped/home days are excluded from the count. */
+     Each visible day gets the next integer; skipped/home/waypoint days are excluded. */
   var _dayDisplayNum = {};
   var _dispCounter   = 0;
   var _sortedForCount = TRIP_DAYS.slice().sort(function(a,b){
@@ -12096,6 +12141,7 @@ function renderSchedule() {
   _sortedForCount.forEach(function(sd) {
     if (sd.sleepType === 'home' && !sd.driveDay) return;
     if (skipDayNums[sd.day]) return;
+    if (!sd.driveDay && _waypointStopIds[sd.stopId]) return; /* waypoint days don't count */
     _dispCounter++;
     _dayDisplayNum[sd.day] = _dispCounter;
   });
@@ -12236,7 +12282,7 @@ function renderSchedule() {
                 /* No coords — render basic pill without distance estimate */
                 var _vsTitle = _sn(_prevStopForSep) + ' \u2192 ' + _sn(stop);
                 var _vsLine  = 'flex:1;height:2px;background:repeating-linear-gradient(90deg,var(--orange) 0,var(--orange) 8px,transparent 8px,transparent 16px);min-width:8px;flex-shrink:1;';
-                html += '<div style="display:flex;align-items:center;gap:0;position:relative;margin:5px 0 5px;cursor:pointer;" onclick="openDriveTimeModal(' + d.day + ',\'' + _prevStopForSep.id + '\',\'' + stop.id + '\',' + _effectiveDate.getTime() + ')" title="' + _vsTitle.replace(/'/g,"&#39;") + ' — tap to edit departure time">'
+                html += '<div style="display:flex;align-items:center;gap:0;position:relative;margin:5px 0 5px;cursor:pointer;" onclick="openDriveTimeModal(' + d.day + ',\'' + _prevStopForSep.id + '\',\'' + stop.id + '\',' + _effectiveDate.getTime() + ')">'
                   + '<div style="' + _vsLine + '"></div>'
                   + '<div style="flex-shrink:0;background:var(--orange);color:#fff;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(232,129,58,.28);">'
                   + '<i class="fa-solid fa-rv" style="flex-shrink:0;font-size:.85rem;"></i>'
@@ -12352,6 +12398,11 @@ function renderSchedule() {
 
       continue; // skip the full card for drive days
     }
+
+    /* Waypoint stop — phase header already rendered the grey "drive-through" card.
+       Suppress all day cards for this stop so no "Check in" / "Morning departure"
+       cards appear. Drive days (d.driveDay handled above) are not affected.       */
+    if (_waypointStopIds[d.stopId]) continue;
 
     // Transit mode — explore day toggled to drive-through/transit day
     var _isTransit = !d.driveDay && d.sleepType !== 'home'
@@ -23700,9 +23751,15 @@ function loadWeather() {
     /* Skip if we already fetched this stop this session */
     if (window._wxFetched[sid]) return;
 
-    /* Skip if we already have cached data covering this stop's date range */
+    /* Skip if we already have cached data covering this stop's date range.
+       If the stop is within the 16-day forecast window, only treat it as covered when
+       we have live FORECAST data — historical/typical data alone must not block a fresh
+       forecast fetch for upcoming stops (fixes stale-data-forever on approaching dates). */
     var cached = appState.weather[sid];
-    var hasCoverage = stopDays.some(function(d) { return cached[d.date]; });
+    var _withinFcWindow = firstDate <= cutoffStr;
+    var hasCoverage = _withinFcWindow
+      ? stopDays.some(function(d) { return cached[d.date] && cached[d.date].type === 'forecast'; })
+      : stopDays.some(function(d) { return cached[d.date]; });
     if (hasCoverage) { window._wxFetched[sid] = true; return; }
 
     stopsToFetch.push({ stop: stop, sid: sid, firstDate: firstDate, lastDate: lastDate });
@@ -27695,7 +27752,8 @@ var DEFAULT_CAT_BUDGETS = {
 };
 var _expScanB64  = null;
 var _expScanMime = 'image/jpeg';
-var _expSelCat   = 'restaurants';
+var _expSelCat        = 'restaurants';
+var _expPendingReceipt = null; /* base64 dataURL of receipt image staged for next addExpense() call */
 
 function renderExpenses() {
   var el = document.getElementById('tools-sub-content');
@@ -27815,6 +27873,45 @@ function renderExpenses() {
     + '<input type="text" id="exp-note" placeholder="Gas station, restaurant name…" style="width:100%;border:1.5px solid var(--border);border-radius:100px;padding:8px 12px;font-size:.88rem;font-family:var(--font);box-sizing:border-box;" />'
     + '</div>'
     + '</div>';
+
+  /* ── Fuel-specific fields — shown only when Fuel category is selected ── */
+  var _fuelFieldsStyle = 'display:' + (_expSelCat === 'fuel' ? 'block' : 'none') + ';';
+  html += '<div id="exp-fuel-fields" style="' + _fuelFieldsStyle + 'background:rgba(230,81,0,.06);border:1.5px solid rgba(230,81,0,.25);border-radius:12px;padding:12px 14px;margin-bottom:10px;">'
+    + '<div style="font-size:.75rem;font-weight:800;color:#E65100;text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;">⛽ Fuel Details (required)</div>'
+    + '<div style="display:flex;gap:10px;margin-bottom:8px;">'
+    /* Gallons */
+    + '<div style="flex:1;">'
+    + '<div style="font-size:.72rem;font-weight:700;color:var(--text-3);margin-bottom:3px;">GALLONS</div>'
+    + '<input type="number" id="exp-gallons" placeholder="0.0" step="0.1" min="0" oninput="_expAutoCalcAmount()" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:.9rem;font-family:var(--font);box-sizing:border-box;" />'
+    + '</div>'
+    /* Price per gallon */
+    + '<div style="flex:1;">'
+    + '<div style="font-size:.72rem;font-weight:700;color:var(--text-3);margin-bottom:3px;">$/GALLON</div>'
+    + '<input type="number" id="exp-pricepg" placeholder="0.000" step="0.001" min="0" oninput="_expAutoCalcAmount()" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:.9rem;font-family:var(--font);box-sizing:border-box;" />'
+    + '</div>'
+    /* Fuel type */
+    + '<div style="flex:1;">'
+    + '<div style="font-size:.72rem;font-weight:700;color:var(--text-3);margin-bottom:3px;">TYPE</div>'
+    + '<select id="exp-fueltype" style="width:100%;border:1.5px solid var(--border);border-radius:8px;padding:7px 10px;font-size:.9rem;font-family:var(--font);box-sizing:border-box;background:var(--bg);">'
+    + '<option value="">Select…</option>'
+    + '<option value="Gas">Gas</option>'
+    + '<option value="Diesel">Diesel</option>'
+    + '<option value="LPG">LPG</option>'
+    + '</select>'
+    + '</div>'
+    + '</div>'
+    + '<div style="font-size:.68rem;color:var(--text-3);">Gallons × $/gal auto-fills the amount above.</div>'
+    + '</div>';
+
+  /* ── Receipt preview indicator (shown after scan or upload) ── */
+  if (_expPendingReceipt) {
+    html += '<div style="display:flex;align-items:center;gap:8px;background:rgba(44,95,138,.06);border:1px solid rgba(44,95,138,.2);border-radius:10px;padding:8px 12px;margin-bottom:10px;">'
+      + '<img src="' + _expPendingReceipt + '" style="width:36px;height:36px;object-fit:cover;border-radius:6px;flex-shrink:0;" alt="receipt" />'
+      + '<div style="flex:1;font-size:.78rem;font-weight:700;color:var(--blue);">📎 Receipt attached</div>'
+      + '<button onclick="_expClearReceipt()" style="background:none;border:none;color:var(--red);font-size:.75rem;font-weight:700;cursor:pointer;font-family:var(--font);">Remove</button>'
+      + '</div>';
+  }
+
   html += '<button onclick="addExpense()" style="width:100%;background:var(--green);color:#fff;border:none;border-radius:100px;padding:11px;font-size:.9rem;font-weight:800;cursor:pointer;font-family:var(--font);">+ Add to Trip</button>';
   html += '</div>';
 
@@ -27836,14 +27933,25 @@ function renderExpenses() {
       byDay[dk].forEach(function(e) {
         var _catId = _EXP_CAT_ALIAS[e.category] || e.category;
         var cat = EXP_CATS.find(function(c){ return c.id === _catId; }) || EXP_CATS[EXP_CATS.length-1];
-        html += '<div style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:9px 12px;margin-bottom:5px;">'
+        /* Build sub-label: fuel gets a summary line, others get "Category · Date" */
+        var _subLabel;
+        if (_catId === 'fuel' && e.fuelGallons) {
+          _subLabel = 'Fuel · ' + e.fuelGallons + ' gal'
+            + (e.fuelType ? ' · ' + e.fuelType : '')
+            + (e.date ? ' · ' + e.date : '');
+        } else {
+          _subLabel = cat.label + (e.date ? ' · ' + e.date : '');
+        }
+        var _eid = e.id.replace(/'/g, "\\'");
+        html += '<div onclick="showExpenseDetail(\'' + _eid + '\')" style="display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:9px 12px;margin-bottom:5px;cursor:pointer;">'
           + '<span style="font-size:1.1rem;">' + cat.icon + '</span>'
           + '<div style="flex:1;">'
           + '<div style="font-size:.85rem;font-weight:700;color:var(--text);">' + (e.note || cat.label) + '</div>'
-          + '<div style="font-size:.7rem;color:var(--text-3);">' + cat.label + (e.date ? ' · ' + e.date : '') + '</div>'
+          + '<div style="font-size:.7rem;color:var(--text-3);">' + _subLabel + '</div>'
           + '</div>'
+          + (e.receiptData ? '<span style="font-size:.75rem;color:var(--blue);opacity:.7;" title="Has receipt">📎</span>' : '')
           + '<div style="font-weight:800;font-size:.92rem;color:' + cat.color + ';">$' + (e.amount||0).toFixed(2) + '</div>'
-          + '<button onclick="deleteExpense(\'' + e.id + '\')" style="background:var(--red-l);border:1px solid var(--red);color:var(--red);border-radius:100px;padding:3px 8px;font-size:.72rem;cursor:pointer;font-family:var(--font);">✕</button>'
+          + '<button onclick="event.stopPropagation();deleteExpense(\'' + _eid + '\')" style="background:var(--red-l);border:1px solid var(--red);color:var(--red);border-radius:100px;padding:3px 8px;font-size:.72rem;cursor:pointer;font-family:var(--font);">✕</button>'
           + '</div>';
       });
       html += '<div style="height:8px;"></div>';
@@ -27855,7 +27963,13 @@ function renderExpenses() {
   el.innerHTML = html;
 }
 
-function setExpCat(id) { _expSelCat = id; renderExpenses(); }
+function setExpCat(id) {
+  _expSelCat = id;
+  renderExpenses();
+  /* After re-render, ensure fuel fields visibility matches selected category */
+  var ff = document.getElementById('exp-fuel-fields');
+  if (ff) ff.style.display = (id === 'fuel') ? 'block' : 'none';
+}
 /* Per-category budget setter — called by inline number inputs */
 function _setCatBudget(catId, val) {
   if (!appState.catBudgets) appState.catBudgets = Object.assign({}, DEFAULT_CAT_BUDGETS);
@@ -27876,6 +27990,8 @@ function scanExpenseReceipt(e) {
   var mime = file.type || 'image/jpeg';
   var reader = new FileReader();
   reader.onload = function(ev) {
+    /* Store the full dataURL so addExpense() can attach it to the expense record */
+    _expPendingReceipt = ev.target.result;
     var b64 = ev.target.result.split(',')[1];
     showToast('🔍 AI scanning receipt…', 2500);
     var prompt = 'You are an expense scanner for a family RV road trip. Look at this receipt image and return ONLY valid JSON with no markdown:\n'
@@ -27924,24 +28040,122 @@ function scanExpenseReceipt(e) {
   e.target.value = '';
 }
 
+/* Auto-calculate total amount from gallons × price per gallon */
+function _expAutoCalcAmount() {
+  var gallonsEl = document.getElementById('exp-gallons');
+  var priceEl   = document.getElementById('exp-pricepg');
+  var amtEl     = document.getElementById('exp-amount');
+  if (!gallonsEl || !priceEl || !amtEl) return;
+  var g = parseFloat(gallonsEl.value);
+  var p = parseFloat(priceEl.value);
+  if (g > 0 && p > 0) {
+    amtEl.value = (g * p).toFixed(2);
+  }
+}
+
+/* Clear staged receipt */
+function _expClearReceipt() {
+  _expPendingReceipt = null;
+  renderExpenses();
+}
+
 function addExpense() {
   var amtEl  = document.getElementById('exp-amount');
   var noteEl = document.getElementById('exp-note');
   var amt    = parseFloat(amtEl ? amtEl.value : 0);
   if (!amt || amt <= 0) { showToast('Enter a valid amount', 1600); return; }
+
+  /* Fuel-specific validation */
+  var _isFuel = _expSelCat === 'fuel';
+  var _fuelGallons = null, _fuelPricePg = null, _fuelType = null;
+  if (_isFuel) {
+    var gallonsEl   = document.getElementById('exp-gallons');
+    var pricePgEl   = document.getElementById('exp-pricepg');
+    var fuelTypeEl  = document.getElementById('exp-fueltype');
+    _fuelGallons = gallonsEl  ? parseFloat(gallonsEl.value)  : null;
+    _fuelPricePg = pricePgEl  ? parseFloat(pricePgEl.value)  : null;
+    _fuelType    = fuelTypeEl ? fuelTypeEl.value.trim()       : '';
+    if (!_fuelGallons || _fuelGallons <= 0) { showToast('Enter number of gallons', 1600); return; }
+    if (!_fuelPricePg || _fuelPricePg <= 0) { showToast('Enter price per gallon', 1600); return; }
+    if (!_fuelType) { showToast('Select a fuel type', 1600); return; }
+  }
+
   if (!appState.expenses) appState.expenses = [];
   var today = new Date();
-  appState.expenses.unshift({
-    id:       'exp_' + Date.now(),
-    category: _expSelCat,
-    amount:   amt,
-    note:     noteEl ? noteEl.value.trim() : '',
-    dayNum:   tripDay(),
-    date:     today.toLocaleDateString('en-US',{month:'short',day:'numeric'})
-  });
+  var _expObj = {
+    id:          'exp_' + Date.now(),
+    category:    _expSelCat,
+    amount:      amt,
+    note:        noteEl ? noteEl.value.trim() : '',
+    dayNum:      tripDay(),
+    date:        today.toLocaleDateString('en-US', { month:'short', day:'numeric' }),
+    receiptData: _expPendingReceipt || null
+  };
+  if (_isFuel) {
+    _expObj.fuelGallons  = Math.round(_fuelGallons * 10) / 10;  /* 1 decimal */
+    _expObj.fuelPricePg  = Math.round(_fuelPricePg * 1000) / 1000; /* 3 decimals */
+    _expObj.fuelType     = _fuelType;
+  }
+  appState.expenses.unshift(_expObj);
+  _expPendingReceipt = null; /* clear staged receipt after save */
   saveState(appState);
   renderExpenses();
   showToast('💰 Expense added!', 1600);
+}
+
+/* ── Expense detail modal ──────────────────────────────────────────── */
+function showExpenseDetail(expId) {
+  var e = appState.expenses && appState.expenses.find(function(x){ return x.id === expId; });
+  if (!e) return;
+  var existing = document.getElementById('exp-detail-overlay');
+  if (existing) existing.remove();
+
+  var _catId = _EXP_CAT_ALIAS[e.category] || e.category;
+  var cat = EXP_CATS.find(function(c){ return c.id === _catId; }) || EXP_CATS[EXP_CATS.length-1];
+
+  var ov = document.createElement('div');
+  ov.id = 'exp-detail-overlay';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9800;display:flex;align-items:center;justify-content:center;padding:16px;';
+  ov.onclick = function(ev) { if (ev.target === ov) ov.remove(); };
+
+  /* Fuel details section */
+  var _fuelHtml = '';
+  if (_catId === 'fuel' && e.fuelGallons) {
+    _fuelHtml = '<div style="background:rgba(230,81,0,.06);border:1px solid rgba(230,81,0,.2);border-radius:10px;padding:10px 14px;margin-bottom:12px;">'
+      + '<div style="font-size:.68rem;font-weight:800;color:#E65100;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">⛽ Fuel Details</div>'
+      + '<div style="display:flex;gap:16px;flex-wrap:wrap;">'
+      + '<div><div style="font-size:.62rem;color:var(--text-3);font-weight:700;">GALLONS</div><div style="font-size:.95rem;font-weight:800;">' + e.fuelGallons + '</div></div>'
+      + '<div><div style="font-size:.62rem;color:var(--text-3);font-weight:700;">$/GALLON</div><div style="font-size:.95rem;font-weight:800;">$' + (e.fuelPricePg || '—') + '</div></div>'
+      + '<div><div style="font-size:.62rem;color:var(--text-3);font-weight:700;">TYPE</div><div style="font-size:.95rem;font-weight:800;">' + (e.fuelType || '—') + '</div></div>'
+      + '</div>'
+      + '</div>';
+  }
+
+  /* Receipt section */
+  var _receiptHtml = e.receiptData
+    ? '<img src="' + e.receiptData + '" alt="Receipt" style="width:100%;border-radius:10px;border:1px solid var(--border);max-height:320px;object-fit:contain;margin-bottom:12px;" />'
+    : '<div style="text-align:center;padding:20px;color:var(--text-3);font-size:.85rem;background:var(--bg);border-radius:10px;border:1.5px dashed var(--border);margin-bottom:12px;">No receipt uploaded</div>';
+
+  ov.innerHTML =
+    '<div style="background:var(--card);border-radius:18px;max-width:380px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.28);overflow:hidden;">'
+    /* Header */
+    + '<div style="background:' + cat.color + ';color:#fff;padding:14px 18px;display:flex;align-items:center;gap:10px;">'
+    + '<span style="font-size:1.4rem;">' + cat.icon + '</span>'
+    + '<div style="flex:1;">'
+    + '<div style="font-weight:900;font-size:1.05rem;">' + (e.note || cat.label) + '</div>'
+    + '<div style="font-size:.72rem;opacity:.85;margin-top:2px;">' + cat.label + (e.date ? ' · ' + e.date : '') + '</div>'
+    + '</div>'
+    + '<div style="font-weight:900;font-size:1.15rem;">$' + (e.amount||0).toFixed(2) + '</div>'
+    + '<button onclick="document.getElementById(\'exp-detail-overlay\').remove()" style="margin-left:8px;background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:50%;width:28px;height:28px;font-size:1.1rem;cursor:pointer;font-family:var(--font);display:flex;align-items:center;justify-content:center;flex-shrink:0;">×</button>'
+    + '</div>'
+    /* Body */
+    + '<div style="padding:16px;">'
+    + _fuelHtml
+    + _receiptHtml
+    + '<button onclick="document.getElementById(\'exp-detail-overlay\').remove()" style="width:100%;padding:11px;background:var(--bg);border:1.5px solid var(--border);border-radius:12px;font-weight:700;font-size:.88rem;cursor:pointer;font-family:var(--font);color:var(--text);">Close</button>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(ov);
 }
 
 function deleteExpense(id) {

@@ -71,6 +71,64 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 29 — 2026-03-12
+
+**Sections 3–6 bug fixes + expense features + test infrastructure.**
+
+**Section 3 — Date Binding:**
+- Added `_assertDateConsistency()` helper — normalises `phaseExtraDays` entries that are NaN, Infinity, or belong to stopIds no longer in TRIP_DAYS; prevents corrupted state from causing wrong dates or infinite offsets. Called at the top of `renderSchedule()`.
+- REG-056 to REG-059 added.
+
+**Section 4 — Stop Card Data Integrity:**
+- Fixed `phaseHeaderHtml()` waypoint condition: source-data `firstDay.waypoint` is now only honoured when the stop still has 0 effective nights. Previously, a stop marked `waypoint:true` in seed data would always show as a waypoint even if the user had given it overnight stays.
+- Fixed null arrive/depart dates in stop header: `_getStopEffectiveDates()` returning null now shows "— dates not set —" placeholder instead of blank.
+- Fixed `_toggleWaypoint()` restore path: when converting back to full stop, explicitly clears `firstDay.waypoint = false` on all TRIP_DAYS entries so source-data waypoint flag doesn't persist.
+- REG-060 to REG-063 added.
+
+**Section 5 — Weather:**
+- Fixed `loadWeather()` `hasCoverage` check: previously, ANY cached data (even old `type:'typical'` historical data) blocked re-fetching for the current session. Now, stops within the 16-day forecast window only skip fetching when they have live `type:'forecast'` data — historical-only cache no longer blocks a fresh forecast fetch when the trip date enters the forecast window.
+- REG-064 to REG-066 added.
+
+**Section 6 — Tooltip:**
+- Removed `title=` attribute from `.ds-wrap` on all three drive separator types (`_renderDriveSepA`, `_renderVirtualDriveSep`, no-coords fallback). Route name is already visible in `ds-r1` inside the pill; the `title` attribute caused browser tooltips to overlap the pill content on mobile and was invisible on mobile anyway.
+- REG-067 to REG-068 added.
+
+**Expense Feature 1 — Clickable rows + receipt detail modal:**
+- Added `_expPendingReceipt` module variable to stage receipt image (base64 dataURL) between scan and save.
+- `scanExpenseReceipt()` now also stores the full dataURL in `_expPendingReceipt` for attaching to the expense record.
+- Expense list rows are now clickable (`onclick="showExpenseDetail(id)"`) with `cursor:pointer`.
+- Delete button upgraded with `event.stopPropagation()` to prevent row click from firing simultaneously.
+- Rows with a receipt show a `📎` indicator.
+- Added `showExpenseDetail(expId)` modal showing name, category, date, amount, receipt image (or "No receipt" placeholder), and fuel breakdown for fuel expenses.
+- `addExpense()` saves `receiptData` field and clears `_expPendingReceipt` after save.
+- Receipt preview banner shown in form when a receipt is staged (with Remove button).
+- REG-069 to REG-073 added.
+
+**Expense Feature 2 — Enhanced fuel fields:**
+- Added fuel-specific form section (shown only when Fuel category selected): Gallons, $/Gallon, Fuel Type (Gas/Diesel/LPG).
+- `_expAutoCalcAmount()` auto-fills the total amount from gallons × price.
+- `setExpCat()` now shows/hides `#exp-fuel-fields` without full re-render.
+- `addExpense()` validates all three fuel fields when category is Fuel, saves `fuelGallons`, `fuelPricePg`, `fuelType` on the expense object.
+- Fuel expense rows show "Fuel · 32.4 gal · Diesel · Mar 4" sub-label instead of generic category/date.
+- REG-074 to REG-079 added.
+
+**Test infrastructure:**
+- `npm run test:watch` — Playwright UI mode (`--ui`) for interactive watch-on-save development.
+- `npm run test:coverage` — runs full fast suite with `--reporter=html,json`, then runs `scripts/coverage-summary.js` to print a pass/fail terminal summary.
+- `scripts/coverage-summary.js` — reads `test-results/results.json` and prints counts + failed test names.
+- `playwright.config.js` — always writes JSON results (not only in CI).
+- `.git/hooks/pre-commit` — installed hook that runs `npm test` before every commit and blocks if any test fails.
+- `scripts/pre-commit.hook` — copy of the hook for re-installation after fresh clones.
+- `README.md` — created; documents all test commands, test file inventory, pre-commit hook, and deployment workflow.
+
+**Waypoint day card bug (TD-1, TD-2, TD-3):**
+- Root cause: `renderSchedule()` never checked whether a stop was a waypoint before rendering day cards. `phaseHeaderHtml()` correctly showed the grey waypoint header, but the main loop continued and rendered full "Check in / Morning departure" cards for every TRIP_DAYS entry at that stop.
+- Secondary root cause: `_dayDisplayNum` pre-computation included waypoint days in the sequential count, shifting all downstream day numbers forward by the number of waypoint days.
+- Fix: Added `_waypointStopIds` IIFE pre-computation using the same detection logic as `phaseHeaderHtml()`. The set is built once per render and shared by both the day counter and the main loop.
+- Day counter: added `if (!sd.driveDay && _waypointStopIds[sd.stopId]) return;` — drive days at waypoints still count, regular days don't.
+- Main loop: added `if (_waypointStopIds[d.stopId]) continue;` after the drive-day branch — suppresses all day cards for waypoint stops without affecting transit bars.
+- REG-080 to REG-083 added.
+
 ### Session 28 (continued) — 2026-03-12
 
 **Drive time/distance calculation reliability improvements.**

@@ -1,0 +1,37 @@
+#!/bin/sh
+# TripGenie pre-commit hook — runs the fast test suite before every commit.
+# If any test fails the commit is blocked.
+#
+# Tests require the app to be reachable at the configured BASE_URL.
+# If the URL isn't reachable (offline, sandbox, no network), tests are
+# skipped with a warning rather than blocking unrelated commits.
+#
+# To bypass in an emergency (not recommended):
+#   git commit --no-verify
+#
+# To reinstall this hook after cloning on a new machine:
+#   cp scripts/pre-commit.hook .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+BASE_URL="${BASE_URL:-https://www.maass5.com}"
+
+# Quick connectivity check (2s timeout, silent)
+if ! curl -s --max-time 2 -o /dev/null "$BASE_URL" 2>/dev/null; then
+  echo "⚠️  Pre-commit: $BASE_URL not reachable — skipping tests."
+  echo "   Run 'npm test' manually before pushing."
+  exit 0
+fi
+
+echo "🧪 Running TripGenie test suite before commit…"
+npm test
+
+STATUS=$?
+if [ $STATUS -ne 0 ]; then
+  echo ""
+  echo "❌ Tests failed — commit blocked."
+  echo "   Fix the failing tests, then re-commit."
+  echo "   To skip (emergencies only): git commit --no-verify"
+  exit 1
+fi
+
+echo "✅ All tests passed — proceeding with commit."
+exit 0

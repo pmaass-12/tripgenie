@@ -16,7 +16,8 @@ module.exports = defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI
     ? [['html', { open: 'never' }], ['list'], ['json', { outputFile: 'test-results/results.json' }]]
-    : [['html', { open: 'never' }], ['list']],
+    /* Always write JSON so coverage-summary.js can read it locally too */
+    : [['html', { open: 'never' }], ['list'], ['json', { outputFile: 'test-results/results.json' }]],
 
   use: {
     baseURL: process.env.BASE_URL || 'https://www.maass5.com',

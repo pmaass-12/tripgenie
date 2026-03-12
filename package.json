@@ -1,11 +1,12 @@
 {
   "name": "tripgenie",
   "version": "1.0.0",
-  "description": "",
-  "main": "regression_test.js",
+  "description": "Maass Family RV Adventure 2026 — trip planner web app",
+  "main": "index.html",
   "scripts": {
     "test":              "playwright test tests/smoke.spec.js tests/regression.spec.js tests/unit.spec.js --project=smoke",
-    "test:fast":         "playwright test tests/smoke.spec.js tests/regression.spec.js tests/unit.spec.js --project=smoke",
+    "test:watch":        "playwright test tests/smoke.spec.js tests/regression.spec.js tests/unit.spec.js --project=smoke --ui",
+    "test:coverage":     "playwright test tests/smoke.spec.js tests/regression.spec.js tests/unit.spec.js --project=smoke --reporter=html,json && echo '\\n✅ Coverage report generated. Run: npm run report' && node scripts/coverage-summary.js",
     "test:smoke":        "playwright test tests/smoke.spec.js --project=smoke",
     "test:unit":         "playwright test tests/unit.spec.js --project=smoke",
     "test:regression":   "playwright test tests/regression.spec.js --project=smoke",
@@ -26,7 +27,7 @@
     "url": "git+https://github.com/pmaass-12/tripgenie.git"
   },
   "keywords": [],
-  "author": "",
+  "author": "Paul Maass",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/pmaass-12/tripgenie/issues"
