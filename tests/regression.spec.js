@@ -1721,4 +1721,21 @@ test.describe('Removed-stop filtering @regression', () => {
     expect(result).toBe(true);
   });
 
+  test('REG-089: startup recalc includes sleepType:home drive days (Fremont→Warwick never stays at placeholder)', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.TRIP_DAYS !== 'undefined', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var src = document.documentElement.innerHTML;
+      // Must NOT have the old broken exclusion
+      var hasOldExclusion = src.includes("d.driveDay && d.sleepType !== 'home'");
+      // Must have the corrected all-drive-days filter
+      var hasCorrectFilter = src.includes('return d.driveDay; })');
+      return { hasOldExclusion, hasCorrectFilter };
+    });
+
+    expect(result.hasOldExclusion).toBe(false);
+    expect(result.hasCorrectFilter).toBe(true);
+  });
+
 });

@@ -20645,7 +20645,9 @@ function initApp() {
     /* Recalc real drive day bars for ANY uncached leg — even a single missing leg
        means the user could see wrong distance/time. Previous threshold (>1/3) was
        too lenient and left individual legs without real road data indefinitely.   */
-    var _drivedays = TRIP_DAYS.filter(function(d) { return d.driveDay && d.sleepType !== 'home'; });
+    /* Include ALL drive days — including the home-return leg (sleepType:'home').
+       The previous exclusion of home-leg days meant Fremont→Warwick was never recalculated. */
+    var _drivedays = TRIP_DAYS.filter(function(d) { return d.driveDay; });
     var _needsCalc = _drivedays.filter(function(d) {
       var _dc = appState.osrmDriveCache && appState.osrmDriveCache[d.day];
       if (!_dc) return true; /* not yet cached */
