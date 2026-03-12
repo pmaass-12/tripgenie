@@ -11223,8 +11223,10 @@ async function _recalcDriveMiles(silent) {
   var updated = 0, failed = 0;
   for (var li = 0; li < legs.length; li++) {
     var leg     = legs[li];
-    var fromSt  = stops.find(function(s) { return String(s.id) === String(leg.fromId); });
-    var toSt    = stops.find(function(s) { return String(s.id) === String(leg.toId); });
+    /* Use getStop() so builtin TRIP_STOPS are found even when customTripData.stops
+       doesn't include them (e.g. "fremont" id stop is builtin, not in custom stops). */
+    var fromSt  = getStop(leg.fromId);
+    var toSt    = getStop(leg.toId);
     if (!fromSt || !toSt || !fromSt.lat || !fromSt.lng || !toSt.lat || !toSt.lng) { failed++; continue; }
     try {
       /* Prefer Mapbox (already domain-authorized, no CORS issues).
@@ -11382,8 +11384,9 @@ async function _prefetchVirtualRoutes(silent) {
   var updated = 0;
   for (var li = 0; li < needed.length; li++) {
     var leg    = needed[li];
-    var fromSt = stops.find(function(s) { return String(s.id) === String(leg.fromId); });
-    var toSt   = stops.find(function(s) { return String(s.id) === String(leg.toId); });
+    /* Use getStop() so builtin TRIP_STOPS are found even when not in customTripData.stops */
+    var fromSt = getStop(leg.fromId);
+    var toSt   = getStop(leg.toId);
     if (!fromSt || !toSt || !fromSt.lat || !fromSt.lng || !toSt.lat || !toSt.lng) continue;
     try {
       var _mbTok2 = (appState && appState.mapboxToken) || MAPBOX_TOKEN || '';
@@ -20649,11 +20652,12 @@ function initApp() {
        The previous exclusion of home-leg days meant Fremont→Warwick was never recalculated. */
     var _drivedays = TRIP_DAYS.filter(function(d) { return d.driveDay; });
     var _needsCalc = _drivedays.filter(function(d) {
-      /* Only recalc legs that have NO cache entry at all.
-         Old-format entries (no fromId) are left as-is — the render-time 3× check
-         catches any that are implausibly wrong. Re-fetching all old entries would
-         flood the routing API with unnecessary calls. */
-      return !(appState.osrmDriveCache && appState.osrmDriveCache[d.day]);
+      var _dc = appState.osrmDriveCache && appState.osrmDriveCache[d.day];
+      if (!_dc) return true; /* not cached at all */
+      /* Placeholder value (200 mi / 4h) means the API was never successfully called
+         for this leg — treat it the same as uncached so recalc runs. */
+      if (_dc.miles === 200 && _dc.driveHours === 4) return true;
+      return false;
     });
     /* Trigger for any completely uncached drive day (including the home-return leg) */
     if (_needsCalc.length > 0) {

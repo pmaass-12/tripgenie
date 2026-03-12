@@ -1741,4 +1741,47 @@ test.describe('Removed-stop filtering @regression', () => {
     expect(result.hasCorrectFilter).toBe(true);
   });
 
+  test('REG-090: _recalcDriveMiles uses getStop() so builtin stops are found even when not in customTripData.stops', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._recalcDriveMiles === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var src = window._recalcDriveMiles.toString();
+      // Must use getStop() not stops.find() for fromSt and toSt lookups
+      var usesGetStop  = src.includes('getStop(leg.fromId)') && src.includes('getStop(leg.toId)');
+      var usesRawFind  = src.includes('stops.find') && src.includes('leg.fromId');
+      return { usesGetStop, usesRawFind };
+    });
+
+    expect(result.usesGetStop).toBe(true);
+    expect(result.usesRawFind).toBe(false);
+  });
+
+  test('REG-091: _prefetchVirtualRoutes uses getStop() so builtin stops are found', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._prefetchVirtualRoutes === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var src = window._prefetchVirtualRoutes.toString();
+      var usesGetStop = src.includes('getStop(leg.fromId)') && src.includes('getStop(leg.toId)');
+      var usesRawFind = src.includes('stops.find') && src.includes('leg.fromId');
+      return { usesGetStop, usesRawFind };
+    });
+
+    expect(result.usesGetStop).toBe(true);
+    expect(result.usesRawFind).toBe(false);
+  });
+
+  test('REG-092: startup recalc treats 200mi/4h placeholder cache entries as needing recalc', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.TRIP_DAYS !== 'undefined', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var src = document.documentElement.innerHTML;
+      return src.includes('_dc.miles === 200 && _dc.driveHours === 4');
+    });
+
+    expect(result).toBe(true);
+  });
+
 });
