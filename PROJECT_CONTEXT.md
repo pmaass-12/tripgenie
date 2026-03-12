@@ -71,6 +71,24 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 28 (continued) — 2026-03-12
+
+**Drive time/distance calculation reliability improvements.**
+
+Root causes fixed:
+- Startup trigger for `_recalcDriveMiles` fired only if `>1/3` of drive days were uncached (old `Math.floor(_drivedays.length / 3)` threshold). Even a single uncached leg could show wrong legacy data indefinitely. Fixed: now fires for ANY uncached drive day.
+- `_prefetchVirtualRoutes` (OSRM fetch for virtual separator bars) only ran once at startup with a 5s delay. If the schedule was opened before data arrived, or after stops changed, virtual separators showed haversine estimates. Fixed: `renderSchedule` now calls `_prefetchVirtualRoutes(true)` via a 150ms `setTimeout` on every render — idempotent (returns early if all cached).
+- Virtual separator "est." badge was a static `<span>` with no way to retry a failed OSRM fetch. Fixed: when haversine fallback is in use (no OSRM cache hit), the badge renders as an interactive `↻ est.` button calling `_prefetchVirtualRoutes(false)`. When OSRM data is present, shows `🛣 road` static label instead.
+- REG-053: startup trigger does not use old >1/3 threshold.
+- REG-054: `_renderVirtualDriveSep` uses osrmVirtualCache values when available.
+- REG-055: `_renderVirtualDriveSep` shows `↻ est.` button when falling back to haversine.
+
+**Architecture overview (drive time system):**
+- **Real drive days** → `osrmDriveCache[dayNum]` populated by `_recalcDriveMiles()`
+- **Virtual separators** → `osrmVirtualCache[fromId_toId]` populated by `_prefetchVirtualRoutes()` or `_recalcDriveMiles()`
+- **Fallback** → haversine × 1.3 speed ÷ 55 mph (shown as `↻ est.` button)
+- **API** → OSRM public (free) or Mapbox if token configured
+
 ### Session 28 — 2026-03-12
 
 **Fix journal location dropdown — reactive rebuild instead of build-once.**

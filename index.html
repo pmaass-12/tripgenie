@@ -12005,9 +12005,14 @@ function _renderVirtualDriveSep(prevStop, destStop, d, effectiveDate, displayNum
   var _arrivalChip = '<span style="display:inline-flex;align-items:center;gap:3px;background:rgba(0,0,0,.15);border:1px solid rgba(255,255,255,.2);'
     + 'color:rgba(255,255,255,.9);border-radius:100px;padding:2px 9px;font-size:.68rem;font-weight:600;white-space:nowrap;flex-shrink:0;">'
     + '\u2192\u00a0Arrive\u00a0' + _arrivalStr + '</span>';
-  /* "est." badge so user knows this is inferred, not data-entered */
-  var _estBadge = '<span style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:100px;'
-    + 'padding:2px 8px;font-size:.65rem;font-weight:700;flex-shrink:0;white-space:nowrap;opacity:.85;">est.</span>';
+  /* "est." badge — static when OSRM road data is available; tappable recalc button when
+     using haversine fallback (so user can manually trigger a real-road fetch).          */
+  var _estBadge = _vcHit
+    ? '<span style="background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.25);border-radius:100px;'
+        + 'padding:2px 8px;font-size:.65rem;font-weight:600;flex-shrink:0;white-space:nowrap;opacity:.75;" title="Calculated from real road routing">🛣 road</span>'
+    : '<button onclick="event.stopPropagation();_prefetchVirtualRoutes(false)" title="Using straight-line estimate — tap to recalculate with real road data" '
+        + 'style="background:rgba(255,165,0,.3);border:1px solid rgba(255,255,255,.5);border-radius:100px;'
+        + 'padding:2px 9px;font-size:.65rem;font-weight:800;flex-shrink:0;white-space:nowrap;cursor:pointer;font-family:var(--font);color:#fff;">↻ est.</button>';
 
   /* Split button — always shown on virtual separators */
   var _vSplitIcon = _estHours > _vsMaxDriveH ? '&#9888;\u00a0' : '&#9986;\u00a0';
@@ -12520,6 +12525,10 @@ function renderSchedule() {
 
   el.innerHTML = html;
   loadWeather();
+
+  /* Kick off OSRM fetch for any virtual separators still on haversine estimates.
+     Non-blocking (async); returns immediately if all legs already cached.        */
+  setTimeout(function() { if (typeof _prefetchVirtualRoutes === 'function') _prefetchVirtualRoutes(true); }, 150);
 
   // Scroll today into view
   var todayEl = el.querySelector('[style*="background:var(--orange)"][style*="Today"]');
@@ -20528,18 +20537,15 @@ function initApp() {
   // Auto-fetch real OSRM drive times — fires 5s after init so it doesn't
   // compete with initial render. Skipped if cache already populated.
   setTimeout(function() {
-    /* Recalc real drive day bars if any drive days lack cached values and
-       still have the default placeholder driveHours (4h was the original
-       placeholder used for every leg regardless of actual distance).
-       Previously only triggered on miles===200 AND driveHours===4 which
-       missed long drives with non-default miles but still-default hours. */
+    /* Recalc real drive day bars for ANY uncached leg — even a single missing leg
+       means the user could see wrong distance/time. Previous threshold (>1/3) was
+       too lenient and left individual legs without real road data indefinitely.   */
     var _drivedays = TRIP_DAYS.filter(function(d) { return d.driveDay && d.sleepType !== 'home'; });
     var _needsCalc = _drivedays.filter(function(d) {
-      if (appState.osrmDriveCache && appState.osrmDriveCache[d.day]) return false; /* already cached */
-      return d.driveHours === 4; /* still at placeholder default */
+      return !(appState.osrmDriveCache && appState.osrmDriveCache[d.day]); /* not yet cached */
     });
-    /* Trigger if more than a third of drive days still need real values */
-    if (_needsCalc.length > Math.max(1, Math.floor(_drivedays.length / 3))) {
+    /* Trigger for any uncached drive day */
+    if (_needsCalc.length > 0) {
       _recalcDriveMiles(true);
     }
     /* Always prefetch virtual separator routes not yet in cache */

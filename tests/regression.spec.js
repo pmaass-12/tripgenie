@@ -870,4 +870,77 @@ test.describe('Removed-stop filtering @regression', () => {
     expect(result).toBe(false);
   });
 
+  // ────────────────────────────────────────────────────────────────────────────
+  // REGRESSION: Drive time/distance calculation reliability (REG-053 / REG-054 / REG-055)
+  // ────────────────────────────────────────────────────────────────────────────
+
+  test('REG-053: startup trigger fires _recalcDriveMiles for any uncached drive day (not >1/3 threshold)', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.initApp === 'function', { timeout: 10_000 });
+
+    // The startup timeout code inside initApp must NOT contain the old >1/3 threshold
+    const srcHasOldThreshold = await page.evaluate(() => {
+      return window.initApp.toString().includes('Math.floor(_drivedays.length / 3)');
+    });
+
+    expect(srcHasOldThreshold).toBe(false);
+  });
+
+  test('REG-054: _renderVirtualDriveSep uses osrmVirtualCache when available (not always haversine)', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._renderVirtualDriveSep === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      // Set up two stops with known coordinates and a cached OSRM result
+      var stopA = { id: 'tst-a', name: 'Alpha', state: 'TX', emoji: '🏕', lat: 30.0, lng: -97.0 };
+      var stopB = { id: 'tst-b', name: 'Beta',  state: 'OK', emoji: '🏔', lat: 34.7, lng: -98.7 };
+      window.appState = window.appState || {};
+      window.appState.osrmVirtualCache = { 'tst-a_tst-b': { miles: 333, driveHours: 5.5 } };
+      window.TRIP_DAYS = window.TRIP_DAYS || [{ day: 1, date: '2026-06-01', stopId: 'tst-b' }];
+      window.appState.removedStops = {};
+
+      var html = window._renderVirtualDriveSep(stopA, stopB, { day: 1, stopId: 'tst-b' }, new Date('2026-06-01'), 1);
+      // Should show cached values (333 mi, 5.5h) not haversine
+      return {
+        has333: html.includes('333'),
+        has55h: html.includes('5.5'),
+        hasRoadLabel: html.includes('🛣'),  // OSRM badge
+        hasEstBtn: html.includes('↻ est.'), // should NOT have recalc button
+      };
+    });
+
+    expect(result.has333).toBe(true);
+    expect(result.has55h).toBe(true);
+    expect(result.hasRoadLabel).toBe(true);
+    expect(result.hasEstBtn).toBe(false);
+  });
+
+  test('REG-055: _renderVirtualDriveSep shows recalculate button when using haversine fallback', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._renderVirtualDriveSep === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var stopA = { id: 'no-cache-a', name: 'CityA', state: 'TX', emoji: '🏕', lat: 30.0, lng: -97.0 };
+      var stopB = { id: 'no-cache-b', name: 'CityB', state: 'OK', emoji: '🏔', lat: 34.7, lng: -98.7 };
+      window.appState = window.appState || {};
+      // Remove any cached entry for this leg
+      if (window.appState.osrmVirtualCache) {
+        delete window.appState.osrmVirtualCache['no-cache-a_no-cache-b'];
+      }
+      window.appState.removedStops = {};
+      window.TRIP_DAYS = window.TRIP_DAYS || [{ day: 2, date: '2026-06-02', stopId: 'no-cache-b' }];
+
+      var html = window._renderVirtualDriveSep(stopA, stopB, { day: 2, stopId: 'no-cache-b' }, new Date('2026-06-02'), 2);
+      return {
+        hasEstBtn: html.includes('↻ est.'),    // recalc button present
+        hasRoadLabel: html.includes('🛣'),      // no "road" badge
+        hasRecalcFn: html.includes('_prefetchVirtualRoutes'), // button calls the right fn
+      };
+    });
+
+    expect(result.hasEstBtn).toBe(true);
+    expect(result.hasRoadLabel).toBe(false);
+    expect(result.hasRecalcFn).toBe(true);
+  });
+
 });
