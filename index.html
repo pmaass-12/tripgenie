@@ -11698,7 +11698,7 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow, skipTo
 
   /* Responsive: dashed-line + pill on desktop; full-width stacked card on mobile */
   var _lineSt = 'background:repeating-linear-gradient(90deg,' + _clr + ' 0,' + _clr + ' 8px,transparent 8px,transparent 16px);';
-  return '<div class="ds-wrap" ' + (_isToday && !skipTodayId ? 'id="sch-today" ' : '') + 'onclick="openDayDetail(' + d.day + ')" title="' + _title.replace(/'/g, "&#39;") + ' — tap for detail">'
+  return '<div class="ds-wrap" ' + (_isToday && !skipTodayId ? 'id="sch-today" ' : '') + 'onclick="openDriveTimeModal(' + d.day + ',null,' + (stop ? '\'' + stop.id + '\'' : 'null') + ',' + effectiveDate.getTime() + ')" title="' + _title.replace(/'/g, "&#39;") + ' — tap to edit departure time">'
     + '<div class="ds-line" style="' + _lineSt + '"></div>'
     + '<div class="ds-pill" style="background:' + _pillBg + ';color:#fff;box-shadow:' + _shadow + ';">'
     + '<div class="ds-r1"><i class="fa-solid fa-rv" style="font-size:.85rem;flex-shrink:0;"></i><span>' + _title + '</span></div>'
@@ -12016,7 +12016,7 @@ function _renderVirtualDriveSep(prevStop, destStop, d, effectiveDate, displayNum
     + _vSplitIcon + 'Split</button>';
 
   var _lineSt2 = 'background:repeating-linear-gradient(90deg,' + _clr + ' 0,' + _clr + ' 8px,transparent 8px,transparent 16px);';
-  return '<div class="ds-wrap" onclick="openDayDetail(' + d.day + ')" title="' + _title.replace(/'/g,"&#39;") + ' — estimated drive">'
+  return '<div class="ds-wrap" onclick="openDriveTimeModal(' + d.day + ',\'' + prevStop.id + '\',' + (destStop ? '\'' + destStop.id + '\'' : 'null') + ',' + effectiveDate.getTime() + ')" title="' + _title.replace(/'/g,"&#39;") + ' — tap to edit departure time">'
     + '<div class="ds-line" style="' + _lineSt2 + '"></div>'
     + '<div class="ds-pill" style="background:' + _pillBg + ';color:#fff;box-shadow:' + _shadow + ';">'
     + '<div class="ds-r1"><i class="fa-solid fa-rv" style="font-size:.85rem;flex-shrink:0;"></i><span>' + _title + '</span></div>'
@@ -12231,7 +12231,7 @@ function renderSchedule() {
                 /* No coords — render basic pill without distance estimate */
                 var _vsTitle = _sn(_prevStopForSep) + ' \u2192 ' + _sn(stop);
                 var _vsLine  = 'flex:1;height:2px;background:repeating-linear-gradient(90deg,var(--orange) 0,var(--orange) 8px,transparent 8px,transparent 16px);min-width:8px;flex-shrink:1;';
-                html += '<div style="display:flex;align-items:center;gap:0;position:relative;margin:5px 0 5px;cursor:pointer;" onclick="openDayDetail(' + d.day + ')" title="' + _vsTitle.replace(/'/g,"&#39;") + '">'
+                html += '<div style="display:flex;align-items:center;gap:0;position:relative;margin:5px 0 5px;cursor:pointer;" onclick="openDriveTimeModal(' + d.day + ',\'' + _prevStopForSep.id + '\',\'' + stop.id + '\',' + _effectiveDate.getTime() + ')" title="' + _vsTitle.replace(/'/g,"&#39;") + ' — tap to edit departure time">'
                   + '<div style="' + _vsLine + '"></div>'
                   + '<div style="flex-shrink:0;background:var(--orange);color:#fff;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(232,129,58,.28);">'
                   + '<i class="fa-solid fa-rv" style="flex-shrink:0;font-size:.85rem;"></i>'
@@ -13821,25 +13821,38 @@ function renderJournal() {
     updateJournalLocation();
   }
 
-  // Populate location select once
+  // Populate location select — rebuilt every render to reflect stop additions/removals
   var locSel = document.getElementById('j-location-select');
-  if (locSel && locSel.options.length === 0) {
+  if (locSel) {
+    var _prevLocVal = locSel.value; // remember current selection before clearing
+    var _gpsOpt = document.getElementById('j-loc-gps-opt'); // preserve GPS option if present
+    while (locSel.firstChild) locSel.removeChild(locSel.firstChild);
+    if (_gpsOpt) locSel.appendChild(_gpsOpt);
+    var _removedSet = (appState && appState.removedStops) || {};
     var locGrp = document.createElement('optgroup');
     locGrp.label = 'Trip Stops';
     for (var si = 0; si < TRIP_STOPS.length; si++) {
       var st = TRIP_STOPS[si];
+      if (_removedSet[st.id]) continue; // skip removed stops
       var lo = document.createElement('option');
       lo.value = 'stop:' + st.id;
       lo.textContent = (st.emoji ? st.emoji + ' ' : '') + st.name + (st.state ? ', ' + st.state : '');
       locGrp.appendChild(lo);
     }
     locSel.appendChild(locGrp);
-    // Sync to current day's stop
-    var curDay = getDay(parseInt(sel.value));
-    if (curDay) {
+    // Restore previous selection if still valid (stop wasn't removed)
+    var _locRestored = false;
+    if (_prevLocVal) {
       for (var li = 0; li < locSel.options.length; li++) {
-        if (locSel.options[li].value === 'stop:' + curDay.stopId) {
-          locSel.selectedIndex = li; break;
+        if (locSel.options[li].value === _prevLocVal) { locSel.selectedIndex = li; _locRestored = true; break; }
+      }
+    }
+    // Fallback: sync to the current day's stop
+    if (!_locRestored) {
+      var curDay = getDay(parseInt(sel.value));
+      if (curDay) {
+        for (var li = 0; li < locSel.options.length; li++) {
+          if (locSel.options[li].value === 'stop:' + curDay.stopId) { locSel.selectedIndex = li; break; }
         }
       }
     }

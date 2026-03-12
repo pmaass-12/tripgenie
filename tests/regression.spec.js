@@ -763,4 +763,111 @@ test.describe('Removed-stop filtering @regression', () => {
     expect(containsBackupCall).toBe(false);
   });
 
+  // ────────────────────────────────────────────────────────────────────────────
+  // REGRESSION: Journal location dropdown rebuilds reactively (REG-049 / REG-050)
+  // Bug: options.length === 0 guard meant dropdown was built once and never
+  // refreshed — removed stops still appeared; newly added stops never appeared.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  test('REG-049: Journal location dropdown excludes removed stops', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderJournal === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      // Set up a minimal appState with two stops, one removed
+      window.appState = window.appState || {};
+      window.appState.removedStops = { 'stop-b': true };
+      window.TRIP_STOPS = [
+        { id: 'stop-a', name: 'Alpha', state: 'TX', emoji: '🏕' },
+        { id: 'stop-b', name: 'Beta',  state: 'OK', emoji: '🏔' },  // removed
+      ];
+      window.TRIP_DAYS = [{ day: 1, date: '2026-06-01', stopId: 'stop-a' }];
+
+      // Create a minimal journal DOM so renderJournal doesn't throw
+      const mkEl = (tag, id) => { const el = document.createElement(tag); el.id = id; document.body.appendChild(el); return el; };
+      if (!document.getElementById('j-day'))             mkEl('select', 'j-day');
+      if (!document.getElementById('j-location-select')) mkEl('select', 'j-location-select');
+      if (!document.getElementById('j-author'))          mkEl('select', 'j-author');
+      if (!document.getElementById('journal-count'))     mkEl('span',   'journal-count');
+      if (!document.getElementById('journal-entries'))   mkEl('div',    'journal-entries');
+
+      // First render — populates dropdown for the first time
+      try { window.renderJournal(); } catch(e) { /* ignore unrelated errors */ }
+
+      const locSel = document.getElementById('j-location-select');
+      const vals = Array.from(locSel.options).map(o => o.value);
+      const hasA   = vals.includes('stop:stop-a');
+      const hasB   = vals.includes('stop:stop-b'); // should be excluded
+      return { hasA, hasB };
+    });
+
+    expect(result.hasA).toBe(true);
+    expect(result.hasB).toBe(false);
+  });
+
+  test('REG-050: Journal location dropdown rebuilds on re-render (no stale cache)', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window.renderJournal === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      window.appState = window.appState || {};
+      window.appState.removedStops = {};
+      window.TRIP_STOPS = [
+        { id: 'stop-a', name: 'Alpha', state: 'TX', emoji: '🏕' },
+      ];
+      window.TRIP_DAYS = [{ day: 1, date: '2026-06-01', stopId: 'stop-a' }];
+
+      const mkEl = (tag, id) => { const el = document.createElement(tag); el.id = id; document.body.appendChild(el); return el; };
+      if (!document.getElementById('j-day'))             mkEl('select', 'j-day');
+      if (!document.getElementById('j-location-select')) mkEl('select', 'j-location-select');
+      if (!document.getElementById('j-author'))          mkEl('select', 'j-author');
+      if (!document.getElementById('journal-count'))     mkEl('span',   'journal-count');
+      if (!document.getElementById('journal-entries'))   mkEl('div',    'journal-entries');
+
+      // First render with 1 stop
+      try { window.renderJournal(); } catch(e) {}
+
+      const afterFirst = document.getElementById('j-location-select').querySelectorAll('option').length;
+
+      // Add a second stop and re-render
+      window.TRIP_STOPS.push({ id: 'stop-c', name: 'Gamma', state: 'NM', emoji: '🏜' });
+      try { window.renderJournal(); } catch(e) {}
+
+      const afterSecond = document.getElementById('j-location-select').querySelectorAll('option').length;
+
+      return { afterFirst, afterSecond };
+    });
+
+    // afterSecond should have one more option than afterFirst
+    expect(result.afterSecond).toBeGreaterThan(result.afterFirst);
+  });
+
+  // ────────────────────────────────────────────────────────────────────────────
+  // REGRESSION: Drive separator clicks open departure modal, not day detail
+  // Bug: ds-wrap had onclick="openDayDetail()" — clicking the orange bar
+  // navigated to the agenda card instead of opening the depart time editor.
+  // ────────────────────────────────────────────────────────────────────────────
+
+  test('REG-051: Real drive separator ds-wrap does not call openDayDetail', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._renderDriveSepA === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      return window._renderDriveSepA.toString().includes('openDayDetail');
+    });
+
+    expect(result).toBe(false);
+  });
+
+  test('REG-052: Virtual drive separator ds-wrap does not call openDayDetail', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._renderVirtualDriveSep === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      return window._renderVirtualDriveSep.toString().includes('openDayDetail');
+    });
+
+    expect(result).toBe(false);
+  });
+
 });

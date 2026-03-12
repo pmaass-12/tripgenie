@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-10 (Session 27 continued 11)
+2026-03-12 (Session 28)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -70,6 +70,32 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 28 — 2026-03-12
+
+**Fix journal location dropdown — reactive rebuild instead of build-once.**
+
+- Root cause: `renderJournal()` had `if (locSel && locSel.options.length === 0)` guard that prevented the stop dropdown from ever being rebuilt after the first render.
+- Effect: removed stops still appeared in the dropdown; newly added stops never appeared.
+- Fix: removed the `options.length === 0` guard entirely. Dropdown is now cleared and rebuilt on every `renderJournal()` call.
+- Removed stops filtered via `appState.removedStops` lookup (same pattern as all other consumers).
+- Previously-selected value is preserved if its stop is still valid; otherwise resets to the current day's stop.
+- Any GPS "detect location" option (id=`j-loc-gps-opt`) is also preserved across rebuilds.
+- REG-049 added: verifies removed stops are excluded from the dropdown.
+- REG-050 added: verifies adding a new stop causes the dropdown to grow on re-render.
+
+**Fix drive separator click — opens departure time editor, not day detail card.**
+
+- Root cause: `.ds-wrap` outer element had `onclick="openDayDetail(d.day)"` — clicking anywhere on the orange bar (route name, mileage text, etc.) opened the day agenda card.
+- User expectation: clicking the bar should open the departure time editor (`openDriveTimeModal`).
+- Fix: changed `onclick` on the `.ds-wrap` div in three places:
+  1. `_renderDriveSepA()` (real drive days): now calls `openDriveTimeModal(day, null, stopId, dateMs)`
+  2. `_renderVirtualDriveSep()` (est. virtual separators): now calls `openDriveTimeModal(day, prevStopId, destStopId, dateMs)`
+  3. Basic fallback "no coords" pill inline HTML: now calls `openDriveTimeModal(day, prevStopId, stopId, dateMs)`
+- Inner chip buttons retain `event.stopPropagation()` to prevent double-firing.
+- Title attribute updated to "tap to edit departure time" across all three.
+- REG-051 added: verifies `_renderDriveSepA` source does not contain `openDayDetail`.
+- REG-052 added: verifies `_renderVirtualDriveSep` source does not contain `openDayDetail`.
 
 ### Session 27 (continued 11) — 2026-03-10
 
