@@ -20649,15 +20649,13 @@ function initApp() {
        The previous exclusion of home-leg days meant Fremont→Warwick was never recalculated. */
     var _drivedays = TRIP_DAYS.filter(function(d) { return d.driveDay; });
     var _needsCalc = _drivedays.filter(function(d) {
-      var _dc = appState.osrmDriveCache && appState.osrmDriveCache[d.day];
-      if (!_dc) return true; /* not yet cached */
-      /* Old-format entries (written before stop-pair tracking) lack fromId/toId and can't
-         be validated for staleness — trigger a one-time recalc to refresh them with the
-         new format. This is what fixes stale 511-mile values after trip restructuring. */
-      if (_dc.fromId === undefined) return true;
-      return false;
+      /* Only recalc legs that have NO cache entry at all.
+         Old-format entries (no fromId) are left as-is — the render-time 3× check
+         catches any that are implausibly wrong. Re-fetching all old entries would
+         flood the routing API with unnecessary calls. */
+      return !(appState.osrmDriveCache && appState.osrmDriveCache[d.day]);
     });
-    /* Trigger for any uncached or unverifiable drive day */
+    /* Trigger for any completely uncached drive day (including the home-return leg) */
     if (_needsCalc.length > 0) {
       _recalcDriveMiles(true);
     }

@@ -1707,18 +1707,21 @@ test.describe('Removed-stop filtering @regression', () => {
     expect(result.has200).toBe(true);
   });
 
-  test('REG-088: startup trigger runs _recalcDriveMiles for old-format cache entries missing fromId', async ({ page }) => {
+  test('REG-088: startup trigger only recalcs completely uncached legs (no over-fetching old-format entries)', async ({ page }) => {
     await page.goto('/');
     await page.waitForFunction(() => typeof window._recalcDriveMiles === 'function', { timeout: 10_000 });
 
     const result = await page.evaluate(() => {
-      // The startup _needsCalc filter must return true for entries that lack fromId
-      // (old-format entries that cannot be validated for stop-pair staleness)
       var src = document.documentElement.innerHTML;
-      return src.includes('_dc.fromId === undefined') && src.includes('_needsCalc');
+      // Must NOT have the over-aggressive old-format re-fetch (causes routing service floods)
+      var hasOldFormatRecheck = src.includes('_dc.fromId === undefined') && src.includes('return true');
+      // Must have the simple uncached-only check
+      var hasSimpleCheck = src.includes('!(appState.osrmDriveCache && appState.osrmDriveCache[d.day])');
+      return { hasOldFormatRecheck, hasSimpleCheck };
     });
 
-    expect(result).toBe(true);
+    expect(result.hasOldFormatRecheck).toBe(false);
+    expect(result.hasSimpleCheck).toBe(true);
   });
 
   test('REG-089: startup recalc includes sleepType:home drive days (Fremont→Warwick never stays at placeholder)', async ({ page }) => {
