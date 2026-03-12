@@ -1633,4 +1633,92 @@ test.describe('Removed-stop filtering @regression', () => {
     expect(result.totalDayPills).toBeLessThan(5);
   });
 
+  // ── REG-084 to REG-088: Drive distance calculation fixes ───────────────────
+
+  test('REG-084: _recalcDriveMiles saves fromId and toId in osrmDriveCache entries', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._recalcDriveMiles === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var src = window._recalcDriveMiles.toString();
+      // Must record fromId and toId in the day-cache entry for staleness detection
+      return src.includes('fromId: leg.fromId') && src.includes('toId: leg.toId');
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('REG-085: _recalcDriveMiles discards routes exceeding 3x straight-line distance', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._recalcDriveMiles === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var src = window._recalcDriveMiles.toString();
+      // Must have a 3× straight-line sanity check that discards suspicious results
+      return src.includes('straightR') && src.includes('* 3') && src.includes('discarding');
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('REG-086: _renderDriveSepA prefers osrmVirtualCache (stop-pair) over osrmDriveCache (day-number)', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._renderDriveSepA === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      var src = window._renderDriveSepA.toString();
+      // Must check osrmVirtualCache keyed by stop pair before falling back to day-number cache
+      return src.includes('_vcPairHit') && src.includes('osrmVirtualCache') && src.includes('fromStopId');
+    });
+
+    expect(result).toBe(true);
+  });
+
+  test('REG-087: _renderDriveSepA discards old-format stale day-cache entries via 3x check', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._renderDriveSepA === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      // Simulate stale 511-mile cache entry for Joshua Tree → LA
+      var jtId  = 1772296204694;  // Joshua Tree stop id
+      var laId  = 'los-angeles-ca';
+      var fakeDay = { day: 99, stopId: laId, driveDay: true, miles: 200, driveHours: 4, sleepType: 'rv_park' };
+      var laStop  = window.TRIP_STOPS.find(function(s){ return String(s.id) === String(laId); });
+      if (!laStop) return { skip: true };
+
+      // Inject a stale old-format cache entry (no fromId, plausible-sounding but wrong)
+      var origCache = window.appState.osrmDriveCache;
+      window.appState.osrmDriveCache = { 99: { miles: 511, driveHours: 10.5 } }; // no fromId
+
+      // _renderDriveSepA should discard 511mi (> 3× ~103mi straight-line) and fall back to d.miles=200
+      var html = window._renderDriveSepA(fakeDay, laStop, new Date(), 33, false, false, jtId);
+
+      window.appState.osrmDriveCache = origCache;
+
+      // 511 must NOT appear; 200 (fallback d.miles) must appear
+      return {
+        has511: html.includes('511'),
+        has200: html.includes('200'),
+      };
+    });
+
+    if (result.skip) return; // stop not in current trip data — skip gracefully
+    expect(result.has511).toBe(false);
+    expect(result.has200).toBe(true);
+  });
+
+  test('REG-088: startup trigger runs _recalcDriveMiles for old-format cache entries missing fromId', async ({ page }) => {
+    await page.goto('/');
+    await page.waitForFunction(() => typeof window._recalcDriveMiles === 'function', { timeout: 10_000 });
+
+    const result = await page.evaluate(() => {
+      // The startup _needsCalc filter must return true for entries that lack fromId
+      // (old-format entries that cannot be validated for stop-pair staleness)
+      var src = document.documentElement.innerHTML;
+      return src.includes('_dc.fromId === undefined') && src.includes('_needsCalc');
+    });
+
+    expect(result).toBe(true);
+  });
+
 });

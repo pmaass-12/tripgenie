@@ -71,6 +71,32 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 30 — 2026-03-12
+
+**Drive distance miscalculation fix (stale `osrmDriveCache` by day number).**
+
+Root cause: `osrmDriveCache` is keyed by day number. When the trip was restructured (stops added/removed/reordered), a day's cache entry remained from the old leg — e.g. `osrmDriveCache[32]` still held 511 mi from a previous route, even though day 32 became the Joshua Tree → Los Angeles leg (~130 mi). The cache was never invalidated, and `_renderDriveSepA` trusted it over the actual day data.
+
+**Fix 1 — `_recalcDriveMiles`**: Now saves `fromId`/`toId` in each `osrmDriveCache` entry so staleness can be detected at render time. Also adds a **3× straight-line validation**: if the routing API returns a result more than 3× the haversine straight-line distance, it's discarded as a suspicious anomaly (logged to console).
+
+**Fix 2 — `_prefetchVirtualRoutes`**: Same 3× straight-line validation added.
+
+**Fix 3 — `_renderDriveSepA`**: New `fromStopId` parameter (7th arg). Cache lookup now:
+1. Checks `osrmVirtualCache[fromId_toId]` first (stop-pair keyed, never goes stale)
+2. Validates `osrmDriveCache[day]` against current stop pair (discards mismatches when `fromId` is present)
+3. Applies 3× straight-line check on old-format entries (no `fromId`) to catch legacy stale values like the 511-mi Joshua Tree→LA case
+4. Falls back to `d.miles`/`d.driveHours` from trip data
+
+**Fix 4 — Arrival card**: Same stop-pair-first cache priority applied to arrival time estimate (line ~12376).
+
+**Fix 5 — Startup trigger**: `_needsCalc` filter at startup now also triggers `_recalcDriveMiles` for any drive day whose cache entry lacks `fromId/toId` (old format), ensuring a one-time refresh writes the new format with stop-pair tracking.
+
+Both call sites of `_renderDriveSepA` updated to pass the origin stop ID: `lastStopId` and `_originStopId` respectively.
+
+REG-084 to REG-088 added covering: fromId/toId saved in cache, 3× guard in recalcDriveMiles, _renderDriveSepA prefers pair cache, 3× guard discards old stale entries, startup trigger includes fromId check.
+
+---
+
 ### Session 29 — 2026-03-12
 
 **Sections 3–6 bug fixes + expense features + test infrastructure.**

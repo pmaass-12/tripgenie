@@ -11243,18 +11243,31 @@ async function _recalcDriveMiles(silent) {
         var secs   = data.routes[0].duration;
         var miles  = Math.round(meters / 1609.344);
         var hrs    = Math.round(secs / 3600 * 4) / 4; /* nearest ¼ hour */
-        days[leg.dayIdx].miles      = miles;
-        days[leg.dayIdx].driveHours = hrs;
-        /* Also persist in osrmDriveCache keyed by day number so builtin trips
-           (where TRIP_DAYS can't be mutated persistently) benefit across reloads */
-        if (!appState.osrmDriveCache) appState.osrmDriveCache = {};
-        var _dayNum = days[leg.dayIdx].day;
-        appState.osrmDriveCache[_dayNum] = { miles: miles, driveHours: hrs };
-        /* Also cache by stop-pair key so virtual separators on the same leg use it */
-        if (!appState.osrmVirtualCache) appState.osrmVirtualCache = {};
-        var _vcKey = String(leg.fromId) + '_' + String(leg.toId);
-        appState.osrmVirtualCache[_vcKey] = { miles: miles, driveHours: hrs };
-        updated++;
+        /* 3× sanity check: discard suspiciously long routes (routing API anomaly) */
+        var _havR = 3958.8;
+        var _p1r = fromSt.lat * Math.PI / 180, _p2r = toSt.lat * Math.PI / 180;
+        var _dpR = (toSt.lat - fromSt.lat) * Math.PI / 180, _dlR = (toSt.lng - fromSt.lng) * Math.PI / 180;
+        var _aR = Math.sin(_dpR/2)*Math.sin(_dpR/2) + Math.cos(_p1r)*Math.cos(_p2r)*Math.sin(_dlR/2)*Math.sin(_dlR/2);
+        var _straightR = _havR * 2 * Math.atan2(Math.sqrt(_aR), Math.sqrt(1 - _aR));
+        if (_straightR > 5 && miles > _straightR * 3) {
+          console.warn('[TripGenie] _recalcDriveMiles: suspicious route ' + fromSt.name + ' \u2192 ' + toSt.name
+            + ' = ' + miles + ' mi (' + Math.round(_straightR) + ' mi straight-line) — discarding result');
+          failed++;
+        } else {
+          days[leg.dayIdx].miles      = miles;
+          days[leg.dayIdx].driveHours = hrs;
+          /* Persist in osrmDriveCache keyed by day number.
+             IMPORTANT: also store fromId/toId so _renderDriveSepA can detect a stale
+             entry if the trip is later restructured and the day changes its origin. */
+          if (!appState.osrmDriveCache) appState.osrmDriveCache = {};
+          var _dayNum = days[leg.dayIdx].day;
+          appState.osrmDriveCache[_dayNum] = { miles: miles, driveHours: hrs, fromId: leg.fromId, toId: leg.toId };
+          /* Also cache by stop-pair key so virtual separators on the same leg use it */
+          if (!appState.osrmVirtualCache) appState.osrmVirtualCache = {};
+          var _vcKey = String(leg.fromId) + '_' + String(leg.toId);
+          appState.osrmVirtualCache[_vcKey] = { miles: miles, driveHours: hrs };
+          updated++;
+        }
       } else { failed++; }
     } catch(e) { failed++; }
     /* Brief pause between calls — OSRM public instance has soft rate limits */
@@ -11385,8 +11398,19 @@ async function _prefetchVirtualRoutes(silent) {
       if (data.routes && data.routes[0]) {
         var miles = Math.round(data.routes[0].distance / 1609.344);
         var hrs   = Math.round(data.routes[0].duration / 3600 * 4) / 4;
-        appState.osrmVirtualCache[leg.key] = { miles: miles, driveHours: hrs };
-        updated++;
+        /* 3× sanity check: discard suspiciously long routes */
+        var _havR3 = 3958.8;
+        var _p1r3 = fromSt.lat * Math.PI / 180, _p2r3 = toSt.lat * Math.PI / 180;
+        var _dpR3 = (toSt.lat - fromSt.lat) * Math.PI / 180, _dlR3 = (toSt.lng - fromSt.lng) * Math.PI / 180;
+        var _aR3 = Math.sin(_dpR3/2)*Math.sin(_dpR3/2) + Math.cos(_p1r3)*Math.cos(_p2r3)*Math.sin(_dlR3/2)*Math.sin(_dlR3/2);
+        var _straightR3 = _havR3 * 2 * Math.atan2(Math.sqrt(_aR3), Math.sqrt(1 - _aR3));
+        if (_straightR3 > 5 && miles > _straightR3 * 3) {
+          console.warn('[TripGenie] _prefetchVirtualRoutes: suspicious route ' + fromSt.name + ' \u2192 ' + toSt.name
+            + ' = ' + miles + ' mi (' + Math.round(_straightR3) + ' mi straight-line) — discarding result');
+        } else {
+          appState.osrmVirtualCache[leg.key] = { miles: miles, driveHours: hrs };
+          updated++;
+        }
       }
     } catch(e) { /* skip on error — will retry next init */ }
     if (li < needed.length - 1) await new Promise(function(res) { setTimeout(res, 180); });
@@ -11621,12 +11645,36 @@ function _renderPauseScheduleBlock(pd, nights) {
    Shows: 🚐  City A → City B  |  Day X · Day Date · Miles · Hours
    Tappable → opens day detail modal. No driver shown (user preference).
 ───────────────────────────────────────────────────────────────────────────── */
-function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow, skipTodayId) {
-  /* Prefer osrmDriveCache (real road data from OSRM) over the hardcoded trip_data values,
-     which may be placeholder 200 mi / 4h until _recalcDriveMiles has run. */
+function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow, skipTodayId, fromStopId) {
+  /* Prefer osrmVirtualCache (keyed by stop pair — never goes stale after trip edits) over
+     osrmDriveCache (keyed by day number — can be stale if the trip was restructured).
+     Fall back to d.miles / d.driveHours from trip data if no cache entry is valid.   */
+  var _vcKeyDrv   = fromStopId ? String(fromStopId) + '_' + String(d.stopId) : null;
+  var _vcPairHit  = _vcKeyDrv && appState.osrmVirtualCache && appState.osrmVirtualCache[_vcKeyDrv];
   var _cachedDrive = appState.osrmDriveCache && appState.osrmDriveCache[d.day];
-  var _dMiles = (_cachedDrive && _cachedDrive.miles)      || d.miles;
-  var _dHours = (_cachedDrive && _cachedDrive.driveHours) || d.driveHours;
+  /* Discard stale day-cache: if it carries a stop-pair that no longer matches, ignore it. */
+  if (_cachedDrive && fromStopId && _cachedDrive.fromId !== undefined &&
+      (String(_cachedDrive.fromId) !== String(fromStopId) || String(_cachedDrive.toId) !== String(d.stopId))) {
+    _cachedDrive = null; /* stale — discard */
+  }
+  /* Belt-and-suspenders: old-format entries (no fromId) can't be checked for stop-pair
+     staleness, but we can still catch obviously wrong values with the 3× straight-line
+     check — e.g. 511 mi for Joshua Tree→LA when the real road distance is ~130 mi.    */
+  if (_cachedDrive && _cachedDrive.fromId === undefined && fromStopId && stop && stop.lat != null) {
+    var _fsV = getStop(fromStopId);
+    if (_fsV && _fsV.lat != null && stop.lng != null && _fsV.lng != null) {
+      var _hvRd = 3958.8;
+      var _hP1d = _fsV.lat * Math.PI / 180, _hP2d = stop.lat * Math.PI / 180;
+      var _hDpd = (stop.lat - _fsV.lat) * Math.PI / 180, _hDld = (stop.lng - _fsV.lng) * Math.PI / 180;
+      var _hAd = Math.sin(_hDpd/2)*Math.sin(_hDpd/2) + Math.cos(_hP1d)*Math.cos(_hP2d)*Math.sin(_hDld/2)*Math.sin(_hDld/2);
+      var _hStrD = _hvRd * 2 * Math.atan2(Math.sqrt(_hAd), Math.sqrt(1 - _hAd));
+      if (_hStrD > 5 && _cachedDrive.miles > _hStrD * 3) {
+        _cachedDrive = null; /* 3× straight-line exceeded — likely stale */
+      }
+    }
+  }
+  var _dMiles = (_vcPairHit && _vcPairHit.miles)      || (_cachedDrive && _cachedDrive.miles)      || d.miles;
+  var _dHours = (_vcPairHit && _vcPairHit.driveHours) || (_cachedDrive && _cachedDrive.driveHours) || d.driveHours;
   var _maxDriveH    = (appState.drivingPrefs && appState.drivingPrefs.maxHours) || 4;
   var _splitResolved = !!(appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].splitResolved);
   var _splitHours   = _splitResolved ? (appState.dayOverrides[d.day].splitHours || Math.round(_dHours / 2 * 10) / 10) : 0;
@@ -12268,7 +12316,7 @@ function renderSchedule() {
           if (_realDriveAhead) {
             /* Use the real drive entry's miles/hours instead of a haversine estimate */
             var _rdDispNum = _dayDisplayNum[_realDriveAhead.day] || _realDriveAhead.day;
-            html += _renderDriveSepA(_realDriveAhead, stop, _effectiveDate, _rdDispNum, _isOverflow, false);
+            html += _renderDriveSepA(_realDriveAhead, stop, _effectiveDate, _rdDispNum, _isOverflow, false, lastStopId);
             _preRenderedDriveDays[_realDriveAhead.day] = true;
           } else {
             var _prevStopForSep = getStop(lastStopId);
@@ -12352,7 +12400,7 @@ function renderSchedule() {
           + '</div>';
       }
 
-      html += _renderDriveSepA(d, stop, _effectiveDate, _dispNum, _isOverflow, _schTodayIdAssigned);
+      html += _renderDriveSepA(d, stop, _effectiveDate, _dispNum, _isOverflow, _schTodayIdAssigned, _originStopId);
       /* Now render destination phase header AFTER the separator */
       if (_phaseJustChanged && stop && !removedStopIds[d.stopId]) {
         var _sepDestIsHome = (d.sleepType === 'home');
@@ -12372,9 +12420,15 @@ function renderSchedule() {
         var _arrBkg1 = _arrBkgs.length > 0 ? _arrBkgs[0] : null;
         var _arrPropName = _arrBkg1 && _arrBkg1.propertyName ? _arrBkg1.propertyName : null;
         var _arrSite = _arrBkg1 && _arrBkg1.siteOrRoom ? ' · Site ' + _arrBkg1.siteOrRoom : '';
-        /* Arrival time estimate */
+        /* Arrival time estimate — same stop-pair-first cache priority as the drive pill */
+        var _vcKeyArr = _originStopId ? String(_originStopId) + '_' + String(d.stopId) : null;
+        var _vcArrHit = _vcKeyArr && appState.osrmVirtualCache && appState.osrmVirtualCache[_vcKeyArr];
         var _cachedD2 = appState.osrmDriveCache && appState.osrmDriveCache[d.day];
-        var _driveDur = (_cachedD2 && _cachedD2.driveHours) || (d.driveHours || 4);
+        if (_cachedD2 && _originStopId && _cachedD2.fromId !== undefined &&
+            (String(_cachedD2.fromId) !== String(_originStopId) || String(_cachedD2.toId) !== String(d.stopId))) {
+          _cachedD2 = null; /* stale */
+        }
+        var _driveDur = (_vcArrHit && _vcArrHit.driveHours) || (_cachedD2 && _cachedD2.driveHours) || (d.driveHours || 4);
         var _depH2 = parseInt(((appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].departTime) || (appState.drivingPrefs && appState.drivingPrefs.departureTime) || '08:00').split(':')[0], 10);
         var _arrRaw = _depH2 + _driveDur;
         var _arrFmt = (function(h){ h=Math.floor(h)%24; var a=h>=12?'PM':'AM'; h=h%12||12; return h+' '+a; })(_arrRaw);
@@ -20593,9 +20647,15 @@ function initApp() {
        too lenient and left individual legs without real road data indefinitely.   */
     var _drivedays = TRIP_DAYS.filter(function(d) { return d.driveDay && d.sleepType !== 'home'; });
     var _needsCalc = _drivedays.filter(function(d) {
-      return !(appState.osrmDriveCache && appState.osrmDriveCache[d.day]); /* not yet cached */
+      var _dc = appState.osrmDriveCache && appState.osrmDriveCache[d.day];
+      if (!_dc) return true; /* not yet cached */
+      /* Old-format entries (written before stop-pair tracking) lack fromId/toId and can't
+         be validated for staleness — trigger a one-time recalc to refresh them with the
+         new format. This is what fixes stale 511-mile values after trip restructuring. */
+      if (_dc.fromId === undefined) return true;
+      return false;
     });
-    /* Trigger for any uncached drive day */
+    /* Trigger for any uncached or unverifiable drive day */
     if (_needsCalc.length > 0) {
       _recalcDriveMiles(true);
     }
