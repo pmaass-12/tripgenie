@@ -25682,8 +25682,9 @@ function renderTools() {
     { id:'membook',  icon:'📖', label:'Memory Book'   },
     { id:'profiles', icon:'👤', label:'Profiles'      },
     { id:'auditlog', icon:'📋', label:'Audit Log'     },
-    { id:'settings', icon:'⚙️', label:'Settings'       },
-    { id:'labs',     icon:'🧪', label:'Labs'           }
+    { id:'settings',     icon:'⚙️', label:'Settings'      },
+    { id:'healthcheck', icon:'🏥', label:'Health Check'  },
+    { id:'labs',        icon:'🧪', label:'Labs'          }
   ];
   var effectiveTab = _toolsTab;
   var bar = '<div class="section-sub-bar">';
@@ -25705,8 +25706,9 @@ function _renderToolsSub() {
   if (_toolsTab === 'membook')  renderMemoryBook();
   if (_toolsTab === 'profiles') renderProfiles();
   if (_toolsTab === 'auditlog') renderAuditLog();
-  if (_toolsTab === 'settings') renderTripSettings();
-  if (_toolsTab === 'labs')     renderLabsTools();
+  if (_toolsTab === 'settings')     renderTripSettings();
+  if (_toolsTab === 'healthcheck') renderHealthCheckTab();
+  if (_toolsTab === 'labs')        renderLabsTools();
 }
 
 /* ── WHAT'S NEW ─────────────────────────────────────────────────── */
