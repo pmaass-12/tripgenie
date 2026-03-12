@@ -11288,8 +11288,12 @@ async function _recalcDriveMiles(silent) {
     saveState(appState);
     _refreshAll(true);
     showToast('✅ Updated ' + updated + ' drive legs — ' + _newTotal.toLocaleString() + ' mi total' + (failed ? ' (' + failed + ' failed)' : ''), 3500);
-  } else {
+  } else if (!silent) {
+    /* Only show the error toast on manual recalc — startup auto-recalc fails silently
+       so a momentary OSRM outage doesn't spam the user on every page load.          */
     showToast('⚠️ Could not reach routing service — try again later', 2500);
+  } else {
+    console.warn('[TripGenie] _recalcDriveMiles: routing service unreachable (' + failed + ' legs failed). Will retry on next load.');
   }
 }
 
