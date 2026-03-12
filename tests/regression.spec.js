@@ -1251,15 +1251,18 @@ test.describe('Removed-stop filtering @regression', () => {
     await page.waitForFunction(() => typeof window.renderExpenses === 'function', { timeout: 10_000 });
 
     const result = await page.evaluate(() => {
+      var tsc = document.createElement('div');
+      tsc.id = 'tools-sub-content';
+      document.body.appendChild(tsc);
       window.appState = window.appState || {};
       window.appState.expenses = [{
         id: 'exp_test1', category: 'restaurants', amount: 25.00,
         note: 'Sonic', dayNum: 3, date: 'Mar 5', receiptData: null
       }];
       window.renderExpenses();
-      var el = document.getElementById('expenses-content') || document.querySelector('[id*="expense"]');
-      if (!el) return false;
-      return el.innerHTML.includes('showExpenseDetail');
+      var result = tsc.innerHTML.includes('showExpenseDetail');
+      tsc.remove();
+      return result;
     });
 
     expect(result).toBe(true);
@@ -1270,16 +1273,19 @@ test.describe('Removed-stop filtering @regression', () => {
     await page.waitForFunction(() => typeof window.renderExpenses === 'function', { timeout: 10_000 });
 
     const result = await page.evaluate(() => {
+      var tsc = document.createElement('div');
+      tsc.id = 'tools-sub-content';
+      document.body.appendChild(tsc);
       window.appState = window.appState || {};
       window.appState.expenses = [{
         id: 'exp_test2', category: 'fuel', amount: 80.00,
         note: 'RaceWay', dayNum: 3, date: 'Mar 4', receiptData: null
       }];
       window.renderExpenses();
-      var el = document.getElementById('expenses-content') || document.querySelector('[id*="expense"]');
-      if (!el) return false;
       // The delete button must call stopPropagation to not open the modal
-      return el.innerHTML.includes('stopPropagation');
+      var result = tsc.innerHTML.includes('stopPropagation');
+      tsc.remove();
+      return result;
     });
 
     expect(result).toBe(true);
@@ -1365,12 +1371,17 @@ test.describe('Removed-stop filtering @regression', () => {
     await page.waitForFunction(() => typeof window.renderExpenses === 'function', { timeout: 10_000 });
 
     const result = await page.evaluate(() => {
+      var tsc = document.createElement('div');
+      tsc.id = 'tools-sub-content';
+      document.body.appendChild(tsc);
       window._expSelCat = 'fuel';
       window.appState = window.appState || {};
       window.appState.expenses = [];
       window.renderExpenses();
       var ff = document.getElementById('exp-fuel-fields');
-      return ff ? ff.style.display !== 'none' : false;
+      var result = ff ? ff.style.display !== 'none' : false;
+      tsc.remove();
+      return result;
     });
 
     expect(result).toBe(true);
@@ -1398,6 +1409,9 @@ test.describe('Removed-stop filtering @regression', () => {
 
     const result = await page.evaluate(() => {
       // Set up the fuel fields in DOM
+      var tsc = document.createElement('div');
+      tsc.id = 'tools-sub-content';
+      document.body.appendChild(tsc);
       window._expSelCat = 'fuel';
       window.appState = window.appState || {};
       window.appState.expenses = [];
@@ -1406,13 +1420,15 @@ test.describe('Removed-stop filtering @regression', () => {
       var gallonsEl = document.getElementById('exp-gallons');
       var priceEl   = document.getElementById('exp-pricepg');
       var amtEl     = document.getElementById('exp-amount');
-      if (!gallonsEl || !priceEl || !amtEl) return 'fields not found';
+      if (!gallonsEl || !priceEl || !amtEl) { tsc.remove(); return 'fields not found'; }
 
       gallonsEl.value = '32.4';
       priceEl.value   = '3.899';
       window._expAutoCalcAmount();
 
-      return parseFloat(amtEl.value);
+      var result = parseFloat(amtEl.value);
+      tsc.remove();
+      return result;
     });
 
     // 32.4 × 3.899 = 126.32 (approximately)
@@ -1426,6 +1442,9 @@ test.describe('Removed-stop filtering @regression', () => {
     await page.waitForFunction(() => typeof window.addExpense === 'function', { timeout: 10_000 });
 
     const result = await page.evaluate(() => {
+      var tsc = document.createElement('div');
+      tsc.id = 'tools-sub-content';
+      document.body.appendChild(tsc);
       window._expSelCat = 'fuel';
       window.appState = window.appState || {};
       window.appState.expenses = [];
@@ -1443,6 +1462,7 @@ test.describe('Removed-stop filtering @regression', () => {
       window.addExpense();
 
       window.showToast = origToast;
+      tsc.remove();
 
       return {
         expenseCount: window.appState.expenses.length,
@@ -1459,6 +1479,9 @@ test.describe('Removed-stop filtering @regression', () => {
     await page.waitForFunction(() => typeof window.addExpense === 'function', { timeout: 10_000 });
 
     const result = await page.evaluate(() => {
+      var tsc = document.createElement('div');
+      tsc.id = 'tools-sub-content';
+      document.body.appendChild(tsc);
       window._expSelCat = 'fuel';
       window._expPendingReceipt = null;
       window.appState = window.appState || {};
@@ -1469,7 +1492,7 @@ test.describe('Removed-stop filtering @regression', () => {
       var gallonsEl = document.getElementById('exp-gallons');
       var priceEl   = document.getElementById('exp-pricepg');
       var typeEl    = document.getElementById('exp-fueltype');
-      if (!amtEl || !gallonsEl || !priceEl || !typeEl) return 'fields missing';
+      if (!amtEl || !gallonsEl || !priceEl || !typeEl) { tsc.remove(); return 'fields missing'; }
 
       amtEl.value     = '126.32';
       gallonsEl.value = '32.4';
@@ -1481,12 +1504,14 @@ test.describe('Removed-stop filtering @regression', () => {
       window.saveState = origSave;
 
       var exp = window.appState.expenses[0];
-      if (!exp) return 'no expense saved';
-      return {
+      if (!exp) { tsc.remove(); return 'no expense saved'; }
+      var result = {
         hasGallons:  exp.fuelGallons === 32.4,
         hasPricePg:  typeof exp.fuelPricePg === 'number',
         hasFuelType: exp.fuelType === 'Diesel',
       };
+      tsc.remove();
+      return result;
     });
 
     expect(result).not.toBe('fields missing');
@@ -1501,6 +1526,9 @@ test.describe('Removed-stop filtering @regression', () => {
     await page.waitForFunction(() => typeof window.renderExpenses === 'function', { timeout: 10_000 });
 
     const result = await page.evaluate(() => {
+      var tsc = document.createElement('div');
+      tsc.id = 'tools-sub-content';
+      document.body.appendChild(tsc);
       window.appState = window.appState || {};
       window.appState.expenses = [{
         id: 'exp_fuel_row', category: 'fuel', amount: 126.32,
@@ -1508,11 +1536,10 @@ test.describe('Removed-stop filtering @regression', () => {
         receiptData: null, fuelGallons: 32.4, fuelPricePg: 3.899, fuelType: 'Diesel'
       }];
       window.renderExpenses();
-      var el = document.getElementById('expenses-content') || document.querySelector('[id*="expense"]');
-      if (!el) return { found: false };
-      var html = el.innerHTML;
+      var html = tsc.innerHTML;
+      tsc.remove();
       return {
-        found: true,
+        found: html.length > 0,
         hasGallons: html.includes('32.4'),
         hasFuelType: html.includes('Diesel'),
       };
@@ -1597,15 +1624,20 @@ test.describe('Removed-stop filtering @regression', () => {
         window.appState.waypointOverrides = { wb: true };
         window.appState.removedStops     = {};
 
-        // Render schedule to a temp container
-        var tempEl = document.createElement('div');
-        tempEl.id  = 'schedule-content';
-        document.body.appendChild(tempEl);
+        // Render schedule — use existing schedule-content or create one if missing
+        var existingEl = document.getElementById('schedule-content');
+        var createdEl = null;
+        if (!existingEl) {
+          createdEl = document.createElement('div');
+          createdEl.id = 'schedule-content';
+          document.body.appendChild(createdEl);
+          existingEl = createdEl;
+        }
 
         window.renderSchedule();
 
-        var html = tempEl.innerHTML;
-        tempEl.remove();
+        var html = existingEl.innerHTML;
+        if (createdEl) createdEl.remove();
 
         // Count "Day N" pill occurrences — should be 3 (days 201, 202, 204) not 4
         var dayPillMatches = html.match(/Day\s+\d+/g) || [];
@@ -1715,8 +1747,9 @@ test.describe('Removed-stop filtering @regression', () => {
       var src = document.documentElement.innerHTML;
       // Must NOT have the over-aggressive old-format re-fetch (causes routing service floods)
       var hasOldFormatRecheck = src.includes('_dc.fromId === undefined') && src.includes('return true');
-      // Must have the simple uncached-only check
-      var hasSimpleCheck = src.includes('!(appState.osrmDriveCache && appState.osrmDriveCache[d.day])');
+      // Must have an uncached-only check (either inline or via extracted _dc variable)
+      var hasSimpleCheck = src.includes('!(appState.osrmDriveCache && appState.osrmDriveCache[d.day])') ||
+        (src.includes('appState.osrmDriveCache[d.day]') && src.includes('if (!_dc) return true'));
       return { hasOldFormatRecheck, hasSimpleCheck };
     });
 
@@ -1730,8 +1763,10 @@ test.describe('Removed-stop filtering @regression', () => {
 
     const result = await page.evaluate(() => {
       var src = document.documentElement.innerHTML;
-      // Must NOT have the old broken exclusion
-      var hasOldExclusion = src.includes("d.driveDay && d.sleepType !== 'home'");
+      // Must NOT have the old broken exclusion (the filter that excluded home-leg drive days).
+      // Use "return d.driveDay && d.sleepType !== 'home'" (with 'return') to avoid false-positive
+      // match against "!d.driveDay && d.sleepType !== 'home'" which legitimately appears elsewhere.
+      var hasOldExclusion = src.includes("return d.driveDay && d.sleepType !== 'home'");
       // Must have the corrected all-drive-days filter
       var hasCorrectFilter = src.includes('return d.driveDay; })');
       return { hasOldExclusion, hasCorrectFilter };

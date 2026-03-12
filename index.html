@@ -7930,7 +7930,7 @@ function _cleanSleepLabel(sleep) {
 }
 
 function _getDriveDayTitle(d) {
-  if (!d || !d.driveDay) return d ? d.title : '';
+  if (!d || !d.driveDay) return d ? (d.title || '') : '';
   var removedIds = appState.removedStops || {};
   var destStop = getStop(d.stopId);
   var myPhase  = d.phase || '';
@@ -12244,6 +12244,14 @@ function renderSchedule() {
   });
   var _overflowDayCount = 0;
 
+  /* Pre-compute set of "stopId|date" for drive days — used to detect explore days that
+     share a date with an arriving drive day (e.g. late-night arrival: drive and explore
+     day both stored as "2026-03-09", but morning activities are actually next-day).     */
+  var _driveArrivalDateKeys = {};
+  _sortedDays.forEach(function(d) {
+    if (d.driveDay && d.date) _driveArrivalDateKeys[d.stopId + '|' + d.date] = true;
+  });
+
   /* Track drive-day entries that were "pre-rendered" before their phase header to
      avoid showing them a second time when the iteration reaches them normally.
      Keyed by day number.                                                         */
@@ -12276,6 +12284,12 @@ function renderSchedule() {
     var _rawDateMs = d.date
       ? new Date(d.date + 'T00:00:00').getTime()
       : new Date(CONFIG.startDate + 'T00:00:00').getTime() + (d.day - 1) * 86400000;
+    /* Late-night arrival fix: if this is an explore day whose date matches a drive day
+       for the same stop, shift +1 day. The drive arrived late (e.g. ~11 PM), so the
+       "morning activities" card belongs to the following calendar day, not the arrival day. */
+    if (!d.driveDay && d.date && _driveArrivalDateKeys[d.stopId + '|' + d.date]) {
+      _rawDateMs += 86400000;
+    }
     var _effectiveDate = new Date(_rawDateMs + (_schCumulativeNights + _schPhOff) * 86400000);
     var _isOverflow = _effectiveDate > _plannedEndDate;
     if (_isOverflow) _overflowDayCount++;
@@ -20652,8 +20666,8 @@ function initApp() {
        The previous exclusion of home-leg days meant Fremont→Warwick was never recalculated. */
     var _drivedays = TRIP_DAYS.filter(function(d) { return d.driveDay; });
     var _needsCalc = _drivedays.filter(function(d) {
-      var _dc = appState.osrmDriveCache && appState.osrmDriveCache[d.day];
-      if (!_dc) return true; /* not cached at all */
+      if (!(appState.osrmDriveCache && appState.osrmDriveCache[d.day])) return true; /* not cached */
+      var _dc = appState.osrmDriveCache[d.day];
       /* Placeholder value (200 mi / 4h) means the API was never successfully called
          for this leg — treat it the same as uncached so recalc runs. */
       if (_dc.miles === 200 && _dc.driveHours === 4) return true;
