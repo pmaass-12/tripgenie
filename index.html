@@ -5973,6 +5973,18 @@ function _smartMergeStates(a, b) {
   _unionById(m.customBookings, other.customBookings,
     function(b) { return b.id || (b.stopId + '|' + (b.confirmation || b.confirmationCode || b.created || '')); });
 
+  /* bookingConfirmations — per-stop arrays keyed by stopId, union by booking id */
+  m.bookingConfirmations = m.bookingConfirmations || {};
+  var _otherBc = other.bookingConfirmations || {};
+  Object.keys(_otherBc).forEach(function(sid) {
+    if (!m.bookingConfirmations[sid]) {
+      m.bookingConfirmations[sid] = JSON.parse(JSON.stringify(_otherBc[sid]));
+    } else {
+      _unionById(m.bookingConfirmations[sid], _otherBc[sid],
+        function(bk) { return bk.id || (bk.checkIn + '|' + (bk.property || bk.name || '')); });
+    }
+  });
+
   m.aiSuggestions = m.aiSuggestions || [];
   _unionById(m.aiSuggestions, other.aiSuggestions, function(s) { return s.id; });
 
@@ -6277,8 +6289,9 @@ async function loadStateFromCloud() {
 function saveState(state) {
   if (state === undefined) state = appState; // allow bare saveState() calls
   if (_isViewer) return; // read-only mode — never persist
-  state._savedAt = new Date().toISOString();
-  if (_userName) state._savedBy = _userName;
+  state._savedAt  = new Date().toISOString();
+  if (_userName) state._savedBy = _userName;   // display name (e.g. "Paul")
+  state._deviceId = _deviceId;                 // per-tab id — used for realtime dedup
   // localStorage is the offline cache; Supabase trips table is primary
   try {
     localStorage.setItem('rv_state', JSON.stringify(state));
@@ -6344,6 +6357,9 @@ var _isFriend = false;
 var _isTestMode = false;
 var _isViewer = false;
 var _userName = '';
+/* Unique per browser-tab session — used to filter out our own realtime pushes
+   without blocking updates from other devices that share the same _userName. */
+var _deviceId = '_dev_' + Math.random().toString(36).slice(2, 9);
 var _cloudLoadedAt = 0;
 var _realAppState = null;
 
@@ -7258,13 +7274,17 @@ function _startRealtimeSync() {
     }, function(payload) {
       var incoming = payload.new && payload.new.trip_data;
       if (!incoming) return;
-      // Ignore our own saves (same user, same device — _savedBy matches)
-      if (incoming._savedBy === _userName) return;
+      /* Ignore saves originating from THIS exact tab (per-session _deviceId).
+         Using _deviceId instead of _userName means two devices sharing the
+         same account (same _userName) still receive each other's updates. */
+      if (incoming._deviceId && incoming._deviceId === _deviceId) return;
       var incomingTs = incoming._savedAt ? new Date(incoming._savedAt).getTime() : 0;
       var localTs    = appState._savedAt ? new Date(appState._savedAt).getTime()  : 0;
       if (incomingTs > localTs) {
-        _saveLocalBackup(appState); // keep a recovery copy before overwriting
-        appState = incoming;
+        _saveLocalBackup(appState); // keep a recovery copy before merging
+        /* Smart merge — never overwrite; union all additive data from both sides */
+        var merged = _smartMergeStates(appState, incoming);
+        appState = merged;
         try { localStorage.setItem('rv_state', JSON.stringify(appState)); } catch(e) {}
         _refreshAll(true);
         var who = incoming._savedBy ? incoming._savedBy : 'another device';

@@ -71,6 +71,34 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 31 — 2026-03-15
+
+**Fix: Events/Restaurants/Attractions panels show empty body after re-render (commit cfc71fd)**
+
+Root cause: `toggleStopEvents` and `toggleStopRestaurants` had a one-time loaded-flag guard (`_stopEventsLoaded[stopId]`, `_stopRestaurantsLoaded[stopId]`). When `renderStops()` rebuilt the DOM (e.g. after clicking + Plan), the panel body was wiped — but the flag stayed `true`, so re-opening the panel called nothing and showed an empty shell.
+
+Fix: Remove the one-time guard from both toggles — always call the load function on open. Add a body-content check inside `loadStopEvents` and `loadStopRestaurants`: if the body already has real content (children present and no spinner), return early (no API call). Refresh buttons now pass `force=true` to bypass the content check and trigger a fresh fetch. Inline error-state Retry buttons for Restaurants also updated to pass `force=true`. `loadStopAttractions` upgraded to the same `force` param pattern: `force=true` clears the in-memory `_attractionsCache` before the cache-hit check, making the Refresh button pattern uniform across all three panels. `_fetchMoreAttractions` simplified to use `force=true` rather than manually deleting the cache.
+
+**Fix: Health Check tab missing from Tools nav (commit 0b6b541)**
+
+`renderHealthCheckTab()` (containing Recalculate Drive Miles + Run Health Check) was orphaned — the function existed but was not in `_renderToolsSub()`. Added `{ id:'healthcheck', icon:'🏥', label:'Health Check' }` to the Tools tab bar between Settings and Labs, and `if (_toolsTab === 'healthcheck') renderHealthCheckTab()` to `_renderToolsSub()`.
+
+**Fix: Routing service toast suppressed during silent startup recalc (commit 8fa81e0)**
+
+The OSRM routing failure toast fired even in `silent=true` mode (startup auto-recalc). Changed to only show toast when `!silent`; console.warn otherwise.
+
+**Fix: Three-part booking sync / realtime cross-device update bug (commit this session)**
+
+Three interrelated bugs caused booking confirmations to be lost across devices:
+
+*Bug 1 — `bookingConfirmations` missing from `_smartMergeStates()`*: `appState.bookingConfirmations` (per-stop booking arrays `{ [stopId]: Array<booking> }`) was not in the merge logic at all. Added a new block after `customBookings _unionById` that iterates each `stopId` in `other.bookingConfirmations`, deep-copies the array if `m` lacks that stop, or unions by `booking.id` (falling back to `checkIn|property`) if both sides have bookings for that stop.
+
+*Bug 2 — Realtime handler overwrote instead of merged*: The `postgres_changes` handler did `appState = incoming` (full overwrite) when `incomingTs > localTs`. Any newer save from Device B replaced Device A's state entirely. Fixed: replaced overwrite with `_smartMergeStates(appState, incoming)` — same pattern as `loadFromCloud()`.
+
+*Bug 3 — `_savedBy` self-filter blocked shared-account devices*: Handler skipped updates where `incoming._savedBy === _userName`. If two family members share the same Supabase account, both devices have the same `_userName` and all realtime pushes are silently ignored. Fixed: added `var _deviceId = '_dev_' + Math.random().toString(36).slice(2, 9)` (per-tab random ID), tagged it as `state._deviceId` in `saveState()`, and changed the realtime filter to `if (incoming._deviceId && incoming._deviceId === _deviceId) return`. Self-pushes (same tab) are still ignored; other devices sharing the same account now receive updates correctly.
+
+---
+
 ### Session 30 (continued) — 2026-03-12
 
 **Drive distance miscalculation fix (stale `osrmDriveCache` by day number).**
