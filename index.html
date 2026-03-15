@@ -13391,7 +13391,7 @@ function renderStops() {
     html += '<div id="stop-events-panel-' + stop.id + '" class="hidden" style="margin-top:2px;border:1px solid #c9b8e8;border-radius:var(--radius-s);overflow:hidden;">'
       + '<div style="background:var(--purple);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;">'
       + '<span style="font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;"><i class="fa-solid fa-calendar-star"></i> Events Near ' + stop.name + '</span>'
-      + '<button onclick="event.stopPropagation();_stopEventsLoaded[\'' + stop.id + '\']=false;loadStopEvents(\'' + stop.id + '\')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
+      + '<button onclick="event.stopPropagation();loadStopEvents(\'' + stop.id + '\',true)" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
       + '</div>'
       + '<div id="stop-events-body-' + stop.id + '"></div>'
       + '</div>';
@@ -13400,7 +13400,7 @@ function renderStops() {
     html += '<div id="stop-attractions-panel-' + stop.id + '" class="hidden" style="margin-top:6px;border:1px solid #a8d8c8;border-radius:var(--radius-s);overflow:hidden;">'
       + '<div style="background:#1a7a5a;color:#fff;display:flex;align-items:center;gap:8px;padding:8px 14px;flex-wrap:wrap;">'
       + '<span style="font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;flex:1;min-width:0;">🏛️ Top Attractions — ' + stop.name + '</span>'
-      + '<button onclick="event.stopPropagation();_stopAttractionsLoaded[\'' + stop.id + '\']=false;delete _attractionsCache[\'' + stop.id + '\'];loadStopAttractions(\'' + stop.id + '\')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;">&#8635; Refresh</button>'
+      + '<button onclick="event.stopPropagation();loadStopAttractions(\'' + stop.id + '\',true)" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);white-space:nowrap;">&#8635; Refresh</button>'
       + '</div>'
       + '<div style="padding:8px 12px;background:#f0faf5;border-bottom:1px solid #c8e8d8;display:flex;gap:8px;align-items:center;">'
       + '<input id="attr-search-' + stop.id + '" type="text" placeholder="🔍 Search: hikes, animals, history…" oninput="_filterAttractions(\'' + stop.id + '\')" style="flex:1;padding:7px 11px;border:1.5px solid #a8d8c8;border-radius:20px;font-size:.82rem;font-family:var(--font);background:#fff;color:var(--text);outline:none;" />'
@@ -13412,7 +13412,7 @@ function renderStops() {
     html += '<div id="stop-restaurants-panel-' + stop.id + '" class="hidden" style="margin-top:6px;border:1px solid #f5c08a;border-radius:var(--radius-s);overflow:hidden;">'
       + '<div style="background:#c05800;color:#fff;display:flex;align-items:center;justify-content:space-between;padding:8px 14px;">'
       + '<span style="font-size:.78rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;">🍽️ Restaurants Near ' + stop.name + '</span>'
-      + '<button onclick="event.stopPropagation();_stopRestaurantsLoaded[\'' + stop.id + '\']=false;loadStopRestaurants(\'' + stop.id + '\')" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
+      + '<button onclick="event.stopPropagation();loadStopRestaurants(\'' + stop.id + '\',true)" style="background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:100px;padding:3px 9px;font-size:.72rem;font-weight:700;cursor:pointer;font-family:var(--font);">&#8635; Refresh</button>'
       + '</div>'
       + '<div id="stop-restaurants-body-' + stop.id + '"></div>'
       + '</div>';
@@ -22839,17 +22839,24 @@ function toggleStopEvents(stopId) {
   if (!panel) return;
   var isHidden = panel.classList.contains('hidden');
   panel.classList.toggle('hidden');
-  if (isHidden && !_stopEventsLoaded[stopId]) {
-    _stopEventsLoaded[stopId] = true;
+  if (isHidden) {
+    /* Always call loadStopEvents when opening — it checks body content internally
+       so there's no extra API cost. This fixes the regression where renderStops()
+       rebuilds the DOM (clearing the body) but _stopEventsLoaded stayed true,
+       causing re-opens to show an empty panel. */
     loadStopEvents(stopId);
   }
 }
 
-function loadStopEvents(stopId) {
+function loadStopEvents(stopId, force) {
   var evBody = document.getElementById('stop-events-body-' + stopId);
   if (!evBody) return;
   var stop = getStop(stopId);
   if (!stop) return;
+
+  /* Skip re-fetch if body already has real content (handles re-open after
+     renderStops() rebuilds the DOM). The Refresh button passes force=true. */
+  if (!force && evBody.children.length > 0 && !evBody.querySelector('.fa-spin')) return;
 
   evBody.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text-2);font-size:.84rem;">'
     + '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i>Searching events near ' + stop.name + '…</div>';
@@ -23186,17 +23193,19 @@ function _loadMoreAttractions(stopId) {
 }
 
 function _fetchMoreAttractions(stopId) {
-  /* Clear cache and reload a fresh set of attractions */
-  delete _attractionsCache[stopId];
+  /* Clear cache and reload a fresh set of attractions (force=true does the cache clear) */
   _attractionsShown[stopId] = _ATTR_PAGE;
-  loadStopAttractions(stopId);
+  loadStopAttractions(stopId, true);
 }
 
-function loadStopAttractions(stopId) {
+function loadStopAttractions(stopId, force) {
   var body = document.getElementById('stop-attractions-body-' + stopId);
   if (!body) return;
   var stop = getStop(stopId);
   if (!stop) return;
+
+  /* force=true (Refresh button) clears cache so we always re-fetch */
+  if (force) delete _attractionsCache[stopId];
 
   /* If we already have cached data, just re-render (handles Refresh-less reopen) */
   if (_attractionsCache[stopId] && _attractionsCache[stopId].length > 0) {
@@ -23268,17 +23277,24 @@ function toggleStopRestaurants(stopId) {
   if (!panel) return;
   var isHidden = panel.classList.contains('hidden');
   panel.classList.toggle('hidden');
-  if (isHidden && !_stopRestaurantsLoaded[stopId]) {
-    _stopRestaurantsLoaded[stopId] = true;
+  if (isHidden) {
+    /* Always call loadStopRestaurants when opening — it checks body content internally
+       so there's no extra API cost. This fixes the regression where renderStops()
+       rebuilds the DOM (clearing the body) but _stopRestaurantsLoaded stayed true,
+       causing re-opens to show an empty panel. */
     loadStopRestaurants(stopId);
   }
 }
 
-function loadStopRestaurants(stopId) {
+function loadStopRestaurants(stopId, force) {
   var body = document.getElementById('stop-restaurants-body-' + stopId);
   if (!body) return;
   var stop = getStop(stopId);
   if (!stop) return;
+
+  /* Skip re-fetch if body already has real content (handles re-open after
+     renderStops() rebuilds the DOM). The Refresh button passes force=true. */
+  if (!force && body.children.length > 0 && !body.querySelector('.fa-spin')) return;
 
   body.innerHTML = '<div style="padding:18px;text-align:center;color:var(--text-2);font-size:.84rem;">'
     + '<i class="fa-solid fa-spinner fa-spin" style="margin-right:6px;"></i>Finding great restaurants near ' + stop.name + '…</div>';
@@ -23306,7 +23322,7 @@ function loadStopRestaurants(stopId) {
     var text = '';
     try { text = data.candidates[0].content.parts[0].text || ''; } catch(e) {}
     if (!text) {
-      body.innerHTML = '<div style="padding:14px 16px;color:var(--text-2);font-size:.84rem;">Could not load restaurants — <button onclick="event.stopPropagation();_stopRestaurantsLoaded[\'' + stopId + '\']=false;loadStopRestaurants(\'' + stopId + '\')" style="color:var(--blue);background:none;border:none;cursor:pointer;font-weight:700;font-family:var(--font);">Try again</button></div>';
+      body.innerHTML = '<div style="padding:14px 16px;color:var(--text-2);font-size:.84rem;">Could not load restaurants — <button onclick="event.stopPropagation();loadStopRestaurants(\'' + stopId + '\',true)" style="color:var(--blue);background:none;border:none;cursor:pointer;font-weight:700;font-family:var(--font);">Try again</button></div>';
       return;
     }
     var blocks = text.split('---');
@@ -23365,7 +23381,7 @@ function loadStopRestaurants(stopId) {
     }
   })
   .catch(function() {
-    body.innerHTML = '<div style="padding:14px 16px;color:var(--red);font-size:.84rem;">⚠️ Couldn\'t load restaurants — <button onclick="event.stopPropagation();_stopRestaurantsLoaded[\'' + stopId + '\']=false;loadStopRestaurants(\'' + stopId + '\')" style="color:var(--blue);background:none;border:none;cursor:pointer;font-weight:700;font-family:var(--font);">Retry</button></div>';
+    body.innerHTML = '<div style="padding:14px 16px;color:var(--red);font-size:.84rem;">⚠️ Couldn\'t load restaurants — <button onclick="event.stopPropagation();loadStopRestaurants(\'' + stopId + '\',true)" style="color:var(--blue);background:none;border:none;cursor:pointer;font-weight:700;font-family:var(--font);">Retry</button></div>';
   });
 }
 
