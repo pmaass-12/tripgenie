@@ -71,6 +71,14 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 35 — 2026-03-15
+
+**Change: Remove "DAY N" label from schedule date chips**
+
+Removed the `sc-day-pill` div (the `Day N` label below the colored date square) from `renderSchedule()`. Date chips now show only weekday abbreviation + month/date (e.g. "Wed Mar 18"). The `.sc-day-pill { display:none }` CSS rule was already present and is untouched. `renderPlannerAgenda` has no equivalent chip — verified, no change needed there.
+
+---
+
 ### Session 34 — 2026-03-15
 
 **Feature: Gemini drive time lookup in departure modal + dayOverrides override wins all cache**
