@@ -25491,6 +25491,9 @@ function _bcSave() {
   if (!appState.bookingConfirmations) appState.bookingConfirmations = {};
   if (!appState.bookingConfirmations[_bcCurrentStopId]) appState.bookingConfirmations[_bcCurrentStopId] = [];
 
+  /* Capture before the edit branch clears it — used in expense logic below */
+  var _savedEditId = _bcEditId;
+
   if (_bcEditId) {
     /* Update existing booking in place */
     bc.id = _bcEditId;
@@ -25507,6 +25510,48 @@ function _bcSave() {
     /* Add new booking */
     appState.bookingConfirmations[_bcCurrentStopId].push(bc);
     showToast('✅ Booking confirmation saved!', 2200);
+  }
+
+  /* Auto-create a lodging expense from the booking cost if present (new bookings only) */
+  if (!_savedEditId && bc.totalCost) {
+    var _costStr = bc.totalCost.replace(/[^0-9.]/g, '');
+    var _costNum = parseFloat(_costStr);
+    if (_costNum > 0) {
+      if (!appState.expenses) appState.expenses = [];
+      /* Check if an expense for this booking id already exists (prevent duplicates) */
+      var _alreadyLogged = appState.expenses.some(function(e) {
+        return e.bookingId === bc.id;
+      });
+      if (!_alreadyLogged) {
+        appState.expenses.unshift({
+          id:        'exp_' + Date.now(),
+          category:  'lodging',
+          amount:    _costNum,
+          note:      (bc.propertyName || 'Lodging')
+                     + (bc.checkInDate ? ' \u00b7 ' + bc.checkInDate : ''),
+          dayNum:    null,
+          date:      bc.checkInDate || new Date().toLocaleDateString(
+                       'en-US', { month: 'short', day: 'numeric' }),
+          bookingId: bc.id,   /* links expense back to booking for dedup */
+          stopId:    _bcCurrentStopId
+        });
+      }
+    }
+  }
+
+  /* Update linked expense amount when editing a booking that already has one */
+  if (_savedEditId && bc.totalCost) {
+    var _editCostNum = parseFloat(bc.totalCost.replace(/[^0-9.]/g, ''));
+    if (_editCostNum > 0 && appState.expenses) {
+      var _linkedExp = appState.expenses.find(function(e) {
+        return e.bookingId === _savedEditId;
+      });
+      if (_linkedExp) {
+        _linkedExp.amount = _editCostNum;
+        _linkedExp.note = (bc.propertyName || 'Lodging')
+                          + (bc.checkInDate ? ' \u00b7 ' + bc.checkInDate : '');
+      }
+    }
   }
 
   saveState(appState);

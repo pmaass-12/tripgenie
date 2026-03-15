@@ -71,6 +71,26 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 36 — 2026-03-15
+
+**Fix: Auto-create lodging expense when booking confirmation is saved**
+
+`_bcSave()` stored `totalCost` in `bookingConfirmations` but never wrote to `appState.expenses`, so the lodging budget always showed $0 after uploading confirmations.
+
+Fix: surgical addition to `_bcSave()` only — three changes inside the function:
+
+1. `var _savedEditId = _bcEditId` — captured immediately before the edit/new branch, because the edit branch sets `_bcEditId = null` before the expense logic runs. All expense checks use `_savedEditId`.
+
+2. New booking expense block (`!_savedEditId && bc.totalCost`): strips non-numeric chars from `totalCost`, parses float, guards `> 0`, checks for an existing `appState.expenses` entry with `e.bookingId === bc.id` (dedup), then `unshift`s `{ id, category:'lodging', amount, note, dayNum:null, date, bookingId, stopId }`. Empty/zero `totalCost` is silently skipped.
+
+3. Edit booking expense block (`_savedEditId && bc.totalCost`): finds the linked expense via `e.bookingId === _savedEditId` and updates `amount` and `note` in place. No new entry is created.
+
+Both blocks sit between the push/update block and `saveState(appState)`. `renderExpenses()` and `addExpense()` are not called or modified.
+
+Verification: 22/22 static checks passed.
+
+---
+
 ### Session 35 — 2026-03-15
 
 **Change: Remove "DAY N" label from schedule date chips**
