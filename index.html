@@ -4877,9 +4877,11 @@ var TRIP_STOPS = [
     "name": "Badlands",
     "phase": "Badlands",
     "state": "SD",
+    "nights": 1,
     "sleepType": "campground",
     "activities": [],
-    "description": ""
+    "highlights": ["Badlands Loop Road", "Wall Drug stop", "Prairie dog towns", "Fossil Trail", "Stargazing"],
+    "description": "Otherworldly eroded buttes and spires. One of the best stargazing spots in the country."
   },
   {
     "id": "albert-lea",
@@ -4887,7 +4889,9 @@ var TRIP_STOPS = [
     "lng": -93.3635,
     "city": "Albert Lea",
     "name": "Albert Lea",
-    "state": "MN"
+    "state": "MN",
+    "nights": 1,
+    "sleepType": "waypoint"
   },
   {
     "id": "wisconsin-dells",
@@ -4895,7 +4899,9 @@ var TRIP_STOPS = [
     "lng": -89.7718,
     "city": "Wisconsin Dells",
     "name": "Wisconsin Dells",
-    "state": "WI"
+    "state": "WI",
+    "nights": 1,
+    "sleepType": "waypoint"
   },
   {
     "id": "fremont",
@@ -4903,7 +4909,9 @@ var TRIP_STOPS = [
     "lng": -84.9344,
     "city": "Fremont",
     "name": "Fremont",
-    "state": "IN"
+    "state": "IN",
+    "nights": 1,
+    "sleepType": "waypoint"
   },
   {
     "id": 15,
@@ -5695,6 +5703,22 @@ var TRIP_DAYS = [
   {
     "day": 46,
     "date": "2026-04-16",
+    "name": "Badlands",
+    "items": [],
+    "miles": 0,
+    "phase": "Badlands",
+    "sleep": "Badlands RV Park",
+    "title": "Badlands — Explore Day",
+    "driver": "",
+    "stopId": 1772297130458,
+    "driveDay": false,
+    "sleepType": "campground",
+    "driveHours": 0,
+    "springBreak": false
+  },
+  {
+    "day": 47,
+    "date": "2026-04-17",
     "name": "Albert Lea",
     "items": [],
     "miles": 200,
@@ -5704,13 +5728,14 @@ var TRIP_DAYS = [
     "driver": "Paul",
     "stopId": "albert-lea",
     "driveDay": true,
+    "waypoint": true,
     "sleepType": "rv_park",
     "driveHours": 4,
     "springBreak": false
   },
   {
-    "day": 47,
-    "date": "2026-04-17",
+    "day": 48,
+    "date": "2026-04-18",
     "name": "Wisconsin Dells",
     "items": [],
     "miles": 200,
@@ -5720,13 +5745,14 @@ var TRIP_DAYS = [
     "driver": "Melissa",
     "stopId": "wisconsin-dells",
     "driveDay": true,
+    "waypoint": true,
     "sleepType": "rv_park",
     "driveHours": 4,
     "springBreak": false
   },
   {
-    "day": 48,
-    "date": "2026-04-18",
+    "day": 49,
+    "date": "2026-04-19",
     "name": "Fremont",
     "items": [],
     "miles": 200,
@@ -5736,13 +5762,14 @@ var TRIP_DAYS = [
     "driver": "Paul",
     "stopId": "fremont",
     "driveDay": true,
+    "waypoint": true,
     "sleepType": "rv_park",
     "driveHours": 4,
     "springBreak": false
   },
   {
-    "day": 49,
-    "date": "2026-04-19",
+    "day": 50,
+    "date": "2026-04-20",
     "name": "Warwick",
     "items": [],
     "miles": 200,
@@ -6335,8 +6362,8 @@ var CONFIG = {
   friendsPasswordHash: '39b14b5cc500ec7a1991c3131570cb73a8eba0d57271ebfac3a3536b1253995a', // friends
   viewerPasswordHash:  '8171bacf32668a8f44b90087ad107ed63170f57154763ba7e44047bf9e5a7be3', // viewer
   startDate: '2026-03-02',
-  endDate:   '2026-04-19',
-  totalDays: 49,
+  endDate:   '2026-04-20',
+  totalDays: 50,
   totalMiles: 5705,
 };
 
@@ -6345,8 +6372,8 @@ var _BUILTIN_TRIP = {
   stops:    TRIP_STOPS,
   days:     TRIP_DAYS,
   startDate: '2026-03-02',
-  endDate:   '2026-04-19',
-  totalDays: 49,
+  endDate:   '2026-04-20',
+  totalDays: 50,
   totalMiles: 5705,
   tripName:  'Maass Family RV 2026'
 };

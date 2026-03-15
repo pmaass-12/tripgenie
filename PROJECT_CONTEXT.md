@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-12 (Session 30)
+2026-03-15 (Session 31)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -70,6 +70,31 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 31 (continued) — 2026-03-15
+
+**Data fix: Return-leg final 4 stops — Badlands explore day + waypoints + CONFIG update**
+
+Added a new Badlands explore day and adjusted the trip end date from 49 to 50 days total:
+
+*TRIP_STOPS changes:*
+- Badlands stop: added `nights: 1`, `highlights` array (Badlands Loop Road, Wall Drug, prairie dogs, Fossil Trail, stargazing), and `description`
+- Albert Lea, Wisconsin Dells, Fremont: each changed to `sleepType: "waypoint"` and `nights: 1`
+
+*TRIP_DAYS changes:*
+- Inserted new day 46 `{ day: 46, date: "2026-04-16", name: "Badlands", title: "Badlands — Explore Day", stopId: 1772297130458, driveDay: false, sleepType: "campground" }`
+- Renumbered old day 46 → 47 (Albert Lea, date 2026-04-17, `waypoint: true`)
+- Renumbered old day 47 → 48 (Wisconsin Dells, date 2026-04-18, `waypoint: true`)
+- Renumbered old day 48 → 49 (Fremont, date 2026-04-19, `waypoint: true`)
+- Renumbered old day 49 → 50 (Warwick / HOME, date 2026-04-20)
+
+*CONFIG + _BUILTIN_TRIP:*
+- `endDate`: `'2026-04-19'` → `'2026-04-20'`
+- `totalDays`: `49` → `50`
+
+Verification: 50 TRIP_DAYS entries confirmed, dates 46–50 sequential (2026-04-16 through 2026-04-20), waypoint:true on days 47/48/49, sleepType=waypoint on Albert Lea/Wisconsin Dells/Fremont stops, CONFIG and _BUILTIN_TRIP both updated.
+
+---
 
 ### Session 31 — 2026-03-15
 
