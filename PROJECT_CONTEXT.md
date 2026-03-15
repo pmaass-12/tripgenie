@@ -71,6 +71,24 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 34 — 2026-03-15
+
+**Feature: Gemini drive time lookup in departure modal + dayOverrides override wins all cache**
+
+Four surgical changes, nothing removed:
+
+*Change 1 — dayOverrides.driveHours/miles wins over all cache in both separator types*: `_renderDriveSepA` and `_renderVirtualDriveSep` now check `appState.dayOverrides[d.day].driveHours` (and `.miles`) immediately after the cache-resolution lines. When set, these override OSRM virtual cache, OSRM day cache, and the hardcoded fallback. The `<1h skip guard` in `_renderVirtualDriveSep` runs after the override so a confirmed short leg still renders.
+
+*Change 2 — `_saveDriveTime` writes driveHours/miles to dayOverrides + osrmVirtualCache*: After saving `departTime`, reads hidden inputs `dtm-confirmed-hours` / `dtm-confirmed-miles`. If `_confirmedH > 0`, writes to `appState.dayOverrides[dayNum].driveHours` (and `.miles`), and also writes the stop-pair entry into `osrmVirtualCache[fromId_toId]` so virtual separators on the same leg update. Toast appends "· Xh drive saved" when confirmed.
+
+*Change 3 — departure modal gets Drive Time section*: Four hidden inputs added to the top of the inner modal container (`dtm-confirmed-hours`, `dtm-confirmed-miles`, `dtm-from-id`, `dtm-to-id`). A "Drive Time" section is inserted between the Departure Time `<select>` and Cancel/Save buttons. Shows the saved value when `dayOverrides[dayNum].driveHours` already exists, otherwise "Not set — tap below to look up". Contains a "🗺 Get Drive Time" button calling `_dtmLookup`.
+
+*Change 4 — `_dtmLookup(dayNum, originStopId, destStopId)`*: New function between `_saveDriveTime` and `_deleteDriveBar`. Resolves stops via `getStop()`, builds a structured `MILES: / HOURS:` prompt including `getRVContext()`, POSTs to `GEMINI_URL` (`maxOutputTokens: 60, temperature: 0.1`). Parses response with regex, rounds hours to nearest quarter (×4/4), fills hidden inputs on success. On parse failure or network error shows inline error, re-enables button, never saves garbage to dayOverrides.
+
+Verification: 37/37 static checks passed.
+
+---
+
 ### Session 33 — 2026-03-15
 
 **Fix: "Add event this day" events invisible in agenda after save**

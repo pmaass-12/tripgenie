@@ -11737,6 +11737,12 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow, skipTo
   }
   var _dMiles = (_vcPairHit && _vcPairHit.miles)      || (_cachedDrive && _cachedDrive.miles)      || d.miles;
   var _dHours = (_vcPairHit && _vcPairHit.driveHours) || (_cachedDrive && _cachedDrive.driveHours) || d.driveHours;
+  /* dayOverrides.driveHours/miles always wins — user-confirmed value overrides all cache */
+  var _ovDrive = appState.dayOverrides && appState.dayOverrides[d.day];
+  if (_ovDrive && _ovDrive.driveHours) {
+    _dHours = _ovDrive.driveHours;
+    if (_ovDrive.miles) _dMiles = _ovDrive.miles;
+  }
   var _maxDriveH    = (appState.drivingPrefs && appState.drivingPrefs.maxHours) || 4;
   var _splitResolved = !!(appState.dayOverrides && appState.dayOverrides[d.day] && appState.dayOverrides[d.day].splitResolved);
   var _splitHours   = _splitResolved ? (appState.dayOverrides[d.day].splitHours || Math.round(_dHours / 2 * 10) / 10) : 0;
@@ -11908,6 +11914,11 @@ function openDriveTimeModal(dayNum, originStopId, destStopId, dateMs) {
 
   var html = '<div id="drive-time-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;" onclick="if(event.target===this)this.remove();">'
     + '<div style="background:#fff;border-radius:18px;padding:24px;max-width:360px;width:100%;box-shadow:0 8px 40px rgba(0,0,0,.25);">'
+    /* Hidden inputs carry confirmed drive time + stop IDs through to _saveDriveTime */
+    + '<input type="hidden" id="dtm-confirmed-hours" value="">'
+    + '<input type="hidden" id="dtm-confirmed-miles" value="">'
+    + '<input type="hidden" id="dtm-from-id" value="' + (originStopId || '') + '">'
+    + '<input type="hidden" id="dtm-to-id" value="' + (destStopId || '') + '">'
     + '<div style="font-size:1rem;font-weight:800;color:var(--text);margin-bottom:3px;">🚐 Departure</div>'
     + '<div style="font-size:.8rem;color:var(--text-2);margin-bottom:18px;">' + _title + '</div>'
 
@@ -11923,6 +11934,21 @@ function openDriveTimeModal(dayNum, originStopId, destStopId, dateMs) {
     /* ── Departure Time section ── */
     + '<div style="font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:6px;">Departure Time</div>'
     + '<select id="drive-time-sel" style="width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid var(--border);font-size:1rem;font-family:var(--font);color:var(--text);background:#fff;margin-bottom:18px;">' + opts + '</select>'
+
+    /* ── Drive Time section ── */
+    + '<div style="margin-bottom:18px;">'
+    + '<div style="font-size:.68rem;font-weight:800;text-transform:uppercase;letter-spacing:.08em;color:var(--text-3);margin-bottom:6px;">Drive Time</div>'
+    + (function() {
+        var _ov = appState.dayOverrides && appState.dayOverrides[dayNum];
+        if (_ov && _ov.driveHours) {
+          return '<div id="dtm-result" style="font-size:.83rem;color:var(--green);font-weight:700;margin-bottom:8px;">✓ '
+            + _ov.driveHours + 'h' + (_ov.miles ? ' · ' + _ov.miles + ' mi' : '') + ' (saved)</div>';
+        }
+        return '<div id="dtm-result" style="font-size:.83rem;color:var(--text-3);margin-bottom:8px;">Not set — tap below to look up</div>';
+      }())
+    + '<button id="dtm-lookup-btn" onclick="event.stopPropagation();_dtmLookup(' + dayNum + ',\'' + (originStopId || '') + '\',\'' + (destStopId || '') + '\')" '
+    + 'style="width:100%;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--blue);color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:var(--font);">🗺 Get Drive Time</button>'
+    + '</div>'
 
     + '<div style="display:flex;gap:8px;">'
     + '<button onclick="document.getElementById(\'drive-time-modal\').remove()" style="flex:1;padding:11px;border:1.5px solid var(--border);border-radius:100px;font-size:.9rem;font-weight:700;cursor:pointer;font-family:var(--font);background:#fff;color:var(--text-2);">Cancel</button>'
@@ -11956,13 +11982,99 @@ function _saveDriveTime(dayNum) {
   if (!appState.dayOverrides) appState.dayOverrides = {};
   if (!appState.dayOverrides[dayNum]) appState.dayOverrides[dayNum] = {};
   appState.dayOverrides[dayNum].departTime = val;
+
+  /* Save confirmed drive time if user fetched one */
+  var _hEl = document.getElementById('dtm-confirmed-hours');
+  var _mEl = document.getElementById('dtm-confirmed-miles');
+  var _confirmedH = _hEl ? parseFloat(_hEl.value || '') : NaN;
+  var _confirmedM = _mEl ? parseInt(_mEl.value || '0', 10) : 0;
+  if (_confirmedH > 0) {
+    appState.dayOverrides[dayNum].driveHours = _confirmedH;
+    if (_confirmedM > 0) appState.dayOverrides[dayNum].miles = _confirmedM;
+    /* Also write into osrmVirtualCache so virtual separators on same leg update */
+    var _fEl = document.getElementById('dtm-from-id');
+    var _tEl = document.getElementById('dtm-to-id');
+    var _dtmFromId = _fEl ? _fEl.value : '';
+    var _dtmToId   = _tEl ? _tEl.value : '';
+    if (_dtmFromId && _dtmToId) {
+      if (!appState.osrmVirtualCache) appState.osrmVirtualCache = {};
+      appState.osrmVirtualCache[_dtmFromId + '_' + _dtmToId] =
+        { miles: _confirmedM || 0, driveHours: _confirmedH };
+    }
+  }
+
   saveState(appState);
   var h = parseInt(val.split(':')[0],10), m = parseInt(val.split(':')[1]||'0',10);
   var ampm = h >= 12 ? 'PM' : 'AM'; h = h%12||12;
   var disp = h + (m ? ':'+String(m).padStart(2,'0') : '') + ' ' + ampm;
-  showToast('🕐 Departure set to ' + disp, 2000);
+  var timeMsg = (_confirmedH > 0) ? ' · ' + _confirmedH + 'h drive saved' : '';
+  showToast('🕐 Departure set to ' + disp + timeMsg, 2200);
   document.getElementById('drive-time-modal').remove();
   renderSchedule();
+}
+
+function _dtmLookup(dayNum, originStopId, destStopId) {
+  var btn    = document.getElementById('dtm-lookup-btn');
+  var result = document.getElementById('dtm-result');
+  if (!btn || !result) return;
+
+  var originStop = originStopId ? getStop(originStopId) : null;
+  var destStop   = destStopId   ? getStop(destStopId)   : null;
+  if (!originStop || !destStop) {
+    result.textContent = '⚠️ Could not identify stops';
+    return;
+  }
+
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Looking up…';
+
+  var _rvCtx = (typeof getRVContext === 'function') ? getRVContext() : '';
+  var prompt = 'Give me the driving distance and estimated drive time by road '
+    + 'from ' + _sn(originStop) + ' to ' + _sn(destStop) + '. '
+    + (_rvCtx ? _rvCtx + ' ' : '')
+    + 'Reply with ONLY these two lines, no explanation:\n'
+    + 'MILES: [number]\n'
+    + 'HOURS: [decimal number, e.g. 3.5]';
+
+  fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { maxOutputTokens: 60, temperature: 0.1 }
+    })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    var text = '';
+    try { text = data.candidates[0].content.parts[0].text || ''; } catch(e) {}
+    var milesMatch = text.match(/MILES:\s*([\d.]+)/i);
+    var hoursMatch = text.match(/HOURS:\s*([\d.]+)/i);
+    var miles = milesMatch ? Math.round(parseFloat(milesMatch[1])) : 0;
+    var hours = hoursMatch ? Math.round(parseFloat(hoursMatch[1]) * 4) / 4 : 0;
+
+    if (hours > 0) {
+      /* Store in hidden inputs so _saveDriveTime picks them up */
+      var hEl = document.getElementById('dtm-confirmed-hours');
+      var mEl = document.getElementById('dtm-confirmed-miles');
+      if (hEl) hEl.value = hours;
+      if (mEl) mEl.value = miles;
+      result.innerHTML = '<span style="color:var(--green);font-weight:700;">✓ '
+        + hours + 'h drive · ' + miles + ' mi</span>'
+        + ' <span style="font-size:.7rem;color:var(--text-3);">— will save when you tap Save Time</span>';
+      btn.innerHTML = '🔄 Re-check';
+      btn.disabled = false;
+    } else {
+      result.textContent = '⚠️ Could not parse response — try again';
+      btn.innerHTML = '🗺 Get Drive Time';
+      btn.disabled = false;
+    }
+  })
+  .catch(function() {
+    result.textContent = '⚠️ Could not reach AI — check connection';
+    btn.innerHTML = '🗺 Get Drive Time';
+    btn.disabled = false;
+  });
 }
 
 function _deleteDriveBar(dayNum) {
@@ -12095,6 +12207,12 @@ function _renderVirtualDriveSep(prevStop, destStop, d, effectiveDate, displayNum
     var _straight = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     _estMiles = Math.round(_straight * 1.3); /* road distance ~30% more than straight-line */
     _estHours = Math.round(_estMiles / 55 * 10) / 10; /* ~55 mph average with RV */
+  }
+  /* dayOverrides.driveHours/miles always wins — user-confirmed value overrides all cache */
+  var _ovDriveV = appState.dayOverrides && appState.dayOverrides[d.day];
+  if (_ovDriveV && _ovDriveV.driveHours) {
+    _estHours = _ovDriveV.driveHours;
+    if (_ovDriveV.miles) _estMiles = _ovDriveV.miles;
   }
   if (_estHours < 1) return ''; /* skip separators for <1 h hops */
 
