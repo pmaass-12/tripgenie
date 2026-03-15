@@ -71,6 +71,22 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 32 — 2026-03-15
+
+**Fix: Three drive separator bugs — wrong titles, stale miles, wrong arrival times**
+
+Three separate bugs all manifested on the orange drive day separator bars on the Schedule page.
+
+*Bug 1 — `_getDriveDayTitle()` scanned `TRIP_DAYS` instead of active days*: The backward scan for the origin city used `TRIP_DAYS[pi]` and `TRIP_DAYS[bi]` by array index. When the user has trip edits, `appState.customTripData.days` diverges from `TRIP_DAYS` — so the same array index held a completely different day, producing nonsense titles like "Yellowstone → Warwick" for unrelated legs. Fix: added `var _activeDays = customTripData.days if present, else TRIP_DAYS` at the top of the function, and replaced both `TRIP_DAYS[pi]` and `TRIP_DAYS[bi]` with `_activeDays[pi]` / `_activeDays[bi]`. No other logic changed.
+
+*Bug 2 — `getStop()` used strict `===` for ID comparison*: Stop IDs can be numeric integers in `TRIP_STOPS` but passed as strings from day objects (and vice versa for custom stops). The existing `===` comparison silently failed on type mismatches, causing `getStop()` to return null for valid stops — `_recalcDriveMiles()` would then skip those legs, leaving the hardcoded "200 mi · 4h drive" placeholder forever. Fix: switched both the `TRIP_STOPS` search and the `customTripData.stops` fallback to `String(s.id) === String(id)` for type-safe matching.
+
+*Bug 3 — Arrival time dropped departure minutes*: `Math.floor(_departM / 60)` always evaluates to 0 for any minutes value under 60, silently discarding the fractional hour. For an 8:30 AM departure the base hour was computed as 8+0 instead of 8+0.5, making all arrival estimates up to 30 minutes early. Fix: removed `Math.floor` in both `_renderDriveSepA` and `_renderVirtualDriveSep` — now `(_departM / 60)` preserves the fraction. Downstream `Math.floor(_arrivalH)` already handles fractional hours correctly.
+
+Verification: 11/11 static checks passed.
+
+---
+
 ### Session 31 (continued) — 2026-03-15
 
 **Data fix: Return-leg final 4 stops — Badlands explore day + waypoints + CONFIG update**

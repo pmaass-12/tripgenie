@@ -5787,10 +5787,12 @@ var TRIP_DAYS = [
 
 /* ── HELPERS ─────────────────────────────────────────────────────── */
 function getStop(id) {
-  /* Check built-in stops first, then custom stops from the trip wizard */
-  return TRIP_STOPS.find(s => s.id === id)
-    || (appState.customTripData && appState.customTripData.stops && appState.customTripData.stops.find(s => s.id === id))
-    || null;
+  var s = TRIP_STOPS.find(function(s) { return String(s.id) === String(id); });
+  if (s) return s;
+  // Also search customTripData stops (added via trip wizard or not in builtins)
+  var custom = appState && appState.customTripData && appState.customTripData.stops;
+  if (custom) return custom.find(function(s) { return String(s.id) === String(id); }) || null;
+  return null;
 }
 function getDay(n)   { return TRIP_DAYS.find(d => d.day === n); }
 function isSpringBreak(dateStr) {
@@ -7982,6 +7984,12 @@ function _getDriveDayTitle(d) {
   var destStop = getStop(d.stopId);
   var myPhase  = d.phase || '';
 
+  // Use the active days array (customTripData if present, else builtin)
+  var _activeDays = (appState && appState.customTripData &&
+                     appState.customTripData.days &&
+                     appState.customTripData.days.length)
+    ? appState.customTripData.days : TRIP_DAYS;
+
   /* Destination: always use the proper stop/phase name — never show a sleep
      location (truck stop, Walmart, etc.) as the destination in the title.
      Sleep location is where you're spending the night, not the destination. */
@@ -7990,7 +7998,7 @@ function _getDriveDayTitle(d) {
   // Find the immediate preceding non-removed day
   var prevDay = null;
   for (var pi = d.day - 2; pi >= 0; pi--) {
-    var pd = TRIP_DAYS[pi];
+    var pd = _activeDays[pi];
     if (!pd || removedIds[pd.stopId]) continue;
     prevDay = pd; break;
   }
@@ -8013,7 +8021,7 @@ function _getDriveDayTitle(d) {
     if (prevSleep && prevSleep !== destName) return prevSleep + ' \u2192 ' + destName;
     // Fallback: scan back to the first different-phase day for origin
     for (var bi = d.day - 2; bi >= 0; bi--) {
-      var prev = TRIP_DAYS[bi];
+      var prev = _activeDays[bi];
       if (!prev || removedIds[prev.stopId]) continue;
       if ((prev.phase || '') === myPhase) continue;
       var on = (prev.phase || '') || (getStop(prev.stopId) ? _sn(getStop(prev.stopId)) : '');
@@ -11761,7 +11769,7 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow, skipTo
   var _sbTotalH = _sbStops > 0 ? Math.round((_sbStops * _sbMins) / 60 * 10) / 10 : 0;
 
   /* Arrival estimate */
-  var _arrivalH = _departH + Math.floor(_departM / 60) + _driveH + _sbTotalH;
+  var _arrivalH = _departH + (_departM / 60) + _driveH + _sbTotalH;
   var _arrivalLow  = Math.floor(_arrivalH);
   var _arrivalHigh = _arrivalLow + 1;
   var _fmtH = function(h) { h = h % 24; var ampm = h >= 12 ? 'PM' : 'AM'; h = h % 12 || 12; return h + ' ' + ampm; };
@@ -12112,7 +12120,7 @@ function _renderVirtualDriveSep(prevStop, destStop, d, effectiveDate, displayNum
     return h + (m ? ':' + String(m).padStart(2,'0') : '') + ' ' + ampm;
   })();
 
-  var _arrivalH = _departH + Math.floor(_departM / 60) + _estHours;
+  var _arrivalH = _departH + (_departM / 60) + _estHours;
   var _fmtH = function(h) { h = h % 24; var ampm = h >= 12 ? 'PM' : 'AM'; h = h%12||12; return h + ' ' + ampm; };
   var _arrivalStr = '~' + _fmtH(Math.floor(_arrivalH)) + '\u2013' + _fmtH(Math.floor(_arrivalH) + 1);
 
