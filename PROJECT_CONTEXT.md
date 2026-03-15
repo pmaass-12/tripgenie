@@ -71,6 +71,24 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 33 — 2026-03-15
+
+**Fix: "Add event this day" events invisible in agenda after save**
+
+Root cause: `_saveAgendaEvent()` computes the effective calendar date for each `TRIP_DAYS` entry to map the prefilled `date` string back to a day number, but its calculation omitted `pauseDays` cumulative nights. `renderPlannerAgenda` includes pause nights in its effective-date math; `_saveAgendaEvent` did not. When any pause days exist, the two calculations produce different effective dates for the same day — `_tdForDate` came back null, `_aeKey` fell back to the raw date string (e.g. `"2026-03-15"`), and the event was saved to `appState.agendaItemOverrides["2026-03-15"]`. `renderPlannerAgenda` reads overrides by day number (e.g. `12`), never by date string for current days, so the event was permanently invisible.
+
+Fix: rewrote the lookup block in `_saveAgendaEvent` (the "Find the TRIP_DAYS entry by effective date" section) to mirror `renderPlannerAgenda`'s calculation exactly:
+- Renamed `_aeOff` → `_aePhOff` (phaseExtraDays offsets, first-occurrence per stop, unchanged logic)
+- Added `_aePauses`: `appState.pauseDays` filtered to entries with `startDate`+`endDate`, sorted ascending
+- Added `_aePI` / `_aeCN`: cumulative pause nights counter, advanced by a `while` loop as the sorted day walk progresses (same pattern as `renderPlannerAgenda`)
+- Effective date now: `td.date + (_aeCN + _aePhOff[stopId]) days`
+
+Everything after the lookup block (`_aeKey`, `_agSched` build, `appState.agendaItemOverrides[_aeKey]` assignment, date-string cleanup, `saveState`, `renderPlannerAgenda()` call) is completely unchanged. The `editId` (edit existing event) path is unaffected — it bypasses the `_toSchedule` block entirely.
+
+Verification: 17/17 static checks passed.
+
+---
+
 ### Session 32 — 2026-03-15
 
 **Fix: Three drive separator bugs — wrong titles, stale miles, wrong arrival times**
