@@ -11984,32 +11984,28 @@ function _saveDriveTime(dayNum) {
   if (!appState.dayOverrides) appState.dayOverrides = {};
   if (!appState.dayOverrides[dayNum]) appState.dayOverrides[dayNum] = {};
   appState.dayOverrides[dayNum].departTime = val;
-
-  /* Save confirmed drive time if user fetched one */
-  var _hEl = document.getElementById('dtm-confirmed-hours');
-  var _mEl = document.getElementById('dtm-confirmed-miles');
-  var _confirmedH = _hEl ? parseFloat(_hEl.value || '') : NaN;
-  var _confirmedM = _mEl ? parseInt(_mEl.value || '0', 10) : 0;
+  /* Save confirmed drive hours/miles if user used "Get Drive Time" */
+  var hEl = document.getElementById('dtm-confirmed-hours');
+  var mEl = document.getElementById('dtm-confirmed-miles');
+  var fromEl = document.getElementById('dtm-from-id');
+  var toEl   = document.getElementById('dtm-to-id');
+  var _confirmedH = hEl ? parseFloat(hEl.value || '0') : 0;
+  var _confirmedM = mEl ? parseInt(mEl.value  || '0', 10) : 0;
   if (_confirmedH > 0) {
     appState.dayOverrides[dayNum].driveHours = _confirmedH;
     if (_confirmedM > 0) appState.dayOverrides[dayNum].miles = _confirmedM;
-    /* Also write into osrmVirtualCache so virtual separators on same leg update */
-    var _fEl = document.getElementById('dtm-from-id');
-    var _tEl = document.getElementById('dtm-to-id');
-    var _dtmFromId = _fEl ? _fEl.value : '';
-    var _dtmToId   = _tEl ? _tEl.value : '';
-    if (_dtmFromId && _dtmToId) {
+    /* Also write into osrmVirtualCache so all separator types see it */
+    if (fromEl && toEl && fromEl.value && toEl.value) {
       if (!appState.osrmVirtualCache) appState.osrmVirtualCache = {};
-      appState.osrmVirtualCache[_dtmFromId + '_' + _dtmToId] =
+      appState.osrmVirtualCache[fromEl.value + '_' + toEl.value] =
         { miles: _confirmedM || 0, driveHours: _confirmedH };
     }
   }
-
   saveState(appState);
   var h = parseInt(val.split(':')[0],10), m = parseInt(val.split(':')[1]||'0',10);
   var ampm = h >= 12 ? 'PM' : 'AM'; h = h%12||12;
   var disp = h + (m ? ':'+String(m).padStart(2,'0') : '') + ' ' + ampm;
-  var timeMsg = (_confirmedH > 0) ? ' · ' + _confirmedH + 'h drive saved' : '';
+  var timeMsg = _confirmedH > 0 ? ' · ' + _confirmedH + 'h drive saved' : '';
   showToast('🕐 Departure set to ' + disp + timeMsg, 2200);
   document.getElementById('drive-time-modal').remove();
   renderSchedule();
@@ -12523,17 +12519,26 @@ function renderSchedule() {
                 var _vsep = _renderVirtualDriveSep(_prevStopForSep, stop, d, _effectiveDate, _dayDisplayNum[d.day] || d.day);
                 if (_vsep) html += _vsep;
               } else {
-                /* No coords — render basic pill without distance estimate */
-                var _vsTitle = _sn(_prevStopForSep) + ' \u2192 ' + _sn(stop);
-                var _vsLine  = 'flex:1;height:2px;background:repeating-linear-gradient(90deg,var(--orange) 0,var(--orange) 8px,transparent 8px,transparent 16px);min-width:8px;flex-shrink:1;';
-                html += '<div style="display:flex;align-items:center;gap:0;position:relative;margin:5px 0 5px;cursor:pointer;" onclick="openDriveTimeModal(' + d.day + ',\'' + _prevStopForSep.id + '\',\'' + stop.id + '\',' + _effectiveDate.getTime() + ')">'
-                  + '<div style="' + _vsLine + '"></div>'
-                  + '<div style="flex-shrink:0;background:var(--orange);color:#fff;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(232,129,58,.28);">'
-                  + '<i class="fa-solid fa-rv" style="flex-shrink:0;font-size:.85rem;"></i>'
-                  + '<span style="white-space:nowrap;">' + _vsTitle + '</span>'
-                  + '<span style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:100px;padding:2px 8px;font-size:.65rem;font-weight:700;white-space:nowrap;opacity:.85;">est.</span>'
-                  + '</div>'
-                  + '<div style="' + _vsLine + '"></div></div>';
+                /* No coords — use full separator if drive time was confirmed, otherwise basic pill */
+                var _ovNoCoords = appState.dayOverrides && appState.dayOverrides[d.day];
+                var _vcNoCoords = appState.osrmVirtualCache &&
+                  appState.osrmVirtualCache[String(_prevStopForSep.id) + '_' + String(d.stopId)];
+                if ((_ovNoCoords && _ovNoCoords.driveHours) || _vcNoCoords) {
+                  html += _renderDriveSepA(d, stop, _effectiveDate,
+                            _dayDisplayNum[d.day] || d.day, _isOverflow, false,
+                            _prevStopForSep.id);
+                } else {
+                  var _vsTitle = _sn(_prevStopForSep) + ' \u2192 ' + _sn(stop);
+                  var _vsLine = 'flex:1;height:2px;background:repeating-linear-gradient(90deg,var(--orange) 0,var(--orange) 8px,transparent 8px,transparent 16px);min-width:8px;flex-shrink:1;';
+                  html += '<div style="display:flex;align-items:center;gap:0;position:relative;margin:5px 0 5px;cursor:pointer;" onclick="openDriveTimeModal(' + d.day + ',\'' + _prevStopForSep.id + '\',\'' + stop.id + '\',' + _effectiveDate.getTime() + ')">'
+                    + '<div style="' + _vsLine + '"></div>'
+                    + '<div style="flex-shrink:0;background:var(--orange);color:#fff;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;display:flex;align-items:center;gap:8px;box-shadow:0 2px 8px rgba(232,129,58,.28);">'
+                    + '<i class="fa-solid fa-rv" style="flex-shrink:0;font-size:.85rem;"></i>'
+                    + '<span style="white-space:nowrap;">' + _vsTitle + '</span>'
+                    + '<span style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.3);border-radius:100px;padding:2px 8px;font-size:.65rem;font-weight:700;white-space:nowrap;opacity:.85;">&#9203; Set time</span>'
+                    + '</div>'
+                    + '<div style="' + _vsLine + '"></div></div>';
+                }
               }
             }
           }

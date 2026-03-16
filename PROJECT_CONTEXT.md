@@ -71,6 +71,26 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 39 — 2026-03-15
+
+**Feat: Wire up drive time save and no-coords separator routing**
+
+Three changes to complete the drive time lookup feature (UI was added in 6e86ff7, save/read sides were never wired up):
+
+**CHANGE 1 — `_saveDriveTime` cleanup** (lines 11980–12012):
+Replaced the old version that used `parseFloat(value || '') → NaN` (which worked but was error-prone) with a clean version using `parseFloat(value || '0') → 0`. Also renamed internal variables from `_hEl/_mEl/_fEl/_tEl` to `hEl/mEl/fromEl/toEl` and tightened the cache-write guard to `if (fromEl && toEl && fromEl.value && toEl.value)`. Functional behaviour identical: reads `dtm-confirmed-hours`/`dtm-confirmed-miles`/`dtm-from-id`/`dtm-to-id`, saves to `dayOverrides[dayNum].driveHours` and `osrmVirtualCache`, then `saveState()` + toast + `renderSchedule()`.
+
+**CHANGE 2 — `_renderDriveSepA` dayOverrides priority**: Already present from commit `6e86ff7` (lines 11742–11747). No change needed.
+
+**CHANGE 3 — no-coords else branch in `renderSchedule`** (line ~12521):
+Previously the "no lat/lng" branch always rendered a minimal pill with an "est." label. Now it first checks `appState.dayOverrides[d.day].driveHours` (`_ovNoCoords`) and `appState.osrmVirtualCache[fromId_toId]` (`_vcNoCoords`). If either is set (i.e. user previously confirmed a drive time), it calls `_renderDriveSepA` for the full rich orange separator with depart/arrive chips. If neither is set, it renders the basic pill with a "⏱ Set time" label (was "est.") to cue the user to tap and use Get Drive Time.
+
+**Verification**:
+1. `grep -n "dtm-confirmed-hours|_confirmedH|driveHours.*_ovDrive|_ovDrive.*driveHours" index.html` → hits in both `_saveDriveTime` and `_renderDriveSepA`
+2. `grep -n "_ovNoCoords|_vcNoCoords" index.html` → 3 hits at lines 12523–12526 in renderSchedule's else branch
+
+---
+
 ### Session 38 — 2026-03-15
 
 **Fix: Waypoint stops showed spurious "Check in & settle in" arrive card**
