@@ -71,6 +71,26 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 37 — 2026-03-15
+
+**Fix: Geocode missing stop coordinates after all stop-save paths**
+
+Stops added via the Schedule tab map UI, the new trip wizard (`_createTripFromSettings`), and the AI trip builder (`_tbConfirmTrip`) could end up with `lat: null` / `lat: 0` if the user typed a name without clicking the map, Nominatim failed, or the AI omitted coordinates. These stops showed no map pins and stale drive times.
+
+Fix: added `if (typeof _geocodeMissingStopCoords === 'function') { setTimeout(_geocodeMissingStopCoords, 1000); }` after `saveState(appState)` in three locations:
+
+1. **Schedule tab add-stop path** (line ~9304) — after `saveState(appState)` in the `_mapAddStopClose` save block, before `_refreshAll(true)`. New stops built from `_mapAddStopLatLng` (which can be null if user typed a name only).
+
+2. **`_createTripFromSettings`** (line ~7579) — after `saveState(appState)`, before the Supabase insert. Handles international/blank trip wizard stops where Nominatim geocoding may have failed.
+
+3. **`_tbConfirmTrip`** (line ~20588) — after `saveState(appState)`, before `closeTripBuilder()`. AI-generated trips from `_buildTripWithAI` frequently omit lat/lng.
+
+`_addNewStop` at line ~31762 was NOT modified — it already has its own inline Nominatim block (31868–31888) that patches the stop immediately. The startup call at line ~20880 was also not modified.
+
+No other functions were changed. The geocode call is guarded with `typeof` so it's safe if the function is not yet defined at call time.
+
+---
+
 ### Session 36 — 2026-03-15
 
 **Fix: Auto-create lodging expense when booking confirmation is saved**

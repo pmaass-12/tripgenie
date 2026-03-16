@@ -7576,6 +7576,7 @@ async function _createTripFromSettings(opts) {
   appState.aiCache = {};
   appState.adjustmentCache = {};
   saveState(appState);
+  if (typeof _geocodeMissingStopCoords === 'function') { setTimeout(_geocodeMissingStopCoords, 1000); }
 
   var client = _initSbClient();
   if (client && _sbUser) {
@@ -9300,6 +9301,7 @@ function _mapAddStopSave(name, afterIdx, nights) {
   };
   appState.activeTrip = 'custom';
   saveState(appState);
+  if (typeof _geocodeMissingStopCoords === 'function') { setTimeout(_geocodeMissingStopCoords, 1000); }
 
   if (typeof _audit === 'function') _audit('Stop added to trip', name + ' (' + nights + ' night' + (nights !== 1 ? 's' : '') + ')');
   _mapAddStopClose();
@@ -20583,6 +20585,7 @@ function _tbConfirmTrip() {
   appState.planned = {};
   appState.tripStarted = false;
   saveState(appState);
+  if (typeof _geocodeMissingStopCoords === 'function') { setTimeout(_geocodeMissingStopCoords, 1000); }
   closeTripBuilder();
   initApp();
   showToast('🗺️ ' + (_tbGenerated.tripName || 'New trip') + ' is loaded — let\'s go!', 3500);
