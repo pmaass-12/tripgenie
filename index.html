@@ -12608,7 +12608,7 @@ function renderSchedule() {
       /* ── "Arrival evening" bookend card ────────────────────────────────────
          Shows after the drive separator and phase header: destination stop arrival.
          Lets the traveller see "I'm arriving at Memphis this evening."           */
-      if (stop && !removedStopIds[d.stopId] && d.sleepType !== 'home') {
+      if (stop && !removedStopIds[d.stopId] && d.sleepType !== 'home' && !_waypointStopIds[d.stopId]) {
         var _arrBkg = isToday ? 'background:var(--orange-l);border-left:4px solid var(--orange);' : isBefore ? 'background:#fafaf8;opacity:.75;' : 'background:var(--card);';
         /* Look up booking for arrival night info */
         var _arrBkgs = (appState.bookingConfirmations && appState.bookingConfirmations[d.stopId]) || [];

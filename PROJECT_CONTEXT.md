@@ -71,6 +71,30 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 38 — 2026-03-15
+
+**Fix: Waypoint stops showed spurious "Check in & settle in" arrive card**
+
+Waypoint stops (drive-through, no overnight stay) were rendering an "Arrival evening" bookend card in the schedule (showing "🏕 Check in & settle in · ~6 PM") even though they have no overnight stay.
+
+**Root cause**: The arrive card guard at line 12611 was:
+```
+if (stop && !removedStopIds[d.stopId] && d.sleepType !== 'home')
+```
+Waypoint stops have `sleepType: 'waypoint'` (not `'home'`), so they passed all three conditions and got the arrive card. The waypoint suppression check (`if (_waypointStopIds[d.stopId]) continue;` at line 12653) only fires AFTER `continue; // skip the full card for drive days` at 12647 — drive days (including waypoints) never reach it.
+
+**Fix**: Added `&& !_waypointStopIds[d.stopId]` to the arrive card guard at line 12611. `_waypointStopIds` is pre-computed at lines 12345–12362 and is in scope. One character change; nothing else touched.
+
+**BUG 1 status**: The "Day N" label in the arrive card (background:#f0ece6) was already removed in commit `bf09ea7`. Confirmed: `#f0ece6` has zero occurrences in index.html. No action needed.
+
+**Verification**:
+1. `grep -n "sc-day-pill|Day.*_dispNum|_dispNum.*Day" index.html` → only the CSS `.sc-day-pill { display:none }` rule at line 2452; no HTML output lines
+2. `#f0ece6` and `_dispNum.*Day` not found in renderSchedule output
+3. Waypoint stops enter `if (d.driveDay)`, hit `&& !_waypointStopIds[d.stopId]` at line 12611 → condition false → arrive card skipped
+4. Non-waypoint drive-day arrivals: `_waypointStopIds[d.stopId]` is undefined/falsy → condition passes → arrive card renders normally
+
+---
+
 ### Session 37 — 2026-03-15
 
 **Fix: Geocode missing stop coordinates after all stop-save paths**
