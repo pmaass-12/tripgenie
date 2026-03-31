@@ -71,6 +71,32 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 40 — 2026-03-31
+
+**Feat: Inline editing of journal entries (text + location)**
+
+Journal entries were read-only after saving. Users had no way to correct typos or update the location without deleting and re-writing the entry.
+
+**Changes** (all inside `renderJournalEntries` + new functions after `deleteJournalEntry`):
+
+1. **Card ID** — added `id="je-{entry.id}"` to each entry card `<div>` so `editJournalEntry` can target and replace its contents in place.
+
+2. **✏️ Edit button** — added before the "Clean up" button in each entry's header button row, styled with `var(--blue-l)` to distinguish from AI/delete actions.
+
+3. **`editJournalEntry(id)`** — replaces the card's innerHTML in place with:
+   - Read-only header (Day badge, author badge, date, "Editing…" label)
+   - Textarea pre-filled with `entry.text` (blue border, auto-focused at end of text)
+   - Location `<select>` pre-selected to `entry.location`, options built from `TRIP_STOPS` minus removed stops
+   - Cancel + Save Changes buttons
+
+4. **`saveJournalEntryEdit(id)`** — reads the textarea and location select, mutates `_journalEntries[i].text` and `.location`, calls `saveJournal()` + `renderJournalEntries()` + toast.
+
+5. **`cancelJournalEntryEdit(id)`** — calls `renderJournalEntries()` to restore the card to its read-only state.
+
+Photos and voice memos are not editable from this UI (they remain visible in the read-only view only after save/cancel). Day and Author are not editable inline (as requested).
+
+---
+
 ### Session 39 — 2026-03-15
 
 **Feat: Wire up drive time save and no-coords separator routing**

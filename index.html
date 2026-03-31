@@ -14248,7 +14248,7 @@ function renderJournalEntries() {
     var stop  = getStop(entry.stopId);
     var stopLabel = entry.location || (stop ? (stop.emoji + ' ' + _sn(stop)) : '');
 
-    html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);">';
+    html += '<div id="je-' + entry.id + '" style="background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;box-shadow:var(--shadow);">';
 
     // ── Entry header ────────────────────────────────────────────
     html += '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px;">';
@@ -14263,6 +14263,7 @@ function renderJournalEntries() {
     html += '<div style="font-size:.8rem;color:var(--text-2);">' + stopLabel + '</div>';
     html += '</div>';
     html += '<div style="display:flex;gap:4px;">';
+    html += '<button onclick="editJournalEntry(' + entry.id + ')" title="Edit entry" style="background:var(--blue-l);border:1px solid #7aaac8;color:var(--blue);border-radius:100px;cursor:pointer;font-size:.68rem;font-weight:800;padding:4px 8px;font-family:var(--font);">&#9998; Edit</button>';
     html += '<button id="jclean-' + entry.id + '" onclick="cleanupJournalEntry(' + entry.id + ')" title="AI cleanup" style="background:#F3E8FF;border:1px solid #D0B4F0;color:#7B5EA7;border-radius:100px;cursor:pointer;font-size:.68rem;font-weight:800;padding:4px 8px;font-family:var(--font);">&#129302; Clean up</button>';
     html += '<button onclick="deleteJournalEntry(' + entry.id + ')" title="Delete entry" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:1rem;padding:4px 6px;"><i class="fa-solid fa-trash-can"></i></button>';
     html += '</div>';
@@ -14661,6 +14662,86 @@ function deleteJournalEntry(id) {
   saveJournal();
   renderJournal();
   showToast('Entry deleted', 1800);
+}
+
+/* ── JOURNAL INLINE EDIT ─────────────────────────────────────────── */
+function editJournalEntry(id) {
+  var entry = null;
+  for (var i = 0; i < _journalEntries.length; i++) {
+    if (_journalEntries[i].id === id) { entry = _journalEntries[i]; break; }
+  }
+  if (!entry) return;
+  var card = document.getElementById('je-' + id);
+  if (!card) return;
+
+  /* Build location options — same stops as compose form */
+  var _removedSet = (appState && appState.removedStops) || {};
+  var locOpts = '';
+  for (var si = 0; si < TRIP_STOPS.length; si++) {
+    var st = TRIP_STOPS[si];
+    if (_removedSet[st.id]) continue;
+    var locLabel = (st.emoji ? st.emoji + ' ' : '') + st.name + (st.state ? ', ' + st.state : '');
+    var sel = (entry.location === locLabel) ? ' selected' : '';
+    locOpts += '<option value="' + locLabel.replace(/"/g, '&quot;') + '"' + sel + '>' + locLabel + '</option>';
+  }
+
+  /* Author colour — matches renderJournalEntries */
+  var aName = entry.author || 'Family';
+  var aBg = aName === 'Paul' ? '#2C5F8A' : aName === 'Melissa' ? '#3A8A5C' : aName === 'Leila' ? '#E8813A' : aName === 'Luna' ? '#7B5EA7' : '#D4A017';
+  var safeText = (entry.text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+  card.innerHTML =
+    /* Header — read-only display */
+    '<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px;">'
+    + '<div><div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+    + '<span style="background:var(--gold);color:#fff;font-size:.7rem;font-weight:800;padding:3px 10px;border-radius:100px;">Day ' + entry.day + '</span>'
+    + '<span style="background:' + aBg + ';color:#fff;font-size:.7rem;font-weight:800;padding:3px 10px;border-radius:100px;">' + aName + '</span>'
+    + '<span style="font-weight:700;font-size:.875rem;">' + formatDate(entry.date) + '</span>'
+    + '</div></div>'
+    + '<span style="font-size:.72rem;color:var(--blue);font-weight:700;font-style:italic;">Editing…</span>'
+    + '</div>'
+    /* Text field */
+    + '<div style="margin-bottom:12px;">'
+    + '<label style="font-size:.72rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;">Note</label>'
+    + '<textarea id="je-edit-text-' + id + '" style="width:100%;min-height:120px;padding:10px 12px;border:1.5px solid var(--blue);border-radius:var(--radius-s);background:var(--bg);font-family:var(--font);font-size:.875rem;resize:vertical;line-height:1.55;color:var(--text);outline:none;box-sizing:border-box;">' + safeText + '</textarea>'
+    + '</div>'
+    /* Location field */
+    + '<div style="margin-bottom:16px;">'
+    + '<label style="font-size:.72rem;font-weight:700;color:var(--text-2);display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.04em;">Location</label>'
+    + '<select id="je-edit-loc-' + id + '" style="width:100%;padding:8px 10px;border:1.5px solid var(--blue);border-radius:var(--radius-s);background:var(--bg);font-family:var(--font);font-size:.82rem;">'
+    + locOpts + '</select>'
+    + '</div>'
+    /* Save / Cancel */
+    + '<div style="display:flex;gap:8px;">'
+    + '<button onclick="cancelJournalEntryEdit(' + id + ')" style="flex:1;padding:10px;background:var(--bg);border:1.5px solid var(--border);border-radius:var(--radius-s);font-family:var(--font);font-size:.85rem;font-weight:700;cursor:pointer;color:var(--text-2);">Cancel</button>'
+    + '<button onclick="saveJournalEntryEdit(' + id + ')" style="flex:2;padding:10px;background:var(--green);color:#fff;border:none;border-radius:var(--radius-s);font-family:var(--font);font-size:.88rem;font-weight:800;cursor:pointer;"><i class=\'fa-solid fa-floppy-disk\'></i> Save Changes</button>'
+    + '</div>';
+
+  /* Focus the textarea at the end of the text */
+  var ta = document.getElementById('je-edit-text-' + id);
+  if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+}
+
+function saveJournalEntryEdit(id) {
+  var textEl = document.getElementById('je-edit-text-' + id);
+  var locEl  = document.getElementById('je-edit-loc-' + id);
+  if (!textEl) return;
+  var newText = textEl.value.trim();
+  var newLoc  = locEl ? locEl.options[locEl.selectedIndex].value : null;
+  for (var i = 0; i < _journalEntries.length; i++) {
+    if (_journalEntries[i].id === id) {
+      _journalEntries[i].text = newText;
+      if (newLoc !== null) _journalEntries[i].location = newLoc;
+      break;
+    }
+  }
+  saveJournal();
+  renderJournalEntries();
+  showToast('\u270F\uFE0F Entry updated!', 2000);
+}
+
+function cancelJournalEntryEdit(id) {
+  renderJournalEntries();
 }
 
 /* ── PHOTO GALLERY ───────────────────────────────────────────────── */
