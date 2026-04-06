@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-03-15 (Session 31)
+2026-04-06 (Session 41)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -70,6 +70,40 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 41 — 2026-04-06
+
+**Fix: Wrong drive time modal title/data when tapping schedule drive separator**
+
+**Root cause**: `_renderDriveSepA` receives `fromStopId` as its 7th parameter, but was passing hardcoded `null` for `originStopId` in both its `openDriveTimeModal` onclick strings — the outer `.ds-wrap` click and the Depart chip button. When `openDriveTimeModal` received `null`, it scanned backward from `dayNum` to find the origin stop. On some trips (e.g. the Cleveland→Warwick day), the backward scan found the wrong stop (Devils Tower, which appeared on an adjacent day), causing the modal title to say "Devils Tower → Warwick, NY" and displaying cached drive data (30.5h / 1854mi) for that wrong pair.
+
+**Fix** (lines ~11799, 11841 in `_renderDriveSepA`):
+- Added `var _fromIdStr = fromStopId ? '\'' + fromStopId + '\'' : 'null';` before the depart chip HTML
+- Replaced both `null` literals in the two `openDriveTimeModal(...)` onclick strings with `_fromIdStr`
+- `openDriveTimeModal` now receives the correct origin stop ID directly and skips the backward scan entirely
+
+**Verification**:
+1. Both onclick strings now reference `_fromIdStr` — confirmed by reading lines 11800 and 11841
+2. `_renderDriveSepA` receives `fromStopId` (7th param) from every call site — checked via grep; all callers pass fromStopId
+3. `openDriveTimeModal` backward scan (`if (!originStopId)`) will now never fire for this path
+
+---
+
+**Fix: Remnant/orphaned stops appearing as map markers**
+
+**Root cause**: `buildMapMarkers()` iterated `_allStopsArr` (which is `TRIP_STOPS` plus custom stops) and only filtered out stops with no lat/lng, the home stop, and removed stops. Stops that exist in `TRIP_STOPS` but are no longer referenced by any active day (e.g. "Albert Lea, MN" that was dropped from the route) still got markers because the only filter was `appState.removedStops`.
+
+**Fix** (lines ~9759–9771 in `buildMapMarkers`):
+- Before the `_allStopsArr.forEach` marker loop, built `_activeStopIdSet` — a dict of all stop IDs referenced by `_activeDays` (the source of truth for what's actually on the trip)
+- Added `if (!_activeStopIdSet[stop.id]) return;` guard inside the forEach
+- Home stop ID added to `_activeStopIdSet` to ensure it's never accidentally filtered (though home is skipped by a prior guard anyway)
+
+**Verification**:
+1. `_activeDays` is built from `customTripData.days` (if set) or `TRIP_DAYS` — same source used by route drawing and schedule rendering
+2. Stops in `TRIP_STOPS` not referenced by any day entry will now be excluded from map markers
+3. Stops added via `waypointOverrides` are still in `_activeDays` and thus still get markers
+
+---
 
 ### Session 40 — 2026-03-31
 

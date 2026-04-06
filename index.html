@@ -9756,11 +9756,19 @@ function buildMapMarkers(mapObj) {
     .addTo(mapObj)
     .bindPopup('<strong>🏠 ' + _tripStartCity() + '</strong><br>' + (_roundTrip ? 'Start &amp; End' : 'Start'));
 
-  // Add all destination stops (built-in + custom wizard stops; skip removed and home)
+  // Build set of stop IDs actually referenced by active days — prevents orphaned stops from appearing
+  var _activeStopIdSet = {};
+  _activeDays.forEach(function(d) {
+    if (d.stopId && !_removedIds[d.stopId]) _activeStopIdSet[d.stopId] = true;
+  });
+  _activeStopIdSet[_homeStopId] = true; // always keep home
+
+  // Add all destination stops (built-in + custom wizard stops; skip removed, home, and unreferenced)
   _allStopsArr.forEach(function(stop) {
     if (!stop.lat || !stop.lng) return; // skip stops with no coordinates
     if (stop.id === _homeStopId) return;  // home already rendered above
     if (_removedIds[stop.id]) return;     // skip stops removed from the trip
+    if (!_activeStopIdSet[stop.id]) return; // skip stops not referenced by any active day
     var _isWpStop = _waypointIds[stop.id];
     var _stopNum = _stopNumMap[stop.id] || '·';
     const icon = _isWpStop
@@ -11796,7 +11804,8 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow, skipTo
 
   /* Depart chip */
   var _chipBg = _isBefore ? 'rgba(0,0,0,.15)' : 'rgba(255,255,255,.2)';
-  var _departChip = '<button onclick="event.stopPropagation();openDriveTimeModal(' + d.day + ',null,' + (stop ? '\'' + stop.id + '\'' : 'null') + ',' + effectiveDate.getTime() + ')" '
+  var _fromIdStr = fromStopId ? '\'' + fromStopId + '\'' : 'null';
+  var _departChip = '<button onclick="event.stopPropagation();openDriveTimeModal(' + d.day + ',' + _fromIdStr + ',' + (stop ? '\'' + stop.id + '\'' : 'null') + ',' + effectiveDate.getTime() + ')" '
     + 'title="Tap to set departure date & time" '
     + 'style="display:inline-flex;align-items:center;gap:4px;background:' + _chipBg + ';border:1px solid rgba(255,255,255,.35);'
     + 'color:#fff;border-radius:100px;padding:2px 9px;font-size:.68rem;font-weight:700;cursor:pointer;font-family:var(--font);flex-shrink:0;white-space:nowrap;">'
@@ -11837,7 +11846,7 @@ function _renderDriveSepA(d, stop, effectiveDate, displayNum, isOverflow, skipTo
 
   /* Responsive: dashed-line + pill on desktop; full-width stacked card on mobile */
   var _lineSt = 'background:repeating-linear-gradient(90deg,' + _clr + ' 0,' + _clr + ' 8px,transparent 8px,transparent 16px);';
-  return '<div class="ds-wrap" ' + (_isToday && !skipTodayId ? 'id="sch-today" ' : '') + 'onclick="openDriveTimeModal(' + d.day + ',null,' + (stop ? '\'' + stop.id + '\'' : 'null') + ',' + effectiveDate.getTime() + ')">'
+  return '<div class="ds-wrap" ' + (_isToday && !skipTodayId ? 'id="sch-today" ' : '') + 'onclick="openDriveTimeModal(' + d.day + ',' + _fromIdStr + ',' + (stop ? '\'' + stop.id + '\'' : 'null') + ',' + effectiveDate.getTime() + ')">'
     + '<div class="ds-line" style="' + _lineSt + '"></div>'
     + '<div class="ds-pill" style="background:' + _pillBg + ';color:#fff;box-shadow:' + _shadow + ';">'
     + '<div class="ds-r1"><i class="fa-solid fa-rv" style="font-size:.85rem;flex-shrink:0;"></i><span>' + _title + '</span></div>'
