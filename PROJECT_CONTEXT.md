@@ -71,7 +71,7 @@ tripgenie/
 
 ## Recent Changes
 
-### Session 41 — 2026-04-06
+### Session 41 — 2026-04-06 (continued)
 
 **Fix: Wrong drive time modal title/data when tapping schedule drive separator**
 
@@ -86,6 +86,17 @@ tripgenie/
 1. Both onclick strings now reference `_fromIdStr` — confirmed by reading lines 11800 and 11841
 2. `_renderDriveSepA` receives `fromStopId` (7th param) from every call site — checked via grep; all callers pass fromStopId
 3. `openDriveTimeModal` backward scan (`if (!originStopId)`) will now never fire for this path
+
+---
+
+**Fix: Dashboard home page showing wrong day and stop**
+
+**Root cause**: `renderDashboard()` used `tripDay()` (which counts elapsed calendar days from `CONFIG.startDate`) to look up the current day via `getDay(dayNum)` → `TRIP_DAYS.find(d => d.day === n)`. Custom trips with inserted extra days (phase splits, `phaseExtraDays`) have `.day` numbers that diverge from calendar-elapsed counts. So `tripDay()` returned e.g. 36 but the correct day for today's date was e.g. day 38, showing the wrong stop and title.
+
+**Fix** (lines ~8509–8531 in `renderDashboard`):
+- Replaced `tripDay()` + `getDay(dayNum)` with a date-string scan: iterates `TRIP_DAYS`, skips removed stops and home-return days, returns the entry whose `.date === _dashTodayStr` (exact match), or falls back to the most-recent elapsed schedule day if no exact match exists.
+- `dayNum` is now derived from `dayData.day` (the matched schedule entry's `.day` field) rather than from the calendar diff. Stats loops (miles completed, stops visited) automatically use the correct baseline.
+- Fallback `tripDay()` is still used if no `dayData` is found at all (pre-trip or empty schedule).
 
 ---
 

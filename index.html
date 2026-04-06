@@ -8506,19 +8506,28 @@ function renderDashboard() {
   var today    = new Date();
   var start    = new Date(CONFIG.startDate);
   var end      = new Date(CONFIG.endDate);
-  var dayNum   = tripDay();
   var _removedSids = appState.removedStops || {};
-  /* Find today's day — skip days whose stop has been removed */
-  var dayData  = (function() {
-    var raw = getDay(dayNum);
-    if (!raw || !_removedSids[raw.stopId]) return raw;
-    /* Today's scheduled stop was removed — advance to the next active day */
-    for (var _fd = 0; _fd < TRIP_DAYS.length; _fd++) {
-      var _c = TRIP_DAYS[_fd];
-      if (_c.day >= dayNum && !_removedSids[_c.stopId] && !(_c.sleepType === 'home' && !_c.driveDay)) return _c;
+  /* ── Find today's schedule entry by DATE string, not by calendar offset ───
+     tripDay() counts elapsed calendar days from CONFIG.startDate, but custom
+     trips can have extra days inserted (phase splits, phaseExtraDays, etc.)
+     so the .day number no longer equals elapsed days.  Searching by .date is
+     the reliable source of truth.                                            */
+  var _dashTodayStr = today.getFullYear() + '-'
+    + String(today.getMonth()+1).padStart(2,'0') + '-'
+    + String(today.getDate()).padStart(2,'0');
+  var dayData = (function() {
+    var _latest = null;
+    for (var _ddi = 0; _ddi < TRIP_DAYS.length; _ddi++) {
+      var _dde = TRIP_DAYS[_ddi];
+      if (!_dde.stopId || _removedSids[_dde.stopId]) continue;
+      if (_dde.sleepType === 'home' && !_dde.driveDay) continue;
+      if (_dde.date === _dashTodayStr) return _dde;          // exact date match
+      if (_dde.date < _dashTodayStr) _latest = _dde;         // track most-recent elapsed day
     }
-    return null;
+    return _latest;  // no exact match → show most recent elapsed schedule day
   })();
+  /* dayNum derived from the matched schedule entry so stats use the same baseline */
+  var dayNum = dayData ? dayData.day : tripDay();
   var curStop  = dayData ? getStop(dayData.stopId) : null;
   var sleep    = dayData ? getDaySleep(dayData.day) : '—';
   /* Compute visible day count first so daysLeft can use it */
