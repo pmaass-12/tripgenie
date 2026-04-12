@@ -9101,47 +9101,75 @@ function _fetchRoadRoute(waypoints, gen, callback) {
     callback(latlngs);
   }
 
+  /* ── Chunk helper: split waypoints into ≤25 overlapping segments ─── */
+  /* Mapbox AND OSRM both have a 25-waypoint limit per request.
+     We chunk the waypoints and stitch the geometry arrays together.     */
+  var MB_MAX = 25;
+  function _chunkRoute(wpts, urlFn, onDone) {
+    if (wpts.length <= MB_MAX) {
+      fetch(urlFn(wpts))
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          var coords = (d.routes && d.routes[0] && d.routes[0].geometry && d.routes[0].geometry.coordinates) || null;
+          onDone(coords);
+        })
+        .catch(function(){ onDone(null); });
+      return;
+    }
+    /* Split into overlapping chunks of MB_MAX, last point of chunk i = first of chunk i+1 */
+    var chunks = [], i = 0;
+    while (i < wpts.length - 1) {
+      chunks.push(wpts.slice(i, Math.min(i + MB_MAX, wpts.length)));
+      i += MB_MAX - 1;
+    }
+    var allCoords = [], pending = chunks.length, failed = false;
+    chunks.forEach(function(chunk, ci) {
+      fetch(urlFn(chunk))
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          var coords = (d.routes && d.routes[0] && d.routes[0].geometry && d.routes[0].geometry.coordinates) || null;
+          allCoords[ci] = coords;
+          if (--pending === 0) {
+            if (allCoords.some(function(c){ return !c; })) { onDone(null); return; }
+            /* Stitch: skip first point of each chunk after the first (it duplicates last of prev) */
+            var stitched = allCoords[0].slice();
+            for (var j = 1; j < allCoords.length; j++) stitched = stitched.concat(allCoords[j].slice(1));
+            onDone(stitched);
+          }
+        })
+        .catch(function(){ if (--pending === 0) onDone(null); });
+    });
+  }
+
   if (useMapbox) {
     /* ── Mapbox Directions API ───────────────────────────────────────── */
-    /* Mapbox expects lng,lat (opposite of Leaflet) */
-    var mbCoords = waypoints.map(function(ll){ return ll[1]+','+ll[0]; }).join(';');
     var excludes = ['ferry'];
-    /* If RV is tall / driver wants to avoid low bridges, exclude motorways.
-       Note: this is a heuristic — true bridge-height data requires a paid
-       specialised API (Trimble, HERE Truck). Motorway exclusion avoids many
-       but not all restricted roads. */
-    if (rp.avoidParkways) excludes.push('motorway');
-    if (rp.avoidTolls)    excludes.push('toll');
-    var mbUrl = 'https://api.mapbox.com/directions/v5/mapbox/driving/'
-      + mbCoords
-      + '?access_token=' + mbToken
-      + '&geometries=geojson&overview=full'
-      + '&exclude=' + excludes.join(',');
-    fetch(mbUrl)
-      .then(function(r){ return r.json(); })
-      .then(function(data){
-        if (gen !== _mapBuildGen) return;
-        if (data.routes && data.routes[0] && data.routes[0].geometry)
-          _handleGeoJSON(data.routes[0].geometry.coordinates);
-        else callback(null);
-      })
-      .catch(function(){ if (gen === _mapBuildGen) callback(null); });
+    /* Only exclude motorway when explicitly set — motorway exclusion makes
+       most cross-country US routes impossible (interstates are required). */
+    if (rp.avoidTolls) excludes.push('toll');
+    var _mbExclude = '&exclude=' + excludes.join(',');
+    var _mbUrlFn = function(wpts) {
+      var coords = wpts.map(function(ll){ return ll[1]+','+ll[0]; }).join(';');
+      return 'https://api.mapbox.com/directions/v5/mapbox/driving/' + coords
+        + '?access_token=' + mbToken + '&geometries=geojson&overview=full' + _mbExclude;
+    };
+    _chunkRoute(waypoints, _mbUrlFn, function(coords) {
+      if (gen !== _mapBuildGen) return;
+      if (coords) _handleGeoJSON(coords);
+      else callback(null);  /* fall through to OSRM below on next render */
+    });
   } else {
     /* ── OSRM public API (free, no key) ─────────────────────────────── */
-    /* OSRM expects lng,lat */
-    var osrmCoords = waypoints.map(function(ll){ return ll[1]+','+ll[0]; }).join(';');
-    var osrmUrl = 'https://router.project-osrm.org/route/v1/driving/'
-      + osrmCoords
-      + '?overview=full&geometries=geojson&annotations=false';
-    fetch(osrmUrl)
-      .then(function(r){ return r.json(); })
-      .then(function(data){
-        if (gen !== _mapBuildGen) return;
-        if (data.routes && data.routes[0] && data.routes[0].geometry)
-          _handleGeoJSON(data.routes[0].geometry.coordinates);
-        else callback(null);
-      })
-      .catch(function(){ if (gen === _mapBuildGen) callback(null); });
+    var _osrmUrlFn = function(wpts) {
+      var coords = wpts.map(function(ll){ return ll[1]+','+ll[0]; }).join(';');
+      return 'https://router.project-osrm.org/route/v1/driving/' + coords
+        + '?overview=full&geometries=geojson&annotations=false';
+    };
+    _chunkRoute(waypoints, _osrmUrlFn, function(coords) {
+      if (gen !== _mapBuildGen) return;
+      if (coords) _handleGeoJSON(coords);
+      else callback(null);
+    });
   }
 }
 
@@ -15328,18 +15356,18 @@ function renderGalleryTab() {
 
   el.innerHTML = html;
 
-  /* ── 8. Attach lightbox handlers ────────────────────────────────── */
-  el.querySelectorAll('[data-media-src]').forEach(function(tile) {
+  /* ── 8. Attach lightbox handlers (with prev/next navigation) ────── */
+  var _allTiles = Array.prototype.slice.call(el.querySelectorAll('[data-media-src]'));
+  _allTiles.forEach(function(tile, idx) {
     tile.addEventListener('click', function() {
-      /* blobUrl (Netlify Blob full-res) takes precedence over IDB for cross-device lightbox.
-         photoId is still passed as fallback so IDB still works on the originating device. */
-      var blobUrl  = tile.dataset.blobUrl  || null;
-      var photoId  = tile.dataset.photoId  || null;
+      var blobUrl = tile.dataset.blobUrl || null;
+      var photoId = tile.dataset.photoId || null;
       _openMediaLightbox(
         blobUrl || tile.dataset.mediaSrc,
         tile.dataset.mediaType,
         tile.dataset.mediaCap,
-        blobUrl ? null : photoId   /* skip IDB lookup when we already have the blob URL */
+        blobUrl ? null : photoId,
+        { tiles: _allTiles, idx: idx }   /* nav context for ← → swipe */
       );
     });
   });
@@ -15716,66 +15744,152 @@ function openGalleryPhoto(idx) {
   _openMediaLightbox(p.src || p.dataUrl, 'image', p.caption || '');
 }
 
-function _openMediaLightbox(src, type, caption, photoId) {
-  /* If we have a photoId, try to load the full-resolution image from IndexedDB.
-     Fall back to src (thumbnail) if IDB is unavailable or photo not found.   */
+/* _openMediaLightbox — opens fullscreen viewer with prev/next navigation.
+   navContext: optional { tiles: NodeList/Array of [data-media-src] elements, idx: currentIndex }
+   If omitted, single-photo mode (no arrows).                                               */
+function _openMediaLightbox(src, type, caption, photoId, navContext) {
   if (photoId && type !== 'video') {
     _idbGet(photoId, function(fullSrc) {
-      _doOpenMediaLightbox(fullSrc || src, type, caption);
+      _doOpenMediaLightbox(fullSrc || src, type, caption, navContext);
     });
     return;
   }
-  _doOpenMediaLightbox(src, type, caption);
+  _doOpenMediaLightbox(src, type, caption, navContext);
 }
-function _doOpenMediaLightbox(src, type, caption) {
-  // Remove existing lightbox
+
+function _doOpenMediaLightbox(src, type, caption, navContext) {
   var old = document.getElementById('_media-lightbox');
   if (old) old.remove();
 
+  /* ── nav state ── */
+  var _tiles   = (navContext && navContext.tiles) ? Array.prototype.slice.call(navContext.tiles) : [];
+  var _idx     = (navContext && navContext.idx != null) ? navContext.idx : 0;
+  var _hasNav  = _tiles.length > 1;
+
   var overlay = document.createElement('div');
-  overlay.id = '_media-lightbox';
-  /* Full-screen dark overlay — click outside image to close */
+  overlay.id  = '_media-lightbox';
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.94);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 16px 32px;box-sizing:border-box;overflow:hidden;';
 
-  var mediaEl;
-  if (type === 'video') {
-    mediaEl = document.createElement('video');
-    mediaEl.src = src;
-    mediaEl.controls = true;
-    mediaEl.autoplay = true;
-    /* Fill as much of the viewport as possible while preserving aspect ratio */
-    mediaEl.style.cssText = 'width:min(96vw,1400px);max-height:85vh;object-fit:contain;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6);flex-shrink:1;';
-  } else {
-    mediaEl = document.createElement('img');
-    mediaEl.src = src;
-    /* Fill the viewport — width is the dominant axis so portrait photos also fill well.
-       object-fit:contain ensures the full image is visible without cropping.            */
-    mediaEl.style.cssText = 'width:min(96vw,1400px);max-height:85vh;object-fit:contain;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6);flex-shrink:1;display:block;';
-    /* Show a faint loading shimmer until image loads */
-    mediaEl.style.background = '#222';
-    mediaEl.onload = function() { mediaEl.style.background = ''; };
-  }
+  /* media wrapper (transitions on navigate) */
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'position:relative;display:flex;align-items:center;justify-content:center;flex:1;width:100%;max-width:min(96vw,1400px);';
 
-  /* Close button — top-right */
-  var closeBtn = document.createElement('button');
-  closeBtn.textContent = '✕';
-  closeBtn.style.cssText = 'position:absolute;top:14px;right:16px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:1.3rem;width:42px;height:42px;border-radius:50%;cursor:pointer;line-height:1;backdrop-filter:blur(4px);flex-shrink:0;';
-  closeBtn.onclick = function() { overlay.remove(); };
+  var mediaEl;
+  function _buildMedia(s, t) {
+    if (t === 'video') {
+      var v = document.createElement('video');
+      v.src = s; v.controls = true; v.autoplay = true;
+      v.style.cssText = 'width:100%;max-height:82vh;object-fit:contain;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6);';
+      return v;
+    }
+    var img = document.createElement('img');
+    img.src = s;
+    img.style.cssText = 'width:100%;max-height:82vh;object-fit:contain;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6);display:block;background:#1a1a1a;';
+    img.onload = function() { img.style.background = ''; };
+    return img;
+  }
+  mediaEl = _buildMedia(src, type);
+  wrap.appendChild(mediaEl);
 
   /* Caption */
   var capEl = document.createElement('div');
+  capEl.style.cssText = 'color:rgba(255,255,255,.7);font-size:.8rem;margin-top:10px;text-align:center;max-width:min(96vw,800px);line-height:1.4;flex-shrink:0;min-height:1.4em;';
   capEl.textContent = caption || '';
-  capEl.style.cssText = 'color:rgba(255,255,255,.7);font-size:.8rem;margin-top:12px;text-align:center;max-width:min(96vw,800px);line-height:1.4;flex-shrink:0;';
 
+  /* Counter  e.g. "3 / 12" */
+  var counterEl = document.createElement('div');
+  counterEl.style.cssText = 'position:absolute;top:16px;left:50%;transform:translateX(-50%);color:rgba(255,255,255,.6);font-size:.78rem;font-weight:600;pointer-events:none;';
+  counterEl.textContent = _hasNav ? (_idx + 1) + ' / ' + _tiles.length : '';
+
+  /* Close button */
+  var closeBtn = document.createElement('button');
+  closeBtn.textContent = '✕';
+  closeBtn.style.cssText = 'position:absolute;top:14px;right:16px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:1.3rem;width:42px;height:42px;border-radius:50%;cursor:pointer;line-height:1;backdrop-filter:blur(4px);';
+  closeBtn.onclick = function() { overlay.remove(); };
+
+  /* Arrow buttons */
+  function _arrowBtn(label, side) {
+    var btn = document.createElement('button');
+    btn.innerHTML = label;
+    btn.style.cssText = 'position:absolute;top:50%;transform:translateY(-50%);' + side + ':10px;'
+      + 'background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.3);color:#fff;'
+      + 'font-size:1.4rem;width:44px;height:44px;border-radius:50%;cursor:pointer;'
+      + 'backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;'
+      + 'z-index:2;transition:background .15s;';
+    btn.onmouseover = function() { btn.style.background='rgba(255,255,255,.35)'; };
+    btn.onmouseout  = function() { btn.style.background='rgba(255,255,255,.2)'; };
+    return btn;
+  }
+
+  var prevBtn, nextBtn;
+  if (_hasNav) {
+    prevBtn = _arrowBtn('‹', 'left');
+    nextBtn = _arrowBtn('›', 'right');
+    wrap.appendChild(prevBtn);
+    wrap.appendChild(nextBtn);
+  }
+
+  /* Navigate to index */
+  function _navTo(newIdx) {
+    if (!_tiles.length) return;
+    newIdx = (newIdx + _tiles.length) % _tiles.length;
+    _idx   = newIdx;
+    var tile    = _tiles[_idx];
+    var newSrc  = tile.dataset.blobUrl || tile.dataset.mediaSrc || '';
+    var newType = tile.dataset.mediaType || 'image';
+    var newCap  = tile.dataset.mediaCap  || '';
+    var newPid  = tile.dataset.photoId   || null;
+    capEl.textContent = newCap;
+    counterEl.textContent = (_idx + 1) + ' / ' + _tiles.length;
+
+    /* Slide animation */
+    var dir = (newIdx > _idx - 1) ? 1 : -1; /* simplified — just fade */
+    mediaEl.style.opacity = '0';
+    mediaEl.style.transition = 'opacity .15s';
+    setTimeout(function() {
+      if (newPid && newType !== 'video') {
+        _idbGet(newPid, function(fullSrc) {
+          mediaEl.src = fullSrc || newSrc;
+          mediaEl.style.opacity = '1';
+        });
+      } else {
+        mediaEl.src = newSrc;
+        mediaEl.style.opacity = '1';
+      }
+    }, 120);
+  }
+
+  if (_hasNav) {
+    prevBtn.onclick = function(e) { e.stopPropagation(); _navTo(_idx - 1); };
+    nextBtn.onclick = function(e) { e.stopPropagation(); _navTo(_idx + 1); };
+  }
+
+  overlay.appendChild(counterEl);
   overlay.appendChild(closeBtn);
-  overlay.appendChild(mediaEl);
-  if (caption) overlay.appendChild(capEl);
+  overlay.appendChild(wrap);
+  overlay.appendChild(capEl);
   overlay.addEventListener('click', function(e) { if (e.target === overlay) overlay.remove(); });
 
-  /* Keyboard: Escape to close */
-  var _kbClose = function(e) { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', _kbClose); } };
-  document.addEventListener('keydown', _kbClose);
-  overlay.addEventListener('remove', function() { document.removeEventListener('keydown', _kbClose); });
+  /* Keyboard: Escape, ←, → */
+  var _kb = function(e) {
+    if (e.key === 'Escape')      { overlay.remove(); document.removeEventListener('keydown', _kb); }
+    else if (e.key === 'ArrowLeft'  && _hasNav) { e.preventDefault(); _navTo(_idx - 1); }
+    else if (e.key === 'ArrowRight' && _hasNav) { e.preventDefault(); _navTo(_idx + 1); }
+  };
+  document.addEventListener('keydown', _kb);
+  overlay.addEventListener('remove', function() { document.removeEventListener('keydown', _kb); });
+
+  /* Touch swipe */
+  if (_hasNav) {
+    var _tx0 = null;
+    overlay.addEventListener('touchstart', function(e) { _tx0 = e.touches[0].clientX; }, { passive: true });
+    overlay.addEventListener('touchend',   function(e) {
+      if (_tx0 === null) return;
+      var dx = e.changedTouches[0].clientX - _tx0;
+      _tx0 = null;
+      if (Math.abs(dx) > 40) _navTo(_idx + (dx < 0 ? 1 : -1));
+    });
+  }
 
   document.body.appendChild(overlay);
 }
