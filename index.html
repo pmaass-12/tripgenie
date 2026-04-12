@@ -6981,51 +6981,60 @@ function _escHtml(s) {
 }
 
 async function _openTrip(tripId) {
-  var client = _initSbClient();
-  if (!client) return;
-  var { data, error } = await client.from('trips').select('trip_data,name')
-    .eq('id', tripId)
-    .eq('user_id', _sbUser.id)   // prevent loading another user's trip via guessed UUID
-    .single();
-  if (error || !data) { alert('Could not load trip: ' + (error && error.message)); return; }
-  _currentTripId = tripId;
-  var loaded = data.trip_data || {};
-  Object.keys(loaded).forEach(function(k) { appState[k] = loaded[k]; });
-  if (loaded.customTripData) {
-    appState.customTripData = loaded.customTripData;
-    appState.activeTrip = 'custom';
-  }
-  /* Strip all base64 image data from photoPool before writing to localStorage.
-     base64 thumbs + dataUrls can easily exceed the ~5MB quota and crash the open.
-     blobThumbUrl / blobUrl (Netlify CDN URLs) are kept — they're just short strings.
-     Any entries that lose their thumb here will be re-uploaded to Netlify Blobs
-     automatically the next time the gallery is opened (_migrateStrandedPhotosToBlob). */
-  if (Array.isArray(appState.photoPool)) {
-    appState.photoPool = appState.photoPool.map(function(p) {
-      if (!p) return p;
-      var clean = {};
-      Object.keys(p).forEach(function(k) { clean[k] = p[k]; });
-      if (clean.thumb   && clean.thumb.indexOf('data:')   === 0) clean.thumb   = null;
-      if (clean.dataUrl && clean.dataUrl.indexOf('data:') === 0) clean.dataUrl = null;
-      return clean;
-    });
-  }
   try {
-    localStorage.setItem('rv_state', JSON.stringify(appState));
-  } catch(e) {
-    /* If still too large after stripping base64, store without photoPool as fallback */
-    var _slim = {};
-    Object.keys(appState).forEach(function(k) { _slim[k] = appState[k]; });
-    _slim.photoPool = (appState.photoPool || []).map(function(p) {
-      if (!p) return p;
-      return { id: p.id, fileName: p.fileName, timestamp: p.timestamp, stopId: p.stopId,
-               caption: p.caption, blobThumbUrl: p.blobThumbUrl, blobUrl: p.blobUrl,
-               lat: p.lat, lng: p.lng, type: p.type };
-    });
-    try { localStorage.setItem('rv_state', JSON.stringify(_slim)); } catch(e2) { /* give up */ }
+    var client = _initSbClient();
+    if (!client) { alert('Not signed in — please reload and log in again.'); return; }
+    if (!_sbUser) { alert('Login not complete yet — please wait a moment and try again.'); return; }
+    var _openBtn = document.querySelector('[onclick*="_openTrip(\'' + tripId + '\')"]');
+    if (_openBtn) { _openBtn.textContent = 'Loading…'; _openBtn.disabled = true; }
+    var { data, error } = await client.from('trips').select('trip_data,name')
+      .eq('id', tripId)
+      .eq('user_id', _sbUser.id)
+      .single();
+    if (_openBtn) { _openBtn.textContent = 'Open Trip'; _openBtn.disabled = false; }
+    if (error || !data) { alert('Could not load trip: ' + (error && error.message)); return; }
+    _currentTripId = tripId;
+    var loaded = data.trip_data || {};
+    Object.keys(loaded).forEach(function(k) { appState[k] = loaded[k]; });
+    if (loaded.customTripData) {
+      appState.customTripData = loaded.customTripData;
+      appState.activeTrip = 'custom';
+    }
+    /* Strip all base64 image data from photoPool before writing to localStorage.
+       base64 thumbs + dataUrls can easily exceed the ~5MB quota and crash the open.
+       blobThumbUrl / blobUrl (Netlify CDN URLs) are kept — they're just short strings.
+       Any entries that lose their thumb here will be re-uploaded to Netlify Blobs
+       automatically the next time the gallery is opened (_migrateStrandedPhotosToBlob). */
+    if (Array.isArray(appState.photoPool)) {
+      appState.photoPool = appState.photoPool.map(function(p) {
+        if (!p) return p;
+        var clean = {};
+        Object.keys(p).forEach(function(k) { clean[k] = p[k]; });
+        if (clean.thumb   && clean.thumb.indexOf('data:')   === 0) clean.thumb   = null;
+        if (clean.dataUrl && clean.dataUrl.indexOf('data:') === 0) clean.dataUrl = null;
+        return clean;
+      });
+    }
+    try {
+      localStorage.setItem('rv_state', JSON.stringify(appState));
+    } catch(e) {
+      /* If still too large after stripping base64, store metadata-only photoPool as fallback */
+      var _slim = {};
+      Object.keys(appState).forEach(function(k) { _slim[k] = appState[k]; });
+      _slim.photoPool = (appState.photoPool || []).map(function(p) {
+        if (!p) return p;
+        return { id: p.id, fileName: p.fileName, timestamp: p.timestamp, stopId: p.stopId,
+                 caption: p.caption, blobThumbUrl: p.blobThumbUrl, blobUrl: p.blobUrl,
+                 lat: p.lat, lng: p.lng, type: p.type };
+      });
+      try { localStorage.setItem('rv_state', JSON.stringify(_slim)); } catch(e2) { /* give up — still open the trip */ }
+    }
+    document.getElementById('my-trips-overlay').style.display = 'none';
+    _doLegacyInitAfterSbAuth();
+  } catch(err) {
+    console.error('_openTrip failed:', err);
+    alert('Failed to open trip: ' + (err && err.message || String(err)) + '\n\nPlease reload the page and try again.');
   }
-  document.getElementById('my-trips-overlay').style.display = 'none';
-  _doLegacyInitAfterSbAuth();
 }
 
 async function _deleteTrip(tripId, btn) {
