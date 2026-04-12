@@ -6325,10 +6325,29 @@ function saveState(state) {
   try {
     localStorage.setItem('rv_state', JSON.stringify(state));
   } catch(e) {
-    // QuotaExceededError — storage full (most likely too many/large photos)
+    // QuotaExceededError — strip base64 from photoPool and retry before giving up
     if (e && (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED' || e.code === 22)) {
-      showToast('⚠️ Storage full — photos saved to session only. Try adding fewer photos at once or remove old ones.', 5000);
-      return; // skip cloud sync too — state wasn't persisted locally
+      var _stripped = false;
+      if (Array.isArray(state.photoPool)) {
+        state.photoPool = state.photoPool.map(function(p) {
+          if (!p) return p;
+          var hadData = (p.thumb && p.thumb.indexOf('data:') === 0) ||
+                        (p.dataUrl && p.dataUrl.indexOf('data:') === 0);
+          if (hadData) {
+            _stripped = true;
+            var c = {}; Object.keys(p).forEach(function(k) { c[k] = p[k]; });
+            if (c.thumb   && c.thumb.indexOf('data:')   === 0) c.thumb   = null;
+            if (c.dataUrl && c.dataUrl.indexOf('data:') === 0) c.dataUrl = null;
+            return c;
+          }
+          return p;
+        });
+      }
+      try {
+        localStorage.setItem('rv_state', JSON.stringify(state));
+        return; // retry succeeded — continue to cloud sync below
+      } catch(e2) { /* still too large — skip localStorage, still sync to cloud */ }
+      return; // skip cloud sync too since localStorage failed
     }
     throw e; // re-throw unexpected errors
   }
@@ -6976,7 +6995,35 @@ async function _openTrip(tripId) {
     appState.customTripData = loaded.customTripData;
     appState.activeTrip = 'custom';
   }
-  localStorage.setItem('rv_state', JSON.stringify(appState));
+  /* Strip all base64 image data from photoPool before writing to localStorage.
+     base64 thumbs + dataUrls can easily exceed the ~5MB quota and crash the open.
+     blobThumbUrl / blobUrl (Netlify CDN URLs) are kept — they're just short strings.
+     Any entries that lose their thumb here will be re-uploaded to Netlify Blobs
+     automatically the next time the gallery is opened (_migrateStrandedPhotosToBlob). */
+  if (Array.isArray(appState.photoPool)) {
+    appState.photoPool = appState.photoPool.map(function(p) {
+      if (!p) return p;
+      var clean = {};
+      Object.keys(p).forEach(function(k) { clean[k] = p[k]; });
+      if (clean.thumb   && clean.thumb.indexOf('data:')   === 0) clean.thumb   = null;
+      if (clean.dataUrl && clean.dataUrl.indexOf('data:') === 0) clean.dataUrl = null;
+      return clean;
+    });
+  }
+  try {
+    localStorage.setItem('rv_state', JSON.stringify(appState));
+  } catch(e) {
+    /* If still too large after stripping base64, store without photoPool as fallback */
+    var _slim = {};
+    Object.keys(appState).forEach(function(k) { _slim[k] = appState[k]; });
+    _slim.photoPool = (appState.photoPool || []).map(function(p) {
+      if (!p) return p;
+      return { id: p.id, fileName: p.fileName, timestamp: p.timestamp, stopId: p.stopId,
+               caption: p.caption, blobThumbUrl: p.blobThumbUrl, blobUrl: p.blobUrl,
+               lat: p.lat, lng: p.lng, type: p.type };
+    });
+    try { localStorage.setItem('rv_state', JSON.stringify(_slim)); } catch(e2) { /* give up */ }
+  }
   document.getElementById('my-trips-overlay').style.display = 'none';
   _doLegacyInitAfterSbAuth();
 }
