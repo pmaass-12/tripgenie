@@ -15169,44 +15169,64 @@ function _migrateStrandedPhotosToBlob() {
 
   stranded.forEach(function(poolEntry) {
     _idbGet(poolEntry.id, function(fullDataUrl) {
-      if (!fullDataUrl) {
-        /* Not in IDB on this device — can't migrate here */
+      if (!fullDataUrl && !poolEntry.blobUrl) {
+        /* Not in IDB and no cloud full-res — can't recover */
         _saveIfDone();
         return;
       }
-      _compressPhotoThumb(fullDataUrl, function(thumbDataUrl) {
-        var _meta = {
-          fileName:  poolEntry.fileName  || '',
-          timestamp: poolEntry.timestamp || '',
-          stopId:    poolEntry.stopId != null ? String(poolEntry.stopId) : '',
-        };
-        _netlifyBlobUpload(poolEntry.id, fullDataUrl, thumbDataUrl, _meta, function(bThumbUrl, bFullUrl) {
-          if (bThumbUrl) poolEntry.blobThumbUrl = bThumbUrl;
-          if (bFullUrl)  poolEntry.blobUrl      = bFullUrl;
-          /* Drop base64 data from localStorage now that blob URLs exist */
-          poolEntry.thumb   = null;
-          poolEntry.dataUrl = null;
-          _saveIfDone();
 
-          /* Swap the placeholder tile in-place — no full re-render needed */
-          var tile = document.querySelector('[data-photo-id="' + poolEntry.id + '"]');
-          if (tile && bThumbUrl) {
-            var placeholder = tile.querySelector('div[style*="Syncing"]') || tile.querySelector('div[style*="linear-gradient"]');
-            if (placeholder) {
-              var img = document.createElement('img');
-              img.src = bThumbUrl;
-              img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
-              img.loading = 'lazy';
-              tile.replaceChild(img, placeholder);
-            } else {
-              var existImg = tile.querySelector('img');
-              if (existImg) existImg.src = bThumbUrl;
+      function _doThumbUpload(dataUrlOrBlobUrl) {
+        _compressPhotoThumb(dataUrlOrBlobUrl, function(thumbDataUrl) {
+          var _meta = {
+            fileName:  poolEntry.fileName  || '',
+            timestamp: poolEntry.timestamp || '',
+            stopId:    poolEntry.stopId != null ? String(poolEntry.stopId) : '',
+          };
+          /* Only upload thumb — skip re-uploading full-res if blobUrl already exists */
+          var fullForUpload = poolEntry.blobUrl ? null : dataUrlOrBlobUrl;
+          _netlifyBlobUpload(poolEntry.id, fullForUpload, thumbDataUrl, _meta, function(bThumbUrl, bFullUrl) {
+            if (bThumbUrl) poolEntry.blobThumbUrl = bThumbUrl;
+            if (bFullUrl)  poolEntry.blobUrl      = bFullUrl;
+            poolEntry.thumb   = null;
+            poolEntry.dataUrl = null;
+            _saveIfDone();
+
+            /* Swap the placeholder tile in-place — no full re-render needed */
+            var tile = document.querySelector('[data-photo-id="' + poolEntry.id + '"]');
+            if (tile && bThumbUrl) {
+              var placeholder = tile.querySelector('div[style*="Syncing"]') || tile.querySelector('div[style*="linear-gradient"]');
+              if (placeholder) {
+                var img = document.createElement('img');
+                img.src = bThumbUrl;
+                img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+                img.loading = 'lazy';
+                tile.replaceChild(img, placeholder);
+              } else {
+                var existImg = tile.querySelector('img');
+                if (existImg) existImg.src = bThumbUrl;
+              }
+              tile.dataset.mediaSrc = bThumbUrl;
+              if (bFullUrl) tile.dataset.blobUrl = bFullUrl;
             }
-            tile.dataset.mediaSrc = bThumbUrl;
-            if (bFullUrl) tile.dataset.blobUrl = bFullUrl;
-          }
+          });
         });
-      });
+      }
+
+      if (fullDataUrl) {
+        /* Full-res in IDB on this device — use directly */
+        _doThumbUpload(fullDataUrl);
+      } else {
+        /* Not in local IDB — fetch full-res from Netlify Blob CDN and thumbnail it */
+        fetch(poolEntry.blobUrl)
+          .then(function(r) { return r.blob(); })
+          .then(function(blob) {
+            var reader = new FileReader();
+            reader.onload = function(e) { _doThumbUpload(e.target.result); };
+            reader.onerror = function() { _saveIfDone(); };
+            reader.readAsDataURL(blob);
+          })
+          .catch(function() { _saveIfDone(); });
+      }
     });
   });
 }
