@@ -9141,6 +9141,20 @@ function _fetchRoadRoute(waypoints, gen, callback) {
     });
   }
 
+  /* ── OSRM public API (free, no key) — used as primary or fallback ── */
+  var _osrmUrlFn = function(wpts) {
+    var coords = wpts.map(function(ll){ return ll[1]+','+ll[0]; }).join(';');
+    return 'https://router.project-osrm.org/route/v1/driving/' + coords
+      + '?overview=full&geometries=geojson&annotations=false';
+  };
+  function _tryOSRM() {
+    _chunkRoute(waypoints, _osrmUrlFn, function(coords) {
+      if (gen !== _mapBuildGen) return;
+      if (coords) _handleGeoJSON(coords);
+      else callback(null);
+    });
+  }
+
   if (useMapbox) {
     /* ── Mapbox Directions API ───────────────────────────────────────── */
     var excludes = ['ferry'];
@@ -9155,21 +9169,13 @@ function _fetchRoadRoute(waypoints, gen, callback) {
     };
     _chunkRoute(waypoints, _mbUrlFn, function(coords) {
       if (gen !== _mapBuildGen) return;
-      if (coords) _handleGeoJSON(coords);
-      else callback(null);  /* fall through to OSRM below on next render */
+      if (coords) { _handleGeoJSON(coords); return; }
+      /* Mapbox failed — fall back to OSRM immediately */
+      console.warn('[TripGenie] _fetchRoadRoute: Mapbox failed, falling back to OSRM');
+      _tryOSRM();
     });
   } else {
-    /* ── OSRM public API (free, no key) ─────────────────────────────── */
-    var _osrmUrlFn = function(wpts) {
-      var coords = wpts.map(function(ll){ return ll[1]+','+ll[0]; }).join(';');
-      return 'https://router.project-osrm.org/route/v1/driving/' + coords
-        + '?overview=full&geometries=geojson&annotations=false';
-    };
-    _chunkRoute(waypoints, _osrmUrlFn, function(coords) {
-      if (gen !== _mapBuildGen) return;
-      if (coords) _handleGeoJSON(coords);
-      else callback(null);
-    });
+    _tryOSRM();
   }
 }
 
