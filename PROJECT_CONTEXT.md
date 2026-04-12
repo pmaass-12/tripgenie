@@ -73,6 +73,29 @@ tripgenie/
 
 ### Session 41 — 2026-04-11
 
+**Feat: Netlify Blob Storage for cross-device photo access**
+
+Photos were only visible on the device where they were uploaded (full-res in IndexedDB, 200px thumb in localStorage). On every other device all photos showed as "Syncing..." placeholders.
+
+**New file: `netlify/functions/photo.js`**
+- `POST { action:'upload', id, data, isThumb, meta }` — decodes a base64 data URL, stores it in the `tripgenie-photos` Netlify Blob store, returns `{ url: '/.netlify/functions/photo?id=...' }`
+- `GET ?id=xxx` — reads the blob and serves it with `Cache-Control: public, max-age=31536000, immutable`
+- `POST { action:'delete', id }` — removes both full-res and thumb blobs
+- Key format: `{id}` for full-res, `{id}-t` for thumbnail
+- Mirrors gemini.js CORS/origin checks; supports optional `PHOTO_UPLOAD_TOKEN` env var
+
+**Frontend changes in `index.html`**:
+1. `_netlifyBlobUpload(id, fullDataUrl, thumbDataUrl, meta, cb)` — parallel-uploads thumb + full-res, calls `cb(thumbUrl, fullUrl)` with the returned function URLs.
+2. `_netlifyBlobDelete(id)` — fire-and-forget cleanup.
+3. `_galleryUpload` upload pipeline: after IDB save, calls `_netlifyBlobUpload`; stores `blobThumbUrl` and `blobUrl` on the pool entry.
+4. `renderGalleryTab`: photo src priority is now `blobThumbUrl → thumb → dataUrl`.
+5. Pool entry carries `blobUrl` and `blobThumbUrl` fields; `isCloudThumb` flag now excludes blob-backed photos.
+6. Lightbox: if `data-blob-url` is set on the tile, passes that directly to `_openMediaLightbox` (skips IDB lookup for cross-device open).
+
+**Result**: New uploads are automatically stored in Netlify Blobs. Photos are immediately visible on any device — browser/phone/tablet — via the function URL. IDB still serves the lightbox on the originating device for instant full-res.
+
+---
+
 **Feat: Apple Photos–style photo map in gallery**
 
 Gallery map markers upgraded from plain count circles to Apple Photos–style photo thumbnail markers:

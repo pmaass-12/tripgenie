@@ -13776,6 +13776,61 @@ function _galleryProgressToast(current, total) {
   el.innerHTML = svg + '📷 Saving ' + current + ' of ' + total + '…';
 }
 
+/* ── Netlify Blob photo upload helper ────────────────────────────
+   Uploads both the thumbnail (200px) and the full-res compressed image
+   to Netlify Blob Storage via /.netlify/functions/photo so photos are
+   accessible from any device, not just the one they were uploaded on.
+
+   cb(thumbUrl, fullUrl) — both are relative function URLs with
+   aggressive Cache-Control headers.  On error, cb(null, null) so the
+   caller falls back to the existing IDB-only path gracefully.        */
+function _netlifyBlobUpload(id, fullDataUrl, thumbDataUrl, meta, cb) {
+  var endpoint = '/.netlify/functions/photo';
+  var pending  = 0;
+  var thumbUrl = null, fullUrl = null;
+  var _done = 0;
+
+  function _finish() {
+    _done++;
+    if (_done === pending) cb(thumbUrl, fullUrl);
+  }
+
+  if (thumbDataUrl) {
+    pending++;
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'upload', id: id, data: thumbDataUrl, isThumb: true, meta: meta }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(j) { if (j.ok && j.url) thumbUrl = j.url; _finish(); })
+    .catch(function()  { _finish(); });
+  }
+
+  if (fullDataUrl) {
+    pending++;
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'upload', id: id, data: fullDataUrl, isThumb: false, meta: meta }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(j) { if (j.ok && j.url) fullUrl = j.url; _finish(); })
+    .catch(function()  { _finish(); });
+  }
+
+  if (pending === 0) cb(null, null);
+}
+
+/* Delete a photo from Netlify Blob Storage (fire-and-forget). */
+function _netlifyBlobDelete(id) {
+  fetch('/.netlify/functions/photo', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'delete', id: id }),
+  }).catch(function() {});
+}
+
 function _galleryUpload(input) {
   if (!input || !input.files || !input.files.length) return;
   if (!appState.photoPool) appState.photoPool = [];
@@ -13891,17 +13946,35 @@ function _galleryUpload(input) {
           }
         };
 
-        /* Generate thumbnail first, then save full-res to IndexedDB (NOT localStorage),
-           then run EXIF + save metadata.  This keeps localStorage free of large images
-           so dozens of photos can be stored without hitting the 5 MB quota.           */
+        /* ── Upload pipeline ──────────────────────────────────────────────
+           1. Generate 200px thumbnail (fast, small)
+           2. Save full-res to IndexedDB for local lightbox (existing path)
+           3. Upload BOTH thumb + full-res to Netlify Blob Storage so any
+              device can display this photo — not just the one it was shot on.
+              The blob URLs are stored back in entry.blobUrl / entry.blobThumbUrl.
+           4. Run EXIF and save metadata last.                              */
         if (isVideo) {
-          /* Videos: save raw to IDB, no thumb, then EXIF+save */
+          /* Videos: save raw to IDB, no blob upload for now, then EXIF+save */
           _idbSave(entry.id, dataUrl, function() { _runExifThenSave(); });
         } else {
-          _compressPhotoThumb(dataUrl, function(thumbUrl) {
-            if (thumbUrl) entry.thumb = thumbUrl;
-            /* Full-res lives in IDB; entry.dataUrl stays null in localStorage/cloud */
-            _idbSave(entry.id, dataUrl, function() { _runExifThenSave(); });
+          _compressPhotoThumb(dataUrl, function(thumbDataUrl) {
+            if (thumbDataUrl) entry.thumb = thumbDataUrl;
+            /* Save full-res to IDB first (local lightbox) */
+            _idbSave(entry.id, dataUrl, function() {
+              /* Then upload to Netlify Blobs (cross-device access) */
+              var _blobMeta = {
+                fileName:  entry.fileName  || '',
+                timestamp: entry.timestamp || '',
+                stopId:    entry.stopId != null ? String(entry.stopId) : '',
+              };
+              _netlifyBlobUpload(entry.id, dataUrl, thumbDataUrl, _blobMeta, function(bThumbUrl, bFullUrl) {
+                if (bThumbUrl) entry.blobThumbUrl = bThumbUrl;
+                if (bFullUrl)  entry.blobUrl      = bFullUrl;
+                /* Clear the raw data URL — it's now in IDB + Blob, no need in localStorage */
+                entry.dataUrl = null;
+                _runExifThenSave();
+              });
+            });
           });
         }
       }
@@ -14938,14 +15011,16 @@ function renderGalleryTab() {
       var stop = poolPhoto.stopId ? getStop(poolPhoto.stopId) : null;
       var exif = poolPhoto.exif || null;
       /* Grid always shows the 200px thumbnail (fast, small).
-         Full-res lives in IndexedDB and is loaded on-demand in the lightbox.
-         Legacy entries may still have dataUrl in localStorage — that's fine,
-         the lightbox IDB lookup will fall through to it via the src field.   */
-      var _poolSrc = poolPhoto.thumb || poolPhoto.dataUrl;
+         Priority: Netlify Blob thumb URL (works on any device) → local thumb
+         data URL → local full-res data URL → nothing (skipped unless IDB key exists).
+         Full-res for the lightbox: Netlify Blob URL → IDB on-demand.            */
+      var _poolSrc = poolPhoto.blobThumbUrl || poolPhoto.thumb || poolPhoto.dataUrl;
       if (!_poolSrc && !poolPhoto.id) return; // no image data at all — skip
       allPhotos.push({
         src:          _poolSrc || '',
-        photoId:      poolPhoto.id || null,   /* IDB key — lightbox loads full-res from here */
+        blobUrl:      poolPhoto.blobUrl      || null,   /* full-res Netlify Blob URL (any device) */
+        blobThumbUrl: poolPhoto.blobThumbUrl || null,   /* thumb Netlify Blob URL */
+        photoId:      poolPhoto.id || null,             /* IDB key — lightbox loads full-res from here */
         type:         'image',
         caption:      poolPhoto.caption || '',
         location:     (exif && exif.locationName) || (stop ? _sn(stop) : ''),
@@ -14954,7 +15029,7 @@ function renderGalleryTab() {
         stopId:       poolPhoto.stopId || null,
         source:       'pool',
         exif:         exif,
-        isCloudThumb: !poolPhoto.dataUrl && !!poolPhoto.thumb
+        isCloudThumb: !poolPhoto.blobThumbUrl && !poolPhoto.dataUrl && !!poolPhoto.thumb
       });
     });
   }
@@ -15094,7 +15169,9 @@ function renderGalleryTab() {
     section.photos.forEach(function(p) {
       var isVid = p.type === 'video' || (p.src && p.src.startsWith('data:video'));
       var capText = p.caption || p.location || '';
-      html += '<div style="cursor:zoom-in;position:relative;aspect-ratio:1;overflow:hidden;border-radius:6px;' + (p.isCloudThumb ? 'opacity:.85;' : '') + '" data-media-src="' + (p.src||'') + '" data-media-type="' + (isVid?'video':'image') + '" data-media-cap="' + (capText.replace(/"/g,'&quot;')) + '" data-photo-id="' + (p.photoId||'') + '">'
+      /* data-blob-url carries the Netlify full-res URL so the lightbox can
+         load from Blob storage on devices that don't have the IDB entry.  */
+      html += '<div style="cursor:zoom-in;position:relative;aspect-ratio:1;overflow:hidden;border-radius:6px;' + (p.isCloudThumb ? 'opacity:.85;' : '') + '" data-media-src="' + (p.src||'') + '" data-media-type="' + (isVid?'video':'image') + '" data-media-cap="' + (capText.replace(/"/g,'&quot;')) + '" data-photo-id="' + (p.photoId||'') + '" data-blob-url="' + (p.blobUrl||'') + '">'
         + (isVid
             ? '<video src="' + p.src + '" style="width:100%;height:100%;object-fit:cover;" muted preload="metadata"></video>'
               + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);"><span style="font-size:1.8rem;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6));">▶️</span></div>'
@@ -15118,8 +15195,16 @@ function renderGalleryTab() {
   /* ── 8. Attach lightbox handlers ────────────────────────────────── */
   el.querySelectorAll('[data-media-src]').forEach(function(tile) {
     tile.addEventListener('click', function() {
-      /* Pass photoId so lightbox can load full-res from IndexedDB */
-      _openMediaLightbox(tile.dataset.mediaSrc, tile.dataset.mediaType, tile.dataset.mediaCap, tile.dataset.photoId || null);
+      /* blobUrl (Netlify Blob full-res) takes precedence over IDB for cross-device lightbox.
+         photoId is still passed as fallback so IDB still works on the originating device. */
+      var blobUrl  = tile.dataset.blobUrl  || null;
+      var photoId  = tile.dataset.photoId  || null;
+      _openMediaLightbox(
+        blobUrl || tile.dataset.mediaSrc,
+        tile.dataset.mediaType,
+        tile.dataset.mediaCap,
+        blobUrl ? null : photoId   /* skip IDB lookup when we already have the blob URL */
+      );
     });
   });
 
