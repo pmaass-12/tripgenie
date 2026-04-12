@@ -13970,8 +13970,10 @@ function _galleryUpload(input) {
               _netlifyBlobUpload(entry.id, dataUrl, thumbDataUrl, _blobMeta, function(bThumbUrl, bFullUrl) {
                 if (bThumbUrl) entry.blobThumbUrl = bThumbUrl;
                 if (bFullUrl)  entry.blobUrl      = bFullUrl;
-                /* Clear the raw data URL — it's now in IDB + Blob, no need in localStorage */
+                /* Clear raw data from localStorage — full-res is in IDB, thumb is in Netlify Blobs.
+                   Keeping base64 strings in localStorage burns through the ~5MB quota fast. */
                 entry.dataUrl = null;
+                if (bThumbUrl) entry.thumb = null;  // blob URL is the src now — no need for base64 thumb
                 _runExifThenSave();
               });
             });
@@ -14119,21 +14121,31 @@ function _idbDelete(id, cb) {
     } catch(e) { if (cb) cb(); }
   });
 }
-/* One-time migration: move any dataUrl still in localStorage pool entries → IDB.
+/* One-time migration: move any dataUrl still in localStorage pool entries → IDB,
+   and strip base64 thumbs from entries that already have a blobThumbUrl (the blob
+   URL is the source of truth — keeping the base64 wastes the ~5MB localStorage quota).
    Call on gallery open so old photos become immediately accessible and free up quota. */
 function _idbMigratePool() {
   if (!appState.photoPool || !appState.photoPool.length) return;
-  var migrated = 0;
+  var migrated = 0, freedThumb = 0;
   appState.photoPool.forEach(function(p) {
     if (p.id && p.dataUrl) {
       _idbSave(p.id, p.dataUrl, null); /* async fire-and-forget */
       p.dataUrl = null;
       migrated++;
     }
+    /* If this entry already has a Netlify Blob thumb URL, the base64 thumb is
+       redundant — drop it to reclaim localStorage space. */
+    if (p.blobThumbUrl && p.thumb) {
+      p.thumb = null;
+      freedThumb++;
+    }
   });
-  if (migrated > 0) {
+  if (migrated > 0 || freedThumb > 0) {
     try { saveState(appState); } catch(e) {}
-    showToast('📷 Freed up space — ' + migrated + ' photo' + (migrated > 1 ? 's' : '') + ' moved to local photo store. You can now add more!', 5000);
+    if (migrated > 0) {
+      showToast('📷 Freed up space — ' + migrated + ' photo' + (migrated > 1 ? 's' : '') + ' moved to local photo store. You can now add more!', 5000);
+    }
   }
 }
 
