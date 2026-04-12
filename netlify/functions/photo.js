@@ -32,6 +32,10 @@ const { getStore } = require('@netlify/blobs');
 
 const MAX_UPLOAD_BYTES = 12_000_000;   // 12 MB raw body ceiling
 
+/* getStore must be called INSIDE the handler, not at module load time.
+   The Netlify Blobs context (site ID + token) is injected via environment
+   variables that are only available during function execution, not at cold-start. */
+
 /* ── CORS helpers (mirrors gemini.js pattern) ─────────────────── */
 function getAllowedOrigins() {
   const raw = process.env.ALLOWED_ORIGINS || '';
@@ -71,7 +75,20 @@ exports.handler = async function (event, context) {
              body: JSON.stringify({ error: 'Forbidden' }) };
   }
 
-  const store = getStore({ name: 'tripgenie-photos' });
+  /* Instantiate store inside the handler so Netlify's blobs context is available.
+     Calling getStore at module level causes 502 on cold-start because the
+     NETLIFY_BLOBS_CONTEXT env is only injected during handler execution. */
+  let store;
+  try {
+    store = getStore({ name: 'tripgenie-photos' });
+  } catch (e) {
+    console.error('getStore failed:', e.message);
+    return {
+      statusCode: 503,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(event) },
+      body: JSON.stringify({ error: 'Blob storage unavailable: ' + e.message }),
+    };
+  }
 
   /* ── GET: serve a stored photo ──────────────────────────────── */
   if (event.httpMethod === 'GET') {
