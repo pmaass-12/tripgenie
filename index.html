@@ -15255,14 +15255,8 @@ function renderGalleryTab() {
       + '</div>';
   }
   if (hasGPS) {
-    var activeGroup = _galleryMapFilter ? locationGroups[_galleryMapFilter] : null;
-    if (activeGroup) {
-      html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">'
-        + '<div style="background:var(--orange);color:#fff;border-radius:100px;padding:4px 12px;font-size:.78rem;font-weight:700;">📍 ' + activeGroup.label + '</div>'
-        + '<button onclick="_setGalleryMapFilter(null)" style="font-size:.75rem;color:var(--text-3);background:none;border:none;cursor:pointer;padding:2px 6px;font-family:var(--font);">✕ Show all</button>'
-        + '</div>';
-    }
-    html += '<div id="gallery-loc-map" style="width:100%;height:340px;border-radius:14px;overflow:hidden;margin-bottom:16px;border:1px solid var(--border);box-shadow:0 2px 12px rgba(0,0,0,.08);"></div>';
+    html += '<div id="gallery-loc-map" style="width:100%;height:360px;border-radius:16px 16px 0 0;overflow:hidden;border:1px solid var(--border);box-shadow:0 2px 16px rgba(0,0,0,.1);"></div>'
+          + '<div id="gallery-map-info" style="background:#fff;border:1px solid var(--border);border-top:none;border-radius:0 0 16px 16px;padding:0;margin-bottom:18px;overflow:hidden;"></div>';
   }
 
   /* ── 6. Photos to display (filtered by location if map pin clicked) ─ */
@@ -15270,7 +15264,9 @@ function renderGalleryTab() {
     ? locationGroups[_galleryMapFilter].photos
     : allPhotos;
 
-  /* ── 7. Date-sectioned grid ─────────────────────────────────────── */
+  /* ── 7. Date-sectioned grid (wrapped so it can be updated in-place) ─ */
+  html += '<div id="gallery-photos-section">';
+
   /* Group visPhotos by calendar date (YYYY-MM-DD) */
   var dateSections = [];    // [{dateKey, label, photos[]}]
   var dateSectionMap = {};  // dateKey → section
@@ -15301,8 +15297,8 @@ function renderGalleryTab() {
       + '<div style="flex:1;height:1px;background:var(--border);"></div>'
       + '<span style="font-size:.7rem;color:var(--text-3);">' + section.photos.length + ' photo' + (section.photos.length !== 1 ? 's' : '') + '</span>'
       + '</div>';
-    /* Photo grid for this date */
-    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:4px;">';
+    /* Photo grid for this date — 4 cols like Google Maps */
+    html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin-bottom:4px;">';
     section.photos.forEach(function(p) {
       var isVid = p.type === 'video' || (p.src && p.src.startsWith('data:video'));
       var capText = p.caption || p.location || '';
@@ -15327,6 +15323,8 @@ function renderGalleryTab() {
     });
     html += '</div>';
   });
+
+  html += '</div>'; /* close #gallery-photos-section */
 
   el.innerHTML = html;
 
@@ -15356,8 +15354,11 @@ function renderGalleryTab() {
      Runs in background; swaps placeholder tiles → real images as blobs land. */
   setTimeout(_migrateStrandedPhotosToBlob, 800);
 
-  /* ── 9. Init Leaflet map (deferred so DOM is ready) ──────────────── */
+  /* ── 9. Init Leaflet map — Google Maps photo style ───────────────── */
   if (!hasGPS) return;
+  window._galleryLocationGroups = locationGroups;
+  window._galleryAllPhotos      = allPhotos;
+
   requestAnimationFrame(function() {
     var mapEl = document.getElementById('gallery-loc-map');
     if (!mapEl || typeof L === 'undefined') return;
@@ -15367,76 +15368,198 @@ function renderGalleryTab() {
     }
     var latSum = 0, lonSum = 0, gc = groupKeys.length;
     groupKeys.forEach(function(k) { latSum += locationGroups[k].lat; lonSum += locationGroups[k].lon; });
-    var map = L.map(mapEl, { zoomControl: true }).setView([latSum/gc, lonSum/gc], 5);
+    var map = L.map(mapEl, { zoomControl: false, attributionControl: false })
+               .setView([latSum/gc, lonSum/gc], gc === 1 ? 12 : 7);
     window._galleryMapInstance = map;
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors', maxZoom: 18
+    L.control.zoom({ position: 'topright' }).addTo(map);
+    /* Light, clean CartoDB tiles */
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19, subdomains: 'abcd'
     }).addTo(map);
 
+    /* ── Heatmap (purple/indigo density) ───────────────────────── */
+    var _heatPts = [];
     groupKeys.forEach(function(k) {
-      var group = locationGroups[k];
-      var isActive = _galleryMapFilter === k;
-
-      /* ── Apple Photos–style thumbnail marker ─────────────────────── */
-      /* Find first photo with an actual image src */
-      var _firstSrc = '';
-      for (var _pi = 0; _pi < group.photos.length; _pi++) {
-        if (group.photos[_pi].src) { _firstSrc = group.photos[_pi].src; break; }
+      var g = locationGroups[k];
+      for (var _hi = 0; _hi < g.photos.length; _hi++) _heatPts.push([g.lat, g.lon, 1]);
+    });
+    function _addHeatLayer() {
+      if (typeof L.heatLayer === 'function' && _heatPts.length) {
+        L.heatLayer(_heatPts, {
+          radius: 28, blur: 20, maxZoom: 16, max: 5,
+          gradient: { 0.3:'#818cf8', 0.55:'#a78bfa', 0.75:'#c084fc', 1.0:'#e879f9' }
+        }).addTo(map);
       }
-      var _cnt     = group.photos.length;
-      var _bdColor = isActive ? '#f57c00' : '#fff';
-      /* Photo face — image thumbnail or camera emoji fallback */
+    }
+    if (!document.getElementById('_leaflet-heat-js')) {
+      var _hs = document.createElement('script');
+      _hs.id = '_leaflet-heat-js';
+      _hs.src = 'https://cdn.jsdelivr.net/npm/leaflet.heat@0.2.0/dist/leaflet-heat.js';
+      _hs.onload = _addHeatLayer;
+      document.head.appendChild(_hs);
+    } else { _addHeatLayer(); }
+
+    /* ── Circular photo markers ──────────────────────────────────── */
+    var _markerRefs = {};
+    function _buildMarkerIcon(group, isActive) {
+      var _firstSrc = '';
+      for (var _fi = 0; _fi < group.photos.length; _fi++) {
+        if (group.photos[_fi].src) { _firstSrc = group.photos[_fi].src; break; }
+      }
+      var _cnt    = group.photos.length;
+      var _ring   = isActive ? '#f57c00' : '#ffffff';
+      var _shadow = isActive
+        ? '0 0 0 3px rgba(245,124,0,.35),0 4px 14px rgba(0,0,0,.5)'
+        : '0 4px 14px rgba(0,0,0,.45)';
       var _face = _firstSrc
-        ? '<img src="' + _firstSrc + '" style="width:100%;height:100%;object-fit:cover;display:block;border-radius:6px;" />'
-        : '<div style="width:100%;height:100%;background:#ccc;display:flex;align-items:center;justify-content:center;font-size:1.2rem;border-radius:6px;">📷</div>';
-      /* Stack shadow layer (shows depth when >1 photo) */
-      var _stack = _cnt > 1
-        ? '<div style="position:absolute;top:-3px;left:3px;width:52px;height:52px;border-radius:8px;background:#ddd;border:2px solid rgba(255,255,255,.7);box-shadow:0 1px 5px rgba(0,0,0,.2);z-index:0;"></div>'
-        : '';
-      /* Count badge top-right */
+        ? '<img src="' + _firstSrc + '" style="width:100%;height:100%;object-fit:cover;display:block;" />'
+        : '<div style="width:100%;height:100%;background:#b0b8c8;display:flex;align-items:center;justify-content:center;font-size:1.4rem;">📷</div>';
       var _badge = _cnt > 1
-        ? '<div style="position:absolute;top:-6px;right:-6px;background:#1a73e8;color:#fff;font-size:.54rem;font-weight:900;border-radius:50%;min-width:17px;height:17px;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff;line-height:1;padding:0 2px;z-index:3;">' + (_cnt > 99 ? '99+' : _cnt) + '</div>'
+        ? '<div style="position:absolute;top:-5px;right:-5px;background:#1a73e8;color:#fff;font-size:.52rem;font-weight:900;border-radius:50%;min-width:16px;height:16px;display:flex;align-items:center;justify-content:center;border:1.5px solid #fff;padding:0 2px;z-index:3;">' + (_cnt > 99 ? '99+' : _cnt) + '</div>'
         : '';
-      var markerHtml =
-        '<div style="position:relative;width:52px;height:58px;cursor:pointer;">'
-        + _stack
-        + '<div style="position:absolute;bottom:0;left:0;width:52px;height:52px;border-radius:8px;overflow:hidden;border:2.5px solid ' + _bdColor + ';box-shadow:0 3px 12px rgba(0,0,0,.45);z-index:1;">' + _face + '</div>'
-        /* triangle "tail" pointing down like a speech bubble */
-        + '<div style="position:absolute;bottom:-7px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid ' + _bdColor + ';z-index:2;filter:drop-shadow(0 2px 2px rgba(0,0,0,.25));"></div>'
-        + _badge
-        + '</div>';
+      return '<div style="position:relative;width:58px;height:66px;cursor:pointer;">'
+        + '<div style="position:absolute;bottom:6px;left:0;width:58px;height:58px;border-radius:50%;overflow:hidden;border:3px solid ' + _ring + ';box-shadow:' + _shadow + ';z-index:1;">' + _face + '</div>'
+        + '<div style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:8px solid ' + _ring + ';filter:drop-shadow(0 2px 3px rgba(0,0,0,.3));z-index:2;"></div>'
+        + _badge + '</div>';
+    }
 
-      var icon = L.divIcon({ html: markerHtml, iconSize: [52, 58], iconAnchor: [26, 58], className: '' });
-      var marker = L.marker([group.lat, group.lon], { icon: icon }).addTo(map);
+    groupKeys.forEach(function(k) {
+      var group    = locationGroups[k];
+      var isActive = _galleryMapFilter === k;
+      var icon     = L.divIcon({ html: _buildMarkerIcon(group, isActive), iconSize:[58,66], iconAnchor:[29,66], className:'' });
+      var marker   = L.marker([group.lat, group.lon], { icon: icon }).addTo(map);
+      _markerRefs[k] = marker;
 
-      /* ── Popup: thumbnail strip + "View all" button ─────────────── */
       marker.on('click', function() {
-        var _thumbsHtml = group.photos.slice(0, 4).map(function(ph) {
-          return ph.src
-            ? '<img src="' + ph.src.replace(/"/g,'') + '" style="width:60px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;" />'
-            : '<div style="width:60px;height:60px;background:#eee;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.2rem;">📷</div>';
-        }).join('');
-        var _moreNote = _cnt > 4 ? '<div style="font-size:.7rem;color:#888;text-align:right;margin-top:4px;">+' + (_cnt - 4) + ' more</div>' : '';
-        var _dateNote = (group.photos[0] && group.photos[0].date) ? '<div style="font-size:.7rem;color:#999;margin-top:2px;">' + group.photos[0].date + '</div>' : '';
-        var _popupHtml =
-          '<div style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;width:228px;">'
-          + '<div style="font-size:.86rem;font-weight:800;color:#111;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">📍 ' + (group.label || 'Location') + '</div>'
-          + _dateNote
-          + '<div style="display:flex;gap:5px;margin:9px 0 4px;overflow-x:auto;padding-bottom:2px;">' + _thumbsHtml + '</div>'
-          + _moreNote
-          + '<button onclick="_setGalleryMapFilter(\'' + k.replace(/'/g,"\\'") + '\')" style="margin-top:9px;width:100%;background:#2C5F8A;color:#fff;border:none;border-radius:100px;padding:7px 14px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:-apple-system,sans-serif;">View all ' + _cnt + ' photo' + (_cnt !== 1 ? 's' : '') + ' ↓</button>'
-          + '</div>';
-        L.popup({ maxWidth: 248, offset: [0, -10] })
-          .setLatLng([group.lat, group.lon])
-          .setContent(_popupHtml)
-          .openOn(map);
+        map.setView([group.lat, group.lon], 13, { animate: true });
+        _galleryMapFilter = k;
+
+        /* Update all marker icons */
+        groupKeys.forEach(function(mk) {
+          _markerRefs[mk].setIcon(L.divIcon({
+            html: _buildMarkerIcon(locationGroups[mk], mk === k),
+            iconSize:[58,66], iconAnchor:[29,66], className:''
+          }));
+        });
+
+        /* Build date string from this group's photos */
+        var _dates = {};
+        group.photos.forEach(function(ph) {
+          var _dk = (ph.exif && ph.exif.dt) ? ph.exif.dt.split('T')[0] : (ph.date || '');
+          if (_dk) _dates[_dk] = true;
+        });
+        var _dateKeys = Object.keys(_dates).sort().reverse();
+        var _dateStr = '';
+        if (_dateKeys.length === 1) {
+          try { _dateStr = new Date(_dateKeys[0]+'T12:00:00').toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}); }
+          catch(e) { _dateStr = _dateKeys[0]; }
+        } else if (_dateKeys.length > 1) {
+          try {
+            _dateStr = new Date(_dateKeys[_dateKeys.length-1]+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'})
+              + ' – ' + new Date(_dateKeys[0]+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+          } catch(e) { _dateStr = _dateKeys[_dateKeys.length-1] + ' – ' + _dateKeys[0]; }
+        }
+
+        /* Populate info bar below map */
+        var _infoEl = document.getElementById('gallery-map-info');
+        if (_infoEl) {
+          _infoEl.innerHTML =
+            '<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;">'
+            + '<div>'
+              + '<div style="font-size:.88rem;font-weight:800;color:var(--text-1);">📍 ' + (group.label || 'Location') + '</div>'
+              + (_dateStr ? '<div style="font-size:.75rem;color:var(--text-3);margin-top:1px;">' + _dateStr + '</div>' : '')
+            + '</div>'
+            + '<button onclick="_galleryResetMapFilter()" style="background:none;border:1px solid var(--border);border-radius:100px;padding:4px 10px;font-size:.72rem;color:var(--text-2);cursor:pointer;font-family:var(--font);">✕ All photos</button>'
+            + '</div>'
+            + '<div style="display:flex;gap:4px;padding:0 14px 10px;overflow-x:auto;">'
+            + group.photos.slice(0, 6).map(function(ph) {
+                return ph.src
+                  ? '<img src="' + ph.src.replace(/"/g,'') + '" style="width:52px;height:52px;object-fit:cover;border-radius:8px;flex-shrink:0;cursor:pointer;" onclick="_galleryScrollToPhotos()" />'
+                  : '<div style="width:52px;height:52px;background:#e8ecf0;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1rem;">📷</div>';
+              }).join('')
+            + (group.photos.length > 6 ? '<div style="width:52px;height:52px;background:rgba(44,95,138,.1);border-radius:8px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.65rem;font-weight:700;color:var(--blue);cursor:pointer;line-height:1.3;" onclick="_galleryScrollToPhotos()">+' + (group.photos.length-6) + '<br/>more</div>' : '')
+            + '</div>';
+        }
+
+        /* Update photo grid in-place (no map re-init) */
+        _galleryUpdatePhotoSection(group.photos);
+
+        /* Scroll info bar into view */
+        setTimeout(function() {
+          var _info = document.getElementById('gallery-map-info');
+          if (_info) _info.scrollIntoView({ behavior:'smooth', block:'nearest' });
+        }, 350);
       });
     });
 
     if (gc > 1) {
-      try { map.fitBounds(groupKeys.map(function(k) { return [locationGroups[k].lat, locationGroups[k].lon]; }), { padding: [30,30] }); } catch(e3) {}
+      try { map.fitBounds(groupKeys.map(function(k){ return [locationGroups[k].lat, locationGroups[k].lon]; }), { padding:[36,36] }); } catch(e3) {}
     }
   });
+}
+
+/* ── In-place photo section updater (no map re-init) ──────────────── */
+function _galleryUpdatePhotoSection(photos) {
+  var sec = document.getElementById('gallery-photos-section');
+  if (!sec) return;
+  var dateSections = [], dsMap = {};
+  (photos || []).forEach(function(p) {
+    var dk = (p.exif && p.exif.dt) ? p.exif.dt.split('T')[0] : (p.date || '');
+    if (!dk) dk = 'undated';
+    if (!dsMap[dk]) {
+      var lbl = dk === 'undated' ? 'Undated' : '';
+      if (!lbl) { try { lbl = new Date(dk+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}); } catch(e) { lbl = dk; } }
+      dsMap[dk] = { label: lbl, photos: [] };
+      dateSections.push(dsMap[dk]);
+    }
+    dsMap[dk].photos.push(p);
+  });
+  var html = '';
+  dateSections.forEach(function(section) {
+    html += '<div style="display:flex;align-items:center;gap:10px;margin:14px 0 10px;">'
+      + '<span style="font-size:.78rem;font-weight:800;color:var(--text-2);white-space:nowrap;">' + section.label + '</span>'
+      + '<div style="flex:1;height:1px;background:var(--border);"></div>'
+      + '<span style="font-size:.7rem;color:var(--text-3);">' + section.photos.length + ' photo' + (section.photos.length!==1?'s':'') + '</span>'
+      + '</div>';
+    html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:3px;margin-bottom:4px;">';
+    section.photos.forEach(function(p) {
+      var isVid = p.type==='video', cap = p.caption||p.location||'';
+      html += '<div style="cursor:zoom-in;position:relative;aspect-ratio:1;overflow:hidden;border-radius:4px;" data-media-src="'+(p.src||'')+'" data-media-type="'+(isVid?'video':'image')+'" data-media-cap="'+cap.replace(/"/g,'&quot;')+'" data-photo-id="'+(p.photoId||'')+'" data-blob-url="'+(p.blobUrl||'')+'">'
+        + (isVid
+            ? '<video src="'+p.src+'" style="width:100%;height:100%;object-fit:cover;" muted preload="metadata"></video><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);"><span style="font-size:1.6rem;">▶️</span></div>'
+            : (p.src
+                ? '<img src="'+p.src+'" style="width:100%;height:100%;object-fit:cover;" loading="lazy" />'
+                : '<div style="width:100%;height:100%;background:linear-gradient(135deg,#e8ecf0,#dde3e9);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;"><span style="font-size:1.2rem;opacity:.4;">📷</span><span style="font-size:.5rem;color:#aaa;font-weight:600;">Syncing…</span></div>'))
+        + (p.photoId ? '<button onclick="event.stopPropagation();_deleteGalleryPhoto(\''+p.photoId+'\')" style="position:absolute;top:4px;left:4px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;border:none;cursor:pointer;font-size:.6rem;display:flex;align-items:center;justify-content:center;z-index:2;line-height:1;">✕</button>' : '')
+        + '</div>';
+    });
+    html += '</div>';
+  });
+  sec.innerHTML = html;
+  sec.querySelectorAll('[data-media-src]').forEach(function(tile) {
+    tile.addEventListener('click', function() {
+      var blobUrl = tile.dataset.blobUrl||null, photoId = tile.dataset.photoId||null;
+      _openMediaLightbox(blobUrl||tile.dataset.mediaSrc, tile.dataset.mediaType, tile.dataset.mediaCap, blobUrl?null:photoId);
+    });
+  });
+  _galleryUpgradeFromIDB(sec);
+}
+
+function _galleryResetMapFilter() {
+  _galleryMapFilter = null;
+  var _infoEl = document.getElementById('gallery-map-info');
+  if (_infoEl) _infoEl.innerHTML = '';
+  var _allPhotos = window._galleryAllPhotos || [];
+  _galleryUpdatePhotoSection(_allPhotos);
+  /* Reset all marker icons to inactive */
+  if (window._galleryLocationGroups && window._galleryMapInstance) {
+    renderGalleryTab(); /* full re-render to reset map markers */
+  }
+}
+
+function _galleryScrollToPhotos() {
+  var sec = document.getElementById('gallery-photos-section');
+  if (sec) sec.scrollIntoView({ behavior:'smooth', block:'start' });
 }
 
 function openPhotoGallery() {
