@@ -14970,6 +14970,75 @@ function _galleryUpgradeFromIDB(container) {
   setTimeout(runBatch, 200);
 }
 
+/* Auto-migrate stranded photos to Netlify Blobs.
+   "Stranded" = pool entry with no blobThumbUrl but IDB has the full-res data.
+   This rescues photos that were uploaded before the Netlify Blob feature existed,
+   or whose localStorage thumb was lost to a quota overflow.
+   Runs in the background after gallery renders; updates tiles in-place without
+   a full re-render. */
+function _migrateStrandedPhotosToBlob() {
+  if (!appState.photoPool || !appState.photoPool.length) return;
+  if (typeof _idbGet !== 'function' || typeof _netlifyBlobUpload !== 'function') return;
+
+  var stranded = appState.photoPool.filter(function(p) {
+    return p.id && !p.blobThumbUrl;
+  });
+  if (!stranded.length) return;
+
+  var _saved = 0;
+  function _saveIfDone() {
+    _saved++;
+    if (_saved === stranded.length) {
+      try { saveState(appState); } catch(e) {}
+    }
+  }
+
+  showToast('☁️ Uploading ' + stranded.length + ' photo' + (stranded.length > 1 ? 's' : '') + ' to cloud…', 3000);
+
+  stranded.forEach(function(poolEntry) {
+    _idbGet(poolEntry.id, function(fullDataUrl) {
+      if (!fullDataUrl) {
+        /* Not in IDB on this device — can't migrate here */
+        _saveIfDone();
+        return;
+      }
+      _compressPhotoThumb(fullDataUrl, function(thumbDataUrl) {
+        var _meta = {
+          fileName:  poolEntry.fileName  || '',
+          timestamp: poolEntry.timestamp || '',
+          stopId:    poolEntry.stopId != null ? String(poolEntry.stopId) : '',
+        };
+        _netlifyBlobUpload(poolEntry.id, fullDataUrl, thumbDataUrl, _meta, function(bThumbUrl, bFullUrl) {
+          if (bThumbUrl) poolEntry.blobThumbUrl = bThumbUrl;
+          if (bFullUrl)  poolEntry.blobUrl      = bFullUrl;
+          /* Drop base64 data from localStorage now that blob URLs exist */
+          poolEntry.thumb   = null;
+          poolEntry.dataUrl = null;
+          _saveIfDone();
+
+          /* Swap the placeholder tile in-place — no full re-render needed */
+          var tile = document.querySelector('[data-photo-id="' + poolEntry.id + '"]');
+          if (tile && bThumbUrl) {
+            var placeholder = tile.querySelector('div[style*="Syncing"]') || tile.querySelector('div[style*="linear-gradient"]');
+            if (placeholder) {
+              var img = document.createElement('img');
+              img.src = bThumbUrl;
+              img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+              img.loading = 'lazy';
+              tile.replaceChild(img, placeholder);
+            } else {
+              var existImg = tile.querySelector('img');
+              if (existImg) existImg.src = bThumbUrl;
+            }
+            tile.dataset.mediaSrc = bThumbUrl;
+            if (bFullUrl) tile.dataset.blobUrl = bFullUrl;
+          }
+        });
+      });
+    });
+  });
+}
+
 function renderGalleryTab() {
   var el = document.getElementById('gallery-tab-content');
   if (!el) return;
@@ -15226,6 +15295,10 @@ function renderGalleryTab() {
      loaded from IndexedDB. Runs async in the background so the gallery
      appears instantly and upgrades smoothly once IDB responds.       */
   _galleryUpgradeFromIDB(el);
+
+  /* Rescue any pre-blob photos that have IDB data but no cloud URL yet.
+     Runs in background; swaps placeholder tiles → real images as blobs land. */
+  setTimeout(_migrateStrandedPhotosToBlob, 800);
 
   /* ── 9. Init Leaflet map (deferred so DOM is ready) ──────────────── */
   if (!hasGPS) return;
