@@ -79,6 +79,7 @@ exports.handler = async function (event, context) {
         ok: true,
         hasBlobsContext: !!process.env.NETLIFY_BLOBS_CONTEXT,
         hasSiteId:       !!process.env.SITE_ID,
+        hasNetlifyToken: !!process.env.NETLIFY_TOKEN,
         nodeVersion:     process.version,
         blobsPkg:        (() => { try { return require('@netlify/blobs/package.json').version; } catch(e) { return 'MISSING: ' + e.message; } })(),
       }),
@@ -90,15 +91,17 @@ exports.handler = async function (event, context) {
              body: JSON.stringify({ error: 'Forbidden' }) };
   }
 
-  /* Instantiate store inside the handler so Netlify's blobs context is available.
-     Calling getStore at module level causes 502 on cold-start because the
-     NETLIFY_BLOBS_CONTEXT env is only injected during handler execution.
-     Pass siteID explicitly as some Netlify environments require it.          */
+  /* Instantiate store with explicit credentials.
+     NETLIFY_BLOBS_CONTEXT is not auto-injected for v1 functions on this site,
+     so we authenticate using SITE_ID (auto-set by Netlify) + NETLIFY_TOKEN
+     (a Personal Access Token set manually in Netlify site env vars).         */
   let store;
   try {
-    const _storeOpts = { name: 'tripgenie-photos' };
-    if (process.env.SITE_ID) _storeOpts.siteID = process.env.SITE_ID;
-    store = getStore(_storeOpts);
+    const _siteID = process.env.SITE_ID;
+    const _token  = process.env.NETLIFY_TOKEN;
+    if (!_siteID) throw new Error('SITE_ID env var not set');
+    if (!_token)  throw new Error('NETLIFY_TOKEN env var not set — add a Personal Access Token in Netlify site settings');
+    store = getStore({ name: 'tripgenie-photos', siteID: _siteID, token: _token });
   } catch (e) {
     console.error('getStore failed:', e.message);
     return {
