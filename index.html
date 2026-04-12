@@ -11387,17 +11387,25 @@ async function _recalcDriveMiles(silent) {
     var toSt    = getStop(leg.toId);
     if (!fromSt || !toSt || !fromSt.lat || !fromSt.lng || !toSt.lat || !toSt.lng) { failed++; continue; }
     try {
-      /* Prefer Mapbox (already domain-authorized, no CORS issues).
-         Fall back to OSRM only when no Mapbox token is configured.   */
-      var _mbTok = (appState && appState.mapboxToken) || MAPBOX_TOKEN || '';
+      /* Prefer Mapbox when token is configured; fall back to OSRM on any error. */
+      var _mbTok = (appState && appState.mapboxToken) || '';
       var coordPair = fromSt.lng.toFixed(5) + ',' + fromSt.lat.toFixed(5) + ';'
                     + toSt.lng.toFixed(5)   + ',' + toSt.lat.toFixed(5);
-      var routeUrl = _mbTok
-        ? 'https://api.mapbox.com/directions/v5/mapbox/driving/' + coordPair
-            + '?overview=none&access_token=' + _mbTok
-        : 'https://router.project-osrm.org/route/v1/driving/' + coordPair + '?overview=false';
-      var resp = await fetch(routeUrl);
-      var data = await resp.json();
+      var _osrmFallbackUrl = 'https://router.project-osrm.org/route/v1/driving/' + coordPair + '?overview=false';
+      var resp, data;
+      if (_mbTok) {
+        var _mbUrl = 'https://api.mapbox.com/directions/v5/mapbox/driving/' + coordPair
+            + '?overview=none&access_token=' + _mbTok;
+        resp = await fetch(_mbUrl);
+        if (!resp.ok) {
+          /* Mapbox failed (e.g. 422 quota/token issue) — fall back to OSRM */
+          console.warn('[TripGenie] _recalcDriveMiles: Mapbox returned ' + resp.status + ', falling back to OSRM');
+          resp = await fetch(_osrmFallbackUrl);
+        }
+      } else {
+        resp = await fetch(_osrmFallbackUrl);
+      }
+      data = await resp.json();
       if (data.routes && data.routes[0]) {
         var meters = data.routes[0].distance;
         var secs   = data.routes[0].duration;
@@ -11551,15 +11559,23 @@ async function _prefetchVirtualRoutes(silent) {
     var toSt   = getStop(leg.toId);
     if (!fromSt || !toSt || !fromSt.lat || !fromSt.lng || !toSt.lat || !toSt.lng) continue;
     try {
-      var _mbTok2 = (appState && appState.mapboxToken) || MAPBOX_TOKEN || '';
+      var _mbTok2 = (appState && appState.mapboxToken) || '';
       var coordPair2 = fromSt.lng.toFixed(5) + ',' + fromSt.lat.toFixed(5) + ';'
                      + toSt.lng.toFixed(5)   + ',' + toSt.lat.toFixed(5);
-      var routeUrl2 = _mbTok2
-        ? 'https://api.mapbox.com/directions/v5/mapbox/driving/' + coordPair2
-            + '?overview=none&access_token=' + _mbTok2
-        : 'https://router.project-osrm.org/route/v1/driving/' + coordPair2 + '?overview=false';
-      var resp = await fetch(routeUrl2);
-      var data = await resp.json();
+      var _osrmUrl2 = 'https://router.project-osrm.org/route/v1/driving/' + coordPair2 + '?overview=false';
+      var resp, data;
+      if (_mbTok2) {
+        var _mbUrl2 = 'https://api.mapbox.com/directions/v5/mapbox/driving/' + coordPair2
+            + '?overview=none&access_token=' + _mbTok2;
+        resp = await fetch(_mbUrl2);
+        if (!resp.ok) {
+          console.warn('[TripGenie] _prefetchVirtualRoutes: Mapbox returned ' + resp.status + ', falling back to OSRM');
+          resp = await fetch(_osrmUrl2);
+        }
+      } else {
+        resp = await fetch(_osrmUrl2);
+      }
+      data = await resp.json();
       if (data.routes && data.routes[0]) {
         var miles = Math.round(data.routes[0].distance / 1609.344);
         var hrs   = Math.round(data.routes[0].duration / 3600 * 4) / 4;
