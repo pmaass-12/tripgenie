@@ -1,6 +1,7 @@
 [build]
   publish = "."
   functions = "netlify/functions"
+  command = "npm install --omit=dev"
 
 # NOTE: CORS headers are intentionally NOT set globally here.
 # Each function handles its own CORS, with origin-specific checks,
