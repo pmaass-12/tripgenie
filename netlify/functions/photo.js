@@ -75,12 +75,30 @@ exports.handler = async function (event, context) {
              body: JSON.stringify({ error: 'Forbidden' }) };
   }
 
+  /* ── GET ?action=health  — diagnostic endpoint ───────────────── */
+  if (event.httpMethod === 'GET' && (event.queryStringParameters || {}).action === 'health') {
+    return {
+      statusCode: 200,
+      headers: { 'Content-Type': 'application/json', ...corsHeaders(event) },
+      body: JSON.stringify({
+        ok: true,
+        hasBlobsContext: !!process.env.NETLIFY_BLOBS_CONTEXT,
+        hasSiteId:       !!process.env.SITE_ID,
+        nodeVersion:     process.version,
+        blobsPkg:        (() => { try { return require('@netlify/blobs/package.json').version; } catch(e) { return 'MISSING: ' + e.message; } })(),
+      }),
+    };
+  }
+
   /* Instantiate store inside the handler so Netlify's blobs context is available.
      Calling getStore at module level causes 502 on cold-start because the
-     NETLIFY_BLOBS_CONTEXT env is only injected during handler execution. */
+     NETLIFY_BLOBS_CONTEXT env is only injected during handler execution.
+     Pass siteID explicitly as some Netlify environments require it.          */
   let store;
   try {
-    store = getStore({ name: 'tripgenie-photos' });
+    const _storeOpts = { name: 'tripgenie-photos' };
+    if (process.env.SITE_ID) _storeOpts.siteID = process.env.SITE_ID;
+    store = getStore(_storeOpts);
   } catch (e) {
     console.error('getStore failed:', e.message);
     return {
