@@ -70,12 +70,7 @@ exports.handler = async function (event, context) {
     return { statusCode: 200, headers: corsHeaders(event), body: '' };
   }
 
-  if (!isOriginAllowed(event)) {
-    return { statusCode: 403, headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ error: 'Forbidden' }) };
-  }
-
-  /* ── GET ?action=health  — diagnostic endpoint ───────────────── */
+  /* ── GET ?action=health  — diagnostic endpoint (no origin check) ── */
   if (event.httpMethod === 'GET' && (event.queryStringParameters || {}).action === 'health') {
     return {
       statusCode: 200,
@@ -88,6 +83,11 @@ exports.handler = async function (event, context) {
         blobsPkg:        (() => { try { return require('@netlify/blobs/package.json').version; } catch(e) { return 'MISSING: ' + e.message; } })(),
       }),
     };
+  }
+
+  if (!isOriginAllowed(event)) {
+    return { statusCode: 403, headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({ error: 'Forbidden' }) };
   }
 
   /* Instantiate store inside the handler so Netlify's blobs context is available.
