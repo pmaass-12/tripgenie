@@ -14014,39 +14014,45 @@ function _galleryUpload(input) {
            EXIF chain — thumb canvas.onload almost always lost the race, so
            entry.thumb was null when saved → cloud had nothing to show other devices. */
         var _runExifThenSave = function() {
-          if (window.exifr && file.type.match(/^image\/(jpeg|jpg|tiff)/i)) {
-            exifr.parse(file, ['DateTimeOriginal','GPSLatitude','GPSLongitude','GPSLatitudeRef','GPSLongitudeRef'])
-              .then(function(exif) {
-                if (exif) {
-                  entry.exif = {};
-                  if (exif.latitude  != null) entry.exif.lat = exif.latitude;
-                  if (exif.longitude != null) entry.exif.lon = exif.longitude;
-                  if (exif.DateTimeOriginal) {
-                    var dt = exif.DateTimeOriginal;
-                    entry.exif.dt = dt instanceof Date ? dt.toISOString() : String(dt);
-                  }
-                  /* Async reverse geocode — fire and forget */
-                  if (entry.exif.lat != null && entry.exif.lon != null) {
-                    var geoUrl = 'https://nominatim.openstreetmap.org/reverse?lat=' + entry.exif.lat
-                      + '&lon=' + entry.exif.lon + '&format=json&zoom=12';
-                    fetch(geoUrl, { headers: { 'Accept-Language': 'en' } })
-                      .then(function(r2) { return r2.json(); })
-                      .then(function(geo) {
-                        if (geo && geo.address) {
-                          var city = geo.address.city || geo.address.town || geo.address.village || geo.address.county || '';
-                          var state2 = geo.address.state || '';
-                          entry.exif.locationName = [city, state2].filter(Boolean).join(', ');
-                          var poolEntry = appState.photoPool.find(function(p) { return p.id === entry.id; });
-                          if (poolEntry) {
-                            poolEntry.exif = entry.exif;
-                            try { saveState(appState); } catch(e2) {}
-                          }
-                        }
-                      }).catch(function() {});
-                  }
-                }
-                _doSave(entry);
-              }).catch(function() { _doSave(entry); });
+          if (window.exifr) {
+            /* Use exifr.gps() for reliable decimal GPS (works on JPEG + HEIC).
+               exifr.parse(file, ['GPSLatitude',...]) returns raw DMS arrays,
+               not decimal — gps() is the correct API for lat/lon.
+               Also drop the jpeg-only type gate so HEIC files are parsed too. */
+            Promise.all([
+              exifr.gps(file).catch(function() { return null; }),
+              exifr.parse(file, ['DateTimeOriginal']).catch(function() { return null; })
+            ]).then(function(results) {
+              var gps      = results[0];
+              var exifMeta = results[1];
+              entry.exif = {};
+              if (gps && gps.latitude  != null) entry.exif.lat = gps.latitude;
+              if (gps && gps.longitude != null) entry.exif.lon = gps.longitude;
+              if (exifMeta && exifMeta.DateTimeOriginal) {
+                var dt = exifMeta.DateTimeOriginal;
+                entry.exif.dt = dt instanceof Date ? dt.toISOString() : String(dt);
+              }
+              /* Async reverse geocode — fire and forget */
+              if (entry.exif.lat != null && entry.exif.lon != null) {
+                var geoUrl = 'https://nominatim.openstreetmap.org/reverse?lat=' + entry.exif.lat
+                  + '&lon=' + entry.exif.lon + '&format=json&zoom=12';
+                fetch(geoUrl, { headers: { 'Accept-Language': 'en' } })
+                  .then(function(r2) { return r2.json(); })
+                  .then(function(geo) {
+                    if (geo && geo.address) {
+                      var city = geo.address.city || geo.address.town || geo.address.village || geo.address.county || '';
+                      var state2 = geo.address.state || '';
+                      entry.exif.locationName = [city, state2].filter(Boolean).join(', ');
+                      var poolEntry = appState.photoPool.find(function(p) { return p.id === entry.id; });
+                      if (poolEntry) {
+                        poolEntry.exif = entry.exif;
+                        try { saveState(appState); } catch(e2) {}
+                      }
+                    }
+                  }).catch(function() {});
+              }
+              _doSave(entry);
+            }).catch(function() { _doSave(entry); });
           } else {
             _doSave(entry);
           }
@@ -14592,41 +14598,45 @@ function handlePhotoUpload(event) {
           wrap.appendChild(exifLabel);
           preview.appendChild(wrap);
 
-          // Try EXIF extraction
-          if (window.exifr && file.type.match(/^image\/(jpeg|jpg|tiff)/i)) {
-            exifr.parse(file, ['DateTimeOriginal','GPSLatitude','GPSLongitude','GPSLatitudeRef','GPSLongitudeRef'])
-              .then(function(exif) {
-                if (!exif) return;
-                photoObj.exif = {};
-                if (exif.latitude != null) photoObj.exif.lat = exif.latitude;
-                if (exif.longitude != null) photoObj.exif.lon = exif.longitude;
-                if (exif.DateTimeOriginal) {
-                  var dt = exif.DateTimeOriginal;
-                  photoObj.exif.dt = dt instanceof Date ? dt.toISOString() : String(dt);
-                }
-                // Reverse geocode if GPS available
-                if (photoObj.exif.lat != null && photoObj.exif.lon != null) {
-                  var geocodeUrl = 'https://nominatim.openstreetmap.org/reverse?lat=' + photoObj.exif.lat
-                    + '&lon=' + photoObj.exif.lon + '&format=json&zoom=12';
-                  fetch(geocodeUrl, { headers: { 'Accept-Language': 'en' } })
-                    .then(function(r2) { return r2.json(); })
-                    .then(function(geo) {
-                      if (geo && geo.address) {
-                        var city = geo.address.city || geo.address.town || geo.address.village || geo.address.county || '';
-                        var state = geo.address.state || '';
-                        photoObj.exif.locationName = [city, state].filter(Boolean).join(', ');
-                        exifLabel.textContent = photoObj.exif.locationName || '';
-                      }
-                    }).catch(function() {});
-                }
-                // Show datetime if available
-                if (photoObj.exif.dt && !photoObj.exif.locationName) {
-                  try {
-                    var d2 = new Date(photoObj.exif.dt);
-                    exifLabel.textContent = d2.toLocaleDateString('en-US', { month:'short', day:'numeric' });
-                  } catch(e2) {}
-                }
-              }).catch(function() {});
+          // Try EXIF extraction — use exifr.gps() for decimal coords (works on JPEG + HEIC)
+          if (window.exifr) {
+            Promise.all([
+              exifr.gps(file).catch(function() { return null; }),
+              exifr.parse(file, ['DateTimeOriginal']).catch(function() { return null; })
+            ]).then(function(results) {
+              var gps      = results[0];
+              var exifMeta = results[1];
+              if (!gps && !exifMeta) return;
+              photoObj.exif = {};
+              if (gps && gps.latitude  != null) photoObj.exif.lat = gps.latitude;
+              if (gps && gps.longitude != null) photoObj.exif.lon = gps.longitude;
+              if (exifMeta && exifMeta.DateTimeOriginal) {
+                var dt = exifMeta.DateTimeOriginal;
+                photoObj.exif.dt = dt instanceof Date ? dt.toISOString() : String(dt);
+              }
+              // Reverse geocode if GPS available
+              if (photoObj.exif.lat != null && photoObj.exif.lon != null) {
+                var geocodeUrl = 'https://nominatim.openstreetmap.org/reverse?lat=' + photoObj.exif.lat
+                  + '&lon=' + photoObj.exif.lon + '&format=json&zoom=12';
+                fetch(geocodeUrl, { headers: { 'Accept-Language': 'en' } })
+                  .then(function(r2) { return r2.json(); })
+                  .then(function(geo) {
+                    if (geo && geo.address) {
+                      var city = geo.address.city || geo.address.town || geo.address.village || geo.address.county || '';
+                      var state = geo.address.state || '';
+                      photoObj.exif.locationName = [city, state].filter(Boolean).join(', ');
+                      exifLabel.textContent = photoObj.exif.locationName || '';
+                    }
+                  }).catch(function() {});
+              }
+              // Show datetime if available
+              if (photoObj.exif.dt && !photoObj.exif.locationName) {
+                try {
+                  var d2 = new Date(photoObj.exif.dt);
+                  exifLabel.textContent = d2.toLocaleDateString('en-US', { month:'short', day:'numeric' });
+                } catch(e2) {}
+              }
+            }).catch(function() {});
           }
         }
       };
@@ -15076,6 +15086,62 @@ function _galleryUpgradeFromIDB(container) {
   setTimeout(runBatch, 200);
 }
 
+/* Retroactively extract GPS EXIF from photos that have a blobUrl but no exif.lat.
+   This fixes photos uploaded before the exifr.gps() fix — they have GPS in the
+   image file but the old code used the wrong API and missed it.
+   Fetches full-res from Netlify Blob CDN, parses GPS, reverse-geocodes, saves. */
+function _migrateExifFromBlobs() {
+  if (!window.exifr || !appState.photoPool || !appState.photoPool.length) return;
+  var needsExif = appState.photoPool.filter(function(p) {
+    return p.blobUrl && (!p.exif || (p.exif.lat == null && p.exif.lon == null));
+  });
+  if (!needsExif.length) return;
+  var _saved = 0;
+  needsExif.forEach(function(poolEntry) {
+    fetch(poolEntry.blobUrl)
+      .then(function(r) { return r.blob(); })
+      .then(function(blob) {
+        return Promise.all([
+          exifr.gps(blob).catch(function() { return null; }),
+          exifr.parse(blob, ['DateTimeOriginal']).catch(function() { return null; })
+        ]);
+      })
+      .then(function(results) {
+        var gps = results[0], exifMeta = results[1];
+        if (!gps && !exifMeta) return;
+        if (!poolEntry.exif) poolEntry.exif = {};
+        if (gps && gps.latitude  != null) poolEntry.exif.lat = gps.latitude;
+        if (gps && gps.longitude != null) poolEntry.exif.lon = gps.longitude;
+        if (exifMeta && exifMeta.DateTimeOriginal) {
+          var dt = exifMeta.DateTimeOriginal;
+          poolEntry.exif.dt = dt instanceof Date ? dt.toISOString() : String(dt);
+        }
+        if (poolEntry.exif.lat != null && poolEntry.exif.lon == null) return; // partial — skip geocode
+        if (poolEntry.exif.lat != null) {
+          fetch('https://nominatim.openstreetmap.org/reverse?lat=' + poolEntry.exif.lat
+            + '&lon=' + poolEntry.exif.lon + '&format=json&zoom=12', { headers: { 'Accept-Language': 'en' } })
+            .then(function(r2) { return r2.json(); })
+            .then(function(geo) {
+              if (geo && geo.address) {
+                var city = geo.address.city || geo.address.town || geo.address.village || geo.address.county || '';
+                poolEntry.exif.locationName = [city, geo.address.state || ''].filter(Boolean).join(', ');
+              }
+              _saved++;
+              try { saveState(appState); } catch(e) {}
+              if (_saved === needsExif.length) {
+                showToast('📍 Location data updated — refreshing gallery', 2000);
+                setTimeout(function() { renderGalleryTab(); }, 2100);
+              }
+            }).catch(function() {
+              _saved++;
+              try { saveState(appState); } catch(e) {}
+            });
+        }
+      })
+      .catch(function() {});
+  });
+}
+
 /* Auto-migrate stranded photos to Netlify Blobs.
    "Stranded" = pool entry with no blobThumbUrl but IDB has the full-res data.
    This rescues photos that were uploaded before the Netlify Blob feature existed,
@@ -15403,6 +15469,7 @@ function renderGalleryTab() {
   /* Rescue any pre-blob photos that have IDB data but no cloud URL yet.
      Runs in background; swaps placeholder tiles → real images as blobs land. */
   setTimeout(_migrateStrandedPhotosToBlob, 800);
+  setTimeout(_migrateExifFromBlobs, 1200);  /* retroactively fix GPS on pre-fix uploads */
 
   /* ── 9. Init Leaflet map — Google Maps photo style ───────────────── */
   if (!hasGPS) return;
