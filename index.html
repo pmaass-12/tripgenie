@@ -17988,6 +17988,12 @@ function switchTab(tabId) {
   var panel  = document.getElementById('tab-' + tabId);
   if (navBtn) navBtn.classList.add('active');
   if (panel)  { panel.classList.remove('hidden'); panel.classList.add('active'); }
+  /* The map tab requires explicit height calculation + Leaflet invalidation after
+     the container becomes visible. switchToMap() handles this via initMainMap(),
+     so delegate to it instead of duplicating the logic.                         */
+  if (tabId === 'map' && typeof initMainMap === 'function') {
+    setTimeout(initMainMap, 100);
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════
