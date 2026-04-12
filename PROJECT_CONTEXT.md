@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-04-06 (Session 41)
+2026-04-11 (Session 41 continued)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -71,7 +71,15 @@ tripgenie/
 
 ## Recent Changes
 
-### Session 41 — 2026-04-11
+### Session 41 (continued) — 2026-04-11
+
+**Feat: Per-photo delete button in gallery grid**
+
+Each photo tile in the gallery grid now has a small `✕` button in the top-left corner. Tapping it calls `_deleteGalleryPhoto(photoId)` which: confirms with the user, removes from `appState.photoPool`, deletes from IDB, fires a Netlify Blob delete for both full-res and thumb keys, saves state, and re-renders the gallery. Uses `event.stopPropagation()` so tapping the ✕ does not open the lightbox.
+
+Only tiles where `p.photoId` is non-null get the button (pool photos, not embedded media). Button is 22×22px circle, semi-transparent black background, positioned top-left to avoid overlapping the ☁️ cloud badge (top-right).
+
+---
 
 **Feat: Netlify Blob Storage for cross-device photo access**
 

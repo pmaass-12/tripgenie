@@ -15185,6 +15185,7 @@ function renderGalleryTab() {
                   + '</div>'))
         + (p.isCloudThumb ? '<div style="position:absolute;top:3px;right:3px;background:rgba(0,0,0,.5);border-radius:6px;padding:2px 4px;font-size:.55rem;color:#fff;line-height:1;">☁️</div>' : '')
         + (capText ? '<div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.65));padding:4px 6px 4px;font-size:.56rem;color:#fff;line-height:1.3;">' + capText + '</div>' : '')
+        + (p.photoId ? '<button onclick="event.stopPropagation();_deleteGalleryPhoto(\'' + p.photoId + '\')" style="position:absolute;top:5px;left:5px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;border:none;cursor:pointer;font-size:.65rem;display:flex;align-items:center;justify-content:center;z-index:2;line-height:1;">✕</button>' : '')
         + '</div>';
     });
     html += '</div>';
@@ -15416,6 +15417,32 @@ function _setGalleryTabView(v) {
 function _setGalleryMapFilter(k) {
   _galleryMapFilter = (_galleryMapFilter === k) ? null : k; // toggle off if same key
   renderGalleryTab();
+}
+
+/* Delete a photo from the gallery pool.
+   Removes from appState.photoPool, cleans up IDB and Netlify Blobs,
+   then re-renders.  Only pool photos (those with an id) can be deleted here;
+   journal-entry photos must be removed from the journal instead.           */
+function _deleteGalleryPhoto(photoId) {
+  if (!photoId) return;
+  if (!confirm('Delete this photo? This cannot be undone.')) return;
+
+  if (!appState.photoPool) return;
+  var idx = -1;
+  for (var _di = 0; _di < appState.photoPool.length; _di++) {
+    if (appState.photoPool[_di].id === photoId) { idx = _di; break; }
+  }
+  if (idx === -1) return;
+
+  /* Clean up storage layers */
+  if (typeof _idbDelete === 'function') _idbDelete(photoId, null);
+  if (typeof _netlifyBlobDelete === 'function') _netlifyBlobDelete(photoId);
+
+  appState.photoPool.splice(idx, 1);
+  saveState(appState);
+  _gVisibleDayCount = 0; // reset cached count
+  renderGalleryTab();
+  showToast('🗑 Photo deleted', 1800);
 }
 
 function openGalleryPhoto(idx) {
