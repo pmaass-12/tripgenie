@@ -71,7 +71,18 @@ tripgenie/
 
 ## Recent Changes
 
-### Session 41 — 2026-04-06 (continued)
+### Session 41 — 2026-04-11
+
+**Feat: Apple Photos–style photo map in gallery**
+
+Gallery map markers upgraded from plain count circles to Apple Photos–style photo thumbnail markers:
+
+1. **Map taller**: height 220px → 340px, added box-shadow for depth.
+2. **Thumbnail markers**: Each location pin shows the first photo as a 52×52px rounded image square with a white border and triangular tail pointing to the GPS coordinate. Stack layer + count badge for multi-photo clusters.
+3. **Popup on tap**: Clicking a marker opens a Leaflet popup with location name, date, scrollable strip of up to 4 thumbnails, "+N more" note, and a "View all N photos ↓" button.
+4. **Active state**: Marker border and tail turn orange when that location is actively filtered.
+
+---
 
 **Fix: Wrong drive time modal title/data when tapping schedule drive separator**
 
