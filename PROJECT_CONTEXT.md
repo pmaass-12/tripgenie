@@ -71,6 +71,29 @@ tripgenie/
 
 ## Recent Changes
 
+### Session 44 — 2026-04-13
+
+**Fix: Black screen when clicking a photo to enlarge (first click)**
+
+Root cause: The tile click handler in `renderGalleryTab` passed `blobUrl ? null : photoId` — intentionally nulling out `photoId` when a Netlify blobUrl was present. This caused `_openMediaLightbox` to skip the IDB lookup and open with just the blobUrl. On the originating device where IDB has the full-res data URL, the blobUrl path sometimes renders black. When navigating with arrows, `_navTo` always reads `tile.dataset.photoId` directly and does the IDB lookup — which works. Fixed: always pass `photoId` unconditionally; `_openMediaLightbox` does IDB lookup and falls back to blobUrl if IDB has nothing. Both click paths (main gallery and stop-photos section) updated.
+
+**Fix: Wrong city label on photos (showing Moab for Joshua Tree photos)**
+
+Root cause: `_dateToLocation` fallback mapped photo dates to trip-itinerary locations. Photos taken at Joshua Tree with GPS data (but not yet geocoded) had dates that happened to match a Moab trip day, so they got the wrong label. Fixed: `_dateToLocation` is now only used when the photo has NO GPS data (`exif.lat == null && exif.lon == null`). Photos with GPS always show their geocoded `locationName` or nothing — never a spurious itinerary label.
+
+**Fix: Deleted photos coming back after page refresh (tombstone + smart-merge + immediate sync)**
+
+Root cause: Three layers of failure working together.
+1. `_smartMergeStates` unions photo pools from both sides. Any tab with stale state would re-add deleted photos when it received a realtime update.
+2. `_syncToSupabaseTrips` had a 1200ms debounce — a fast refresh before sync completed would restore from Supabase.
+
+Fixes:
+1. **Tombstone array** (`appState.deletedPhotoIds`): `_deleteGalleryPhoto` and `_galleryDeleteSelected` now record deleted photo IDs in `appState.deletedPhotoIds` before splicing from the pool and saving state.
+2. **Smart merge respects tombstones**: `_smartMergeStates` now builds a union of both sides' `deletedPhotoIds`, filters deleted IDs out of the base photoPool, and only unions photos that aren't tombstoned. Deletions are now permanent across all devices/tabs.
+3. **Immediate sync**: After deletion, `_syncToSupabaseTrips(appState, 0)` is called directly (bypass 1200ms debounce) so Supabase is updated before any possible page refresh.
+
+---
+
 ### Session 43b — 2026-04-12
 
 **Fix: MP4 videos not playing (three stacked bugs)**

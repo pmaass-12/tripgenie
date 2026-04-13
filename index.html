@@ -6019,8 +6019,17 @@ function _smartMergeStates(a, b) {
   m.aiSuggestions = m.aiSuggestions || [];
   _unionById(m.aiSuggestions, other.aiSuggestions, function(s) { return s.id; });
 
-  m.photoPool = m.photoPool || [];
-  _unionById(m.photoPool, other.photoPool, function(p) { return p.id; });
+  /* Build a combined tombstone set from BOTH sides — deletions are permanent */
+  var _deletedIds = {};
+  (m.deletedPhotoIds    || []).forEach(function(id) { _deletedIds[id] = true; });
+  (other.deletedPhotoIds || []).forEach(function(id) { _deletedIds[id] = true; });
+  m.deletedPhotoIds = Object.keys(_deletedIds);
+
+  m.photoPool = (m.photoPool || []).filter(function(p) { return !_deletedIds[p.id]; });
+  /* Union only photos that are NOT tombstoned — this prevents any device's stale state
+     from resurrecting photos that were intentionally deleted on another device/tab.   */
+  var _otherPoolFiltered = (other.photoPool || []).filter(function(p) { return !_deletedIds[p.id]; });
+  _unionById(m.photoPool, _otherPoolFiltered, function(p) { return p.id; });
   /* Restore full-res dataUrls from the local copy: cloud strips them to save space,
      so after merging we patch any entry that lost its dataUrl back from whichever
      side still has it (prevents photos "disappearing" after cloud round-trip).   */
@@ -15495,7 +15504,12 @@ function renderGalleryTab() {
         photoId:      poolPhoto.id || null,             /* IDB key — lightbox loads full-res from here */
         type:         _poolType,
         caption:      poolPhoto.caption || '',
-        location:     (exif && exif.locationName) || (stop ? _sn(stop) : '') || _dateToLocation[_pDate] || '',
+        location:     (exif && exif.locationName) || (stop ? _sn(stop) : '')
+                   /* Only use trip-itinerary date fallback when photo has NO GPS data.
+                      Photos with GPS that haven't been geocoded yet should show nothing
+                      rather than a wrong trip-stop label inferred from their date.    */
+                   || ((!exif || (exif.lat == null && exif.lon == null)) ? (_dateToLocation[_pDate] || '') : '')
+                   || '',
         date:         _pDate,
         day:          poolPhoto.dayNum,
         stopId:       poolPhoto.stopId || null,
@@ -15731,7 +15745,7 @@ function renderGalleryTab() {
         blobUrl || tile.dataset.mediaSrc,
         tile.dataset.mediaType,
         tile.dataset.mediaCap,
-        blobUrl ? null : photoId,
+        photoId,   /* always pass photoId — IDB lookup shows full-res, falls back to blobUrl */
         { tiles: _allTiles, idx: idx }   /* nav context for ← → swipe */
       );
     });
@@ -15933,7 +15947,7 @@ function _galleryUpdatePhotoSection(photos) {
   sec.querySelectorAll('[data-media-src]').forEach(function(tile) {
     tile.addEventListener('click', function() {
       var blobUrl = tile.dataset.blobUrl||null, photoId = tile.dataset.photoId||null;
-      _openMediaLightbox(blobUrl||tile.dataset.mediaSrc, tile.dataset.mediaType, tile.dataset.mediaCap, blobUrl?null:photoId);
+      _openMediaLightbox(blobUrl||tile.dataset.mediaSrc, tile.dataset.mediaType, tile.dataset.mediaCap, photoId);
     });
   });
   _galleryUpgradeFromIDB(sec);
@@ -16097,8 +16111,14 @@ function _deleteGalleryPhoto(photoId) {
   if (typeof _idbDelete === 'function') _idbDelete(photoId, null);
   if (typeof _netlifyBlobDelete === 'function') _netlifyBlobDelete(photoId);
 
+  /* Record tombstone BEFORE removing from pool so smart-merge never re-adds this photo */
+  appState.deletedPhotoIds = appState.deletedPhotoIds || [];
+  if (appState.deletedPhotoIds.indexOf(photoId) === -1) appState.deletedPhotoIds.push(photoId);
+
   appState.photoPool.splice(idx, 1);
   saveState(appState);
+  /* Flush immediately so a page refresh can't restore from Supabase before the sync lands */
+  if (_sbUser) _syncToSupabaseTrips(appState, 0);
   _gVisibleDayCount = 0; // reset cached count
   renderGalleryTab();
   showToast('🗑 Photo deleted', 1800);
@@ -16140,9 +16160,12 @@ function _galleryDeleteSelected() {
   if (!ids.length) return;
   if (!confirm('Delete ' + ids.length + ' photo' + (ids.length > 1 ? 's' : '') + '? This cannot be undone.')) return;
   if (!appState.photoPool) return;
+  appState.deletedPhotoIds = appState.deletedPhotoIds || [];
   ids.forEach(function(photoId) {
     if (typeof _idbDelete === 'function') _idbDelete(photoId, null);
     if (typeof _netlifyBlobDelete === 'function') _netlifyBlobDelete(photoId);
+    /* Record tombstone so smart-merge never re-adds these photos */
+    if (appState.deletedPhotoIds.indexOf(photoId) === -1) appState.deletedPhotoIds.push(photoId);
     for (var _i = appState.photoPool.length - 1; _i >= 0; _i--) {
       if (appState.photoPool[_i].id === photoId) { appState.photoPool.splice(_i, 1); break; }
     }
@@ -16150,6 +16173,8 @@ function _galleryDeleteSelected() {
   _gallerySelected = {};
   _gallerySelectMode = false;
   saveState(appState);
+  /* Flush immediately so page refresh can't restore deleted photos from Supabase */
+  if (_sbUser) _syncToSupabaseTrips(appState, 0);
   _gVisibleDayCount = 0;
   renderGalleryTab();
   showToast('🗑 ' + ids.length + ' photo' + (ids.length > 1 ? 's' : '') + ' deleted', 2000);
