@@ -13966,7 +13966,7 @@ function _galleryUpload(input) {
   var total = toProcess.length;
   if (total === 0) { _galleryUploadDone(0, dupes, input); return; }
 
-  var added = 0, failed = 0, processed = 0;
+  var added = 0, failed = 0, skippedVideos = 0;
 
   /* Process each file one at a time (sequential) so the user sees
      incremental progress and each photo is saved individually.     */
@@ -13974,14 +13974,23 @@ function _galleryUpload(input) {
     _galleryProgressToast(idx, total);
     if (idx >= total) {
       _galleryProgressToast(total, total);
+      if (skippedVideos > 0) {
+        showToast('🎬 ' + skippedVideos + ' video' + (skippedVideos > 1 ? 's' : '') + ' skipped — only photos are supported', 3200);
+      }
       _galleryUploadDone(added, dupes + failed, input);
       return;
     }
     var file = toProcess[idx];
+    /* Skip video files — only photos are supported in the gallery upload */
+    if (file.type.startsWith('video/') || /\.(mp4|mov|webm|avi|mkv|m4v)$/i.test(file.name)) {
+      skippedVideos++;
+      _processNext(idx + 1);
+      return;
+    }
     var reader = new FileReader();
     reader.onload = function(ev) {
       var rawUrl  = ev.target.result;
-      var isVideo = file.type.startsWith('video/');
+      var isVideo = false;
 
       function _afterCompress(dataUrl) {
         /* Use file.lastModified as timestamp so photos group by actual capture date,
