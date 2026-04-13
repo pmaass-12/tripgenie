@@ -13990,6 +13990,7 @@ function _galleryUpload(input) {
           id:        Date.now() + '_' + Math.random().toString(36).substr(2,6),
           dataUrl:   dataUrl,
           fileName:  file.name,
+          type:      isVideo ? 'video' : 'image',
           timestamp: new Date(file.lastModified || Date.now()).toISOString(),
           caption:   '',
           stopId:    null,
@@ -14264,16 +14265,29 @@ function _idbMigratePool() {
 }
 
 /* Compress a dataUrl image to a small thumbnail (≤200px, JPEG 0.45)
-   Returns a compressed base64 string via callback. Used for cloud sync. */
+   Returns a JPEG data URL via callback, or null on failure.
+   Handles JPEG/PNG/WebP natively; HEIC via createImageBitmap (OS decoder
+   on macOS/iOS) with heic2any (pure-JS) as cross-platform fallback.    */
 function _compressPhotoThumb(dataUrl, cb) {
-  /* dataUrl may be a data: URI, a blob: URL, or a CDN https: URL.
-     For HEIC data URIs (data:image/heic;base64,...) Chrome can't decode them
-     directly in an <img> — convert to a Blob URL first so the OS decoder runs. */
+  var MAX = 200;
   try {
+    /* Draw an ImageBitmap onto a canvas and return the JPEG data URL */
+    function _bitmapToJpeg(bitmap) {
+      try {
+        var ratio = Math.min(MAX / bitmap.width, MAX / bitmap.height, 1);
+        var c = document.createElement('canvas');
+        c.width  = Math.round(bitmap.width  * ratio);
+        c.height = Math.round(bitmap.height * ratio);
+        c.getContext('2d').drawImage(bitmap, 0, 0, c.width, c.height);
+        try { bitmap.close(); } catch(e2) {}
+        cb(c.toDataURL('image/jpeg', 0.45));
+      } catch(e3) { cb(null); }
+    }
+
+    /* Standard path — works for JPEG/PNG/WebP/GIF */
     function _drawAndReturn(src, cleanup) {
       var img = new Image();
       img.onload = function() {
-        var MAX = 200;
         var ratio = Math.min(MAX / img.width, MAX / img.height, 1);
         var c = document.createElement('canvas');
         c.width  = Math.round(img.width  * ratio);
@@ -14286,29 +14300,71 @@ function _compressPhotoThumb(dataUrl, cb) {
       img.src = src;
     }
 
-    /* HEIC/HEIF — use heic2any for reliable cross-platform JPEG conversion.
-       Chrome cannot decode HEIC on canvas natively; heic2any is pure JS. */
+    /* Convert a HEIC Blob to JPEG using a two-stage fallback:
+       Stage 1 — createImageBitmap: uses OS-level decoder on macOS/iOS (fast, no JS bundle)
+       Stage 2 — heic2any: pure-JS HEIC decoder (works on Windows/Linux/Android Chrome) */
+    function _heicBlobToJpeg(heicBlob) {
+      if (typeof createImageBitmap !== 'undefined') {
+        createImageBitmap(heicBlob)
+          .then(function(bmp) { _bitmapToJpeg(bmp); })
+          .catch(function() {
+            /* OS decoder failed — try heic2any JS decoder */
+            if (typeof heic2any !== 'undefined') {
+              heic2any({ blob: heicBlob, toType: 'image/jpeg', quality: 0.85 })
+                .then(function(jpegBlob) {
+                  var jpegUrl = URL.createObjectURL(jpegBlob);
+                  _drawAndReturn(jpegUrl, function() { URL.revokeObjectURL(jpegUrl); });
+                })
+                .catch(function() { cb(null); });
+            } else { cb(null); }
+          });
+      } else if (typeof heic2any !== 'undefined') {
+        heic2any({ blob: heicBlob, toType: 'image/jpeg', quality: 0.85 })
+          .then(function(jpegBlob) {
+            var jpegUrl = URL.createObjectURL(jpegBlob);
+            _drawAndReturn(jpegUrl, function() { URL.revokeObjectURL(jpegUrl); });
+          })
+          .catch(function() { cb(null); });
+      } else { cb(null); }
+    }
+
+    /* ── Route by source type ───────────────────────────────────────── */
+
+    /* HEIC/HEIF data URI — decode before canvas */
     if (dataUrl && dataUrl.startsWith('data:image/hei')) {
       var _b64h = dataUrl.split(',')[1];
       if (_b64h) {
         var _binh = atob(_b64h), _bytesh = new Uint8Array(_binh.length);
         for (var _hi = 0; _hi < _binh.length; _hi++) _bytesh[_hi] = _binh.charCodeAt(_hi);
-        var _heicBlob = new Blob([_bytesh], { type: 'image/heic' });
-        if (typeof heic2any !== 'undefined') {
-          heic2any({ blob: _heicBlob, toType: 'image/jpeg', quality: 0.85 })
-            .then(function(jpegBlob) {
-              var _jpegUrl = URL.createObjectURL(jpegBlob);
-              _drawAndReturn(_jpegUrl, function() { URL.revokeObjectURL(_jpegUrl); });
-            })
-            .catch(function() { cb(null); });
-          return;
-        }
-        /* heic2any not available — try native blob URL as last resort */
-        var _objUrlH = URL.createObjectURL(_heicBlob);
-        _drawAndReturn(_objUrlH, function() { URL.revokeObjectURL(_objUrlH); });
+        _heicBlobToJpeg(new Blob([_bytesh], { type: 'image/heic' }));
         return;
       }
     }
+
+    /* blob:// or https:// — try native img first; on failure try heic2any fallback
+       (covers HEIC served from Netlify CDN as blob:// or direct URL)          */
+    if (dataUrl && !dataUrl.startsWith('data:')) {
+      var _urlImg = new Image();
+      _urlImg.onload = function() {
+        var ratio = Math.min(MAX / _urlImg.width, MAX / _urlImg.height, 1);
+        var c = document.createElement('canvas');
+        c.width  = Math.round(_urlImg.width  * ratio);
+        c.height = Math.round(_urlImg.height * ratio);
+        c.getContext('2d').drawImage(_urlImg, 0, 0, c.width, c.height);
+        cb(c.toDataURL('image/jpeg', 0.45));
+      };
+      _urlImg.onerror = function() {
+        /* Native decode failed (likely HEIC); fetch and try heic2any */
+        fetch(dataUrl)
+          .then(function(r) { return r.blob(); })
+          .then(function(b) { _heicBlobToJpeg(b); })
+          .catch(function() { cb(null); });
+      };
+      _urlImg.src = dataUrl;
+      return;
+    }
+
+    /* Standard data: URI (JPEG/PNG/WebP) */
     _drawAndReturn(dataUrl, null);
   } catch(e) { cb(null); }
 }
@@ -14997,11 +15053,12 @@ function cancelJournalEntryEdit(id) {
 }
 
 /* ── PHOTO GALLERY ───────────────────────────────────────────────── */
-var _galleryFilter    = 'all';
-var _galleryTabView   = 'grid';   // 'grid' | 'map'
-var _galleryMapFilter = null;     // location cluster key string, or null = show all
-var _gallerySelectMode = false;   // true = multi-select mode active
-var _gallerySelected   = {};      // photoId → true when checked
+var _galleryFilter        = 'all';
+var _galleryTabView       = 'grid';   // 'grid' | 'map'
+var _galleryMapFilter     = null;     // location cluster key string, or null = show all
+var _galleryLocationLabel = null;     // label string from dropdown filter, or null = show all
+var _gallerySelectMode    = false;    // true = multi-select mode active
+var _gallerySelected      = {};       // photoId → true when checked
 
 function openPlateGallery() {
   var modal = document.getElementById('plate-gallery-modal');
@@ -15188,7 +15245,7 @@ function _migrateStrandedPhotosToBlob() {
   if (typeof _idbGet !== 'function' || typeof _netlifyBlobUpload !== 'function') return;
 
   var stranded = appState.photoPool.filter(function(p) {
-    return p.id && !p.blobThumbUrl;
+    return p.id && !p.blobThumbUrl && p.type !== 'video';
   });
   if (!stranded.length) return;
 
@@ -15287,11 +15344,48 @@ function _migrateStrandedPhotosToBlob() {
               });
               }); // end _compressBlob
             }
-            /* HEIC blobs: convert to JPEG with heic2any before canvas drawing */
-            if (blob.type && blob.type.match(/heic|heif/i) && typeof heic2any !== 'undefined') {
+            /* HEIC blobs: try createImageBitmap (OS decoder) then heic2any before canvas */
+            var _isHeicBlob = blob.type && blob.type.match(/heic|heif/i);
+            if (_isHeicBlob && typeof createImageBitmap !== 'undefined') {
+              createImageBitmap(blob)
+                .then(function(bmp) {
+                  /* OS decoder worked — draw on canvas directly */
+                  try {
+                    var _mig_r = Math.min(200 / bmp.width, 200 / bmp.height, 1);
+                    var _mig_c = document.createElement('canvas');
+                    _mig_c.width  = Math.round(bmp.width  * _mig_r);
+                    _mig_c.height = Math.round(bmp.height * _mig_r);
+                    _mig_c.getContext('2d').drawImage(bmp, 0, 0, _mig_c.width, _mig_c.height);
+                    try { bmp.close(); } catch(e2) {}
+                    var _thumbDU = _mig_c.toDataURL('image/jpeg', 0.45);
+                    // Inline upload (skip _compressBlob round-trip)
+                    if (!_thumbDU) { _saveIfDone(); return; }
+                    var _mm = { fileName: poolEntry.fileName||'', timestamp: poolEntry.timestamp||'', stopId: poolEntry.stopId != null ? String(poolEntry.stopId) : '' };
+                    _netlifyBlobUpload(poolEntry.id, null, _thumbDU, _mm, function(bThumbUrl) {
+                      if (bThumbUrl) poolEntry.blobThumbUrl = bThumbUrl;
+                      poolEntry.thumb = null; poolEntry.dataUrl = null;
+                      _saveIfDone();
+                      var _tile = document.querySelector('[data-photo-id="' + poolEntry.id + '"]');
+                      if (_tile && bThumbUrl) {
+                        var _ph = _tile.querySelector('div[style*="Syncing"]') || _tile.querySelector('div[style*="linear-gradient"]');
+                        if (_ph) { var _i = document.createElement('img'); _i.src = bThumbUrl; _i.style.cssText = 'width:100%;height:100%;object-fit:cover;'; _i.loading='lazy'; _tile.replaceChild(_i, _ph); }
+                        _tile.dataset.mediaSrc = bThumbUrl;
+                      }
+                    });
+                  } catch(e3) { _compressBlob(blob); }
+                })
+                .catch(function() {
+                  /* OS decoder failed — try heic2any */
+                  if (typeof heic2any !== 'undefined') {
+                    heic2any({ blob: blob, toType: 'image/jpeg', quality: 0.85 })
+                      .then(function(jpegBlob) { _compressBlob(jpegBlob); })
+                      .catch(function() { _saveIfDone(); });
+                  } else { _saveIfDone(); }
+                });
+            } else if (_isHeicBlob && typeof heic2any !== 'undefined') {
               heic2any({ blob: blob, toType: 'image/jpeg', quality: 0.85 })
                 .then(function(jpegBlob) { _compressBlob(jpegBlob); })
-                .catch(function() { _compressBlob(blob); }); // fallback to native
+                .catch(function() { _saveIfDone(); });
             } else {
               _compressBlob(blob);
             }
@@ -15358,14 +15452,17 @@ function renderGalleryTab() {
          Priority: Netlify Blob thumb URL (works on any device) → local thumb
          data URL → local full-res data URL → nothing (skipped unless IDB key exists).
          Full-res for the lightbox: Netlify Blob URL → IDB on-demand.            */
-      var _poolSrc = poolPhoto.blobThumbUrl || poolPhoto.thumb || poolPhoto.dataUrl;
+      var _poolType = poolPhoto.type
+          || (/\.(mp4|mov|webm|avi|mkv|m4v)$/i.test(poolPhoto.fileName||'') ? 'video' : 'image');
+      var _poolSrc = poolPhoto.blobThumbUrl || poolPhoto.thumb || poolPhoto.dataUrl
+                   || (_poolType === 'video' ? (poolPhoto.blobUrl || '') : '');
       if (!_poolSrc && !poolPhoto.id) return; // no image data at all — skip
       allPhotos.push({
         src:          _poolSrc || '',
         blobUrl:      poolPhoto.blobUrl      || null,   /* full-res Netlify Blob URL (any device) */
         blobThumbUrl: poolPhoto.blobThumbUrl || null,   /* thumb Netlify Blob URL */
         photoId:      poolPhoto.id || null,             /* IDB key — lightbox loads full-res from here */
-        type:         'image',
+        type:         _poolType,
         caption:      poolPhoto.caption || '',
         location:     (exif && exif.locationName) || (stop ? _sn(stop) : ''),
         date:         (exif && exif.dt) ? exif.dt.split('T')[0] : (poolPhoto.timestamp ? poolPhoto.timestamp.split('T')[0] : ''),
@@ -15414,18 +15511,21 @@ function renderGalleryTab() {
   var hasGPS = groupKeys.length > 0;
 
   /* ── 4. Header ───────────────────────────────────────────────────── */
-  /* Build location options for dropdown */
+  /* Build location options for dropdown — deduplicate by label so
+     "Monterey County, California" only appears once even if multiple
+     GPS clusters share the same reverse-geocoded location name.     */
   var _locOptions = '<option value="">📍 All locations</option>';
   if (hasGPS) {
-    var _locNames = [];
+    var _seenLabels = {};
+    var _locLabels  = [];
     groupKeys.forEach(function(k) {
       var lbl = locationGroups[k].label;
-      if (lbl) _locNames.push({ key: k, label: lbl });
+      if (lbl && !_seenLabels[lbl]) { _seenLabels[lbl] = true; _locLabels.push(lbl); }
     });
-    _locNames.sort(function(a,b) { return a.label.localeCompare(b.label); });
-    _locNames.forEach(function(loc) {
-      var sel = (_galleryMapFilter === loc.key) ? ' selected' : '';
-      _locOptions += '<option value="' + loc.key + '"' + sel + '>' + loc.label + '</option>';
+    _locLabels.sort(function(a,b) { return a.localeCompare(b); });
+    _locLabels.forEach(function(lbl) {
+      var sel = (_galleryLocationLabel === lbl) ? ' selected' : '';
+      _locOptions += '<option value="' + lbl.replace(/"/g,'&quot;') + '"' + sel + '>' + lbl + '</option>';
     });
   }
   var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">'
@@ -15487,10 +15587,20 @@ function renderGalleryTab() {
           + '<div id="gallery-map-info" style="background:#fff;border:1px solid var(--border);border-top:none;border-radius:0 0 16px 16px;padding:0;margin-bottom:18px;overflow:hidden;"></div>';
   }
 
-  /* ── 6. Photos to display (filtered by location if map pin clicked) ─ */
-  var visPhotos = (hasGPS && _galleryMapFilter && locationGroups[_galleryMapFilter])
-    ? locationGroups[_galleryMapFilter].photos
-    : allPhotos;
+  /* ── 6. Photos to display (filtered by location dropdown or map pin) ─ */
+  var visPhotos;
+  if (_galleryLocationLabel) {
+    /* Dropdown filter: match ALL photos whose locationName equals the selected label */
+    visPhotos = allPhotos.filter(function(p) {
+      return (p.exif && p.exif.locationName) === _galleryLocationLabel
+          || p.location === _galleryLocationLabel;
+    });
+  } else if (hasGPS && _galleryMapFilter && locationGroups[_galleryMapFilter]) {
+    /* Map pin filter: use the exact cluster key */
+    visPhotos = locationGroups[_galleryMapFilter].photos;
+  } else {
+    visPhotos = allPhotos;
+  }
 
   /* ── 6b. Select-mode action bar ─────────────────────────────────── */
   if (_gallerySelectMode) {
@@ -15797,7 +15907,8 @@ function _galleryUpdatePhotoSection(photos) {
 }
 
 function _galleryResetMapFilter() {
-  _galleryMapFilter = null;
+  _galleryMapFilter     = null;
+  _galleryLocationLabel = null;
   var _infoEl = document.getElementById('gallery-map-info');
   if (_infoEl) _infoEl.innerHTML = '';
   var _allPhotos = window._galleryAllPhotos || [];
@@ -16034,8 +16145,9 @@ function _galleryShareSelected() {
 }
 
 /* ── Location dropdown filter ───────────────────────────────────────── */
-function _gallerySetLocationFilter(key) {
-  _galleryMapFilter = key || null;
+function _gallerySetLocationFilter(label) {
+  _galleryLocationLabel = label || null;
+  _galleryMapFilter = null; // clear map-pin filter when dropdown is used
   renderGalleryTab();
   /* Scroll down past the map to the photos */
   setTimeout(function() {
@@ -16055,7 +16167,13 @@ function openGalleryPhoto(idx) {
    navContext: optional { tiles: NodeList/Array of [data-media-src] elements, idx: currentIndex }
    If omitted, single-photo mode (no arrows).                                               */
 function _openMediaLightbox(src, type, caption, photoId, navContext) {
-  if (photoId && type !== 'video') {
+  /* Videos play directly from src/blobUrl — no IDB lookup needed */
+  if (type === 'video') {
+    _doOpenMediaLightbox(src, type, caption, navContext);
+    return;
+  }
+  /* Images: prefer full-res from IDB on the originating device */
+  if (photoId) {
     _idbGet(photoId, function(fullSrc) {
       _doOpenMediaLightbox(fullSrc || src, type, caption, navContext);
     });
@@ -16149,12 +16267,19 @@ function _doOpenMediaLightbox(src, type, caption, navContext) {
     capEl.textContent = newCap;
     counterEl.textContent = (_idx + 1) + ' / ' + _tiles.length;
 
-    /* Slide animation */
-    var dir = (newIdx > _idx - 1) ? 1 : -1; /* simplified — just fade */
+    /* Fade out, rebuild element if type changes (image↔video), then fade in */
     mediaEl.style.opacity = '0';
     mediaEl.style.transition = 'opacity .15s';
     setTimeout(function() {
-      if (newPid && newType !== 'video') {
+      var currentTag = mediaEl.tagName === 'VIDEO' ? 'video' : 'image';
+      if (currentTag !== newType) {
+        /* Type changed — replace the element entirely */
+        var newEl = _buildMedia(newSrc, newType);
+        newEl.style.opacity = '0';
+        wrap.replaceChild(newEl, mediaEl);
+        mediaEl = newEl;
+        setTimeout(function() { mediaEl.style.opacity = '1'; }, 50);
+      } else if (newPid && newType !== 'video') {
         _idbGet(newPid, function(fullSrc) {
           mediaEl.src = fullSrc || newSrc;
           mediaEl.style.opacity = '1';
