@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-04-12 (Session 42)
+2026-04-12 (Session 43)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -70,6 +70,22 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 43 — 2026-04-12
+
+**Fix: HEIC migration — cache bust + client-side HEIC fallback**
+
+Root cause of "Syncing..." persisting after sharp deployment: two separate bugs.
+
+1. **Browser cache**: `fetch(poolEntry.blobUrl)` was returning the old HEIC blob cached as `immutable` from before sharp was deployed. Fixed by adding `{ cache: 'no-store' }` to force a fresh request.
+
+2. **HEIC blob not detected**: `_compressBlob(blob)` passed a blob URL to `_compressPhotoThumb`, but that function only checks for HEIC on `data:image/hei...` data URLs — a blob URL bypasses the HEIC branch and silently fails on canvas `drawImage`. Fixed by adding explicit `b.type` check in `_compressBlob`: if HEIC, tries `createImageBitmap` (OS decoder) first, then `heic2any`, then recursively calls `_compressBlob` with the resulting JPEG blob.
+
+3. **crossorigin="anonymous"** added to heic2any `<script>` tag so future "Script error." messages show the actual error details instead of the browser's sanitized cross-origin placeholder.
+
+These changes are in `index.html` only.
+
+---
 
 ### Session 42 — 2026-04-12
 

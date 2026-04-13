@@ -15,7 +15,7 @@
   <!-- NOTE: must use unpkg.com (not jsdelivr) — jsdelivr serves .cjs with wrong MIME type -->
   <script src="https://unpkg.com/exifr@7.1.3/dist/lite.umd.js" onerror="console.warn('exifr failed to load — photo EXIF reading unavailable')"></script>
   <!-- heic2any: pure-JS HEIC→JPEG converter (Chrome cannot draw HEIC on canvas natively) -->
-  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" onerror="console.warn('heic2any failed to load — HEIC thumbnails may not generate')"></script>
+  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" crossorigin="anonymous" onerror="console.warn('heic2any failed to load — HEIC thumbnails may not generate')"></script>
   <!-- supabase-js v2 — exposes window.supabase.createClient() used by _initSbClient() -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -15267,16 +15267,13 @@ function _migrateStrandedPhotosToBlob() {
         _doThumbUpload(fullDataUrl);
       } else {
         /* Not in local IDB — fetch full-res from Netlify Blob CDN.
-           For HEIC blobs, run heic2any first to get a JPEG we can draw on canvas. */
-        fetch(poolEntry.blobUrl)
+           cache:'no-store' bypasses any cached HEIC blob from before sharp was deployed;
+           the server now converts HEIC→JPEG via sharp, so we should get a JPEG back.
+           _compressBlob also has a client-side HEIC fallback in case sharp is unavailable. */
+        fetch(poolEntry.blobUrl, { cache: 'no-store' })
           .then(function(r) { return r.blob(); })
           .then(function(blob) {
-            function _compressBlob(b) {
-              var objUrl = URL.createObjectURL(b);
-              _compressPhotoThumb(objUrl, function(thumbDataUrl) {
-                URL.revokeObjectURL(objUrl);
-                if (!thumbDataUrl) { _saveIfDone(); return; }
-              /* Upload only the new JPEG thumb — full-res is already in Netlify Blobs */
+            function _uploadThumb(thumbDataUrl) {
               var _meta = {
                 fileName:  poolEntry.fileName  || '',
                 timestamp: poolEntry.timestamp || '',
@@ -15300,11 +15297,42 @@ function _migrateStrandedPhotosToBlob() {
                   tile.dataset.mediaSrc = bThumbUrl;
                 }
               });
-              }); // end _compressBlob
             }
-            /* The Netlify photo function now converts HEIC→JPEG server-side,
-               so fetched blobs are always JPEG.  Pass directly to _compressBlob.
-               (Legacy HEIC blobs also get converted by the GET handler via sharp.) */
+            function _compressBlob(b) {
+              /* If still HEIC (sharp unavailable server-side), convert client-side.
+                 Try createImageBitmap (OS decoder, works in Chrome/Safari on macOS/iOS)
+                 then fall back to heic2any (pure-JS).  On success, recurse with JPEG blob. */
+              if (b.type && /^image\/(heic|heif)/i.test(b.type)) {
+                var _tryHeic2any = function() {
+                  if (typeof heic2any !== 'undefined') {
+                    heic2any({ blob: b, toType: 'image/jpeg', quality: 0.9 })
+                      .then(function(j) { _compressBlob(j); })
+                      .catch(function() { _saveIfDone(); });
+                  } else { _saveIfDone(); }
+                };
+                if (typeof createImageBitmap !== 'undefined') {
+                  createImageBitmap(b)
+                    .then(function(bmp) {
+                      var c = document.createElement('canvas');
+                      c.width = bmp.width; c.height = bmp.height;
+                      c.getContext('2d').drawImage(bmp, 0, 0);
+                      try { bmp.close(); } catch(e2) {}
+                      c.toBlob(function(jpgBlob) { _compressBlob(jpgBlob); }, 'image/jpeg', 0.9);
+                    })
+                    .catch(_tryHeic2any);
+                  return;
+                }
+                _tryHeic2any();
+                return;
+              }
+              /* Non-HEIC blob (JPEG/PNG/etc) — create objectURL and compress to 200px thumb */
+              var objUrl = URL.createObjectURL(b);
+              _compressPhotoThumb(objUrl, function(thumbDataUrl) {
+                URL.revokeObjectURL(objUrl);
+                if (!thumbDataUrl) { _saveIfDone(); return; }
+                _uploadThumb(thumbDataUrl);
+              });
+            }
             _compressBlob(blob);
           })
           .catch(function() { _saveIfDone(); });
