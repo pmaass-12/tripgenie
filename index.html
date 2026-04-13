@@ -15411,6 +15411,25 @@ function renderGalleryTab() {
      This runs once per session, frees up quota, and allows more photos.   */
   _idbMigratePool();
 
+  /* ── 0. Build date→location lookup from trip itinerary ─────────────
+     For photos without GPS EXIF we fall back to the stop the family was
+     at on that date (e.g., every photo taken on 2026-04-02 gets
+     "Cambria, CA" even if the converter stripped GPS metadata).        */
+  var _dateToLocation = {};
+  (function() {
+    var _activeDays  = (appState.customTripData && appState.customTripData.days)  || TRIP_DAYS;
+    var _activeStops = (appState.customTripData && appState.customTripData.stops) || TRIP_STOPS;
+    var _stopLabel   = {};
+    _activeStops.forEach(function(s) {
+      _stopLabel[s.id] = (s.city || s.name || '') + (s.state ? ', ' + s.state : '');
+    });
+    _activeDays.forEach(function(d) {
+      if (d.date && d.stopId && _stopLabel[d.stopId]) {
+        _dateToLocation[d.date] = _stopLabel[d.stopId];
+      }
+    });
+  })();
+
   /* ── 1. Collect all photos from journal entries + photoPool ─────── */
   var allPhotos = [];
   _journalEntries.forEach(function(entry) {
@@ -15422,7 +15441,7 @@ function renderGalleryTab() {
           src:      src,
           type:     (p && p.type) ? p.type : (src && src.startsWith('data:video') ? 'video' : 'image'),
           caption:  (p && p.caption) || '',
-          location: entry.location || entry.stopName || '',
+          location: entry.location || entry.stopName || _dateToLocation[entry.date] || '',
           date:     entry.date || '',
           day:      entry.day,
           stopId:   entry.stopId || null,   /* needed for map fallback when no GPS EXIF */
@@ -15437,7 +15456,7 @@ function renderGalleryTab() {
           src:          thumb,
           type:         'image',
           caption:      '☁️ ' + (entry.author || 'Family'),
-          location:     entry.location || '',
+          location:     entry.location || _dateToLocation[entry.date] || '',
           date:         entry.date || '',
           day:          entry.day,
           stopId:       entry.stopId || null,
@@ -15463,6 +15482,8 @@ function renderGalleryTab() {
       var _poolSrc = poolPhoto.blobThumbUrl || poolPhoto.thumb || poolPhoto.dataUrl
                    || (_poolType === 'video' ? (poolPhoto.blobUrl || '') : '');
       if (!_poolSrc && !poolPhoto.id) return; // no image data at all — skip
+      var _pDate = (exif && exif.dt) ? exif.dt.split('T')[0]
+                 : (poolPhoto.timestamp ? poolPhoto.timestamp.split('T')[0] : '');
       allPhotos.push({
         src:          _poolSrc || '',
         blobUrl:      poolPhoto.blobUrl      || null,   /* full-res Netlify Blob URL (any device) */
@@ -15470,8 +15491,8 @@ function renderGalleryTab() {
         photoId:      poolPhoto.id || null,             /* IDB key — lightbox loads full-res from here */
         type:         _poolType,
         caption:      poolPhoto.caption || '',
-        location:     (exif && exif.locationName) || (stop ? _sn(stop) : ''),
-        date:         (exif && exif.dt) ? exif.dt.split('T')[0] : (poolPhoto.timestamp ? poolPhoto.timestamp.split('T')[0] : ''),
+        location:     (exif && exif.locationName) || (stop ? _sn(stop) : '') || _dateToLocation[_pDate] || '',
+        date:         _pDate,
         day:          poolPhoto.dayNum,
         stopId:       poolPhoto.stopId || null,
         source:       'pool',
