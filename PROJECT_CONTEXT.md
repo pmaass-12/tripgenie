@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-04-11 (Session 41 continued)
+2026-04-12 (Session 42)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -70,6 +70,35 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 42 — 2026-04-12
+
+**Fix: HEIC thumbnails now use heic2any for reliable cross-platform conversion**
+
+Previous approach (createObjectURL on HEIC blob) failed in Chrome on most systems because the browser's canvas `drawImage` can't decode HEIC natively. Fixed by adding the `heic2any` pure-JS library (`cdn.jsdelivr.net/npm/heic2any@0.0.4`).
+
+Changes:
+1. Added `<script src="heic2any.min.js">` script tag after exifr.
+2. `_compressPhotoThumb`: when input starts with `data:image/hei`, uses heic2any to convert to JPEG blob → createObjectURL → canvas. Falls back to old blob URL path if heic2any not loaded.
+3. `_migrateStrandedPhotosToBlob` (blob-fetch path): wraps blob in `_compressBlob()` helper; if `blob.type` matches `heic|heif` and heic2any is available, converts to JPEG first, then passes JPEG blob to `_compressBlob`.
+
+**Feat: Gallery multi-select (delete/share selected photos)**
+
+New globals: `_gallerySelectMode` (boolean), `_gallerySelected` (photoId → true map).
+
+Header button "☑ Select" toggles select mode. When active it becomes "✕ Cancel" (orange). Sticky action bar appears above the photo grid showing: selected count, "Select all" toggle, "📤 Share (N)" and "🗑 Delete (N)" buttons (disabled when nothing selected).
+
+Tile rendering changes: in select mode, tiles show circular checkbox overlay (top-right, orange when selected). Clicking a tile calls `_galleryToggleTile(photoId)`. Lightbox is suppressed in select mode.
+
+New functions: `_galleryToggleSelectMode`, `_galleryToggleTile`, `_gallerySelectAll`, `_galleryDeleteSelected` (bulk delete + IDB/Blob cleanup), `_galleryShareSelected` (Web Share API or clipboard fallback).
+
+**Feat: Location city/state dropdown filter in gallery**
+
+A `<select>` dropdown appears in the gallery header (when GPS photos exist) showing all unique location names sorted alphabetically. Selecting a location calls `_gallerySetLocationFilter(key)` which sets `_galleryMapFilter` and re-renders, then smooth-scrolls to the photo grid. The dropdown reflects the current active filter (selected option matches).
+
+New function: `_gallerySetLocationFilter(key)`.
+
+---
 
 ### Session 41 (continued) — 2026-04-11
 

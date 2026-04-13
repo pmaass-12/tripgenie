@@ -14,6 +14,8 @@
   <!-- exifr: read GPS + datetime EXIF from uploaded photos -->
   <!-- NOTE: must use unpkg.com (not jsdelivr) — jsdelivr serves .cjs with wrong MIME type -->
   <script src="https://unpkg.com/exifr@7.1.3/dist/lite.umd.js" onerror="console.warn('exifr failed to load — photo EXIF reading unavailable')"></script>
+  <!-- heic2any: pure-JS HEIC→JPEG converter (Chrome cannot draw HEIC on canvas natively) -->
+  <script src="https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js" onerror="console.warn('heic2any failed to load — HEIC thumbnails may not generate')"></script>
   <!-- supabase-js v2 — exposes window.supabase.createClient() used by _initSbClient() -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
@@ -14284,15 +14286,26 @@ function _compressPhotoThumb(dataUrl, cb) {
       img.src = src;
     }
 
-    /* HEIC/HEIF data URIs need the blob URL path for native OS decoding */
+    /* HEIC/HEIF — use heic2any for reliable cross-platform JPEG conversion.
+       Chrome cannot decode HEIC on canvas natively; heic2any is pure JS. */
     if (dataUrl && dataUrl.startsWith('data:image/hei')) {
-      var _b64 = dataUrl.split(',')[1];
-      if (_b64) {
-        var _bin = atob(_b64), _bytes = new Uint8Array(_bin.length);
-        for (var i = 0; i < _bin.length; i++) _bytes[i] = _bin.charCodeAt(i);
-        var _blob = new Blob([_bytes], { type: 'image/heic' });
-        var _objUrl = URL.createObjectURL(_blob);
-        _drawAndReturn(_objUrl, function() { URL.revokeObjectURL(_objUrl); });
+      var _b64h = dataUrl.split(',')[1];
+      if (_b64h) {
+        var _binh = atob(_b64h), _bytesh = new Uint8Array(_binh.length);
+        for (var _hi = 0; _hi < _binh.length; _hi++) _bytesh[_hi] = _binh.charCodeAt(_hi);
+        var _heicBlob = new Blob([_bytesh], { type: 'image/heic' });
+        if (typeof heic2any !== 'undefined') {
+          heic2any({ blob: _heicBlob, toType: 'image/jpeg', quality: 0.85 })
+            .then(function(jpegBlob) {
+              var _jpegUrl = URL.createObjectURL(jpegBlob);
+              _drawAndReturn(_jpegUrl, function() { URL.revokeObjectURL(_jpegUrl); });
+            })
+            .catch(function() { cb(null); });
+          return;
+        }
+        /* heic2any not available — try native blob URL as last resort */
+        var _objUrlH = URL.createObjectURL(_heicBlob);
+        _drawAndReturn(_objUrlH, function() { URL.revokeObjectURL(_objUrlH); });
         return;
       }
     }
@@ -14987,6 +15000,8 @@ function cancelJournalEntryEdit(id) {
 var _galleryFilter    = 'all';
 var _galleryTabView   = 'grid';   // 'grid' | 'map'
 var _galleryMapFilter = null;     // location cluster key string, or null = show all
+var _gallerySelectMode = false;   // true = multi-select mode active
+var _gallerySelected   = {};      // photoId → true when checked
 
 function openPlateGallery() {
   var modal = document.getElementById('plate-gallery-modal');
@@ -15237,17 +15252,15 @@ function _migrateStrandedPhotosToBlob() {
         _doThumbUpload(fullDataUrl);
       } else {
         /* Not in local IDB — fetch full-res from Netlify Blob CDN.
-           Use createObjectURL (not readAsDataURL) so macOS/browser
-           native decoders handle HEIC → canvas works on Mac Chrome. */
+           For HEIC blobs, run heic2any first to get a JPEG we can draw on canvas. */
         fetch(poolEntry.blobUrl)
           .then(function(r) { return r.blob(); })
           .then(function(blob) {
-            var objUrl = URL.createObjectURL(blob);
-            /* _compressPhotoThumb with a blob:// URL works for HEIC on Mac Chrome
-               because the browser uses the OS image decoder, not a base64 parser. */
-            _compressPhotoThumb(objUrl, function(thumbDataUrl) {
-              URL.revokeObjectURL(objUrl);
-              if (!thumbDataUrl) { _saveIfDone(); return; }
+            function _compressBlob(b) {
+              var objUrl = URL.createObjectURL(b);
+              _compressPhotoThumb(objUrl, function(thumbDataUrl) {
+                URL.revokeObjectURL(objUrl);
+                if (!thumbDataUrl) { _saveIfDone(); return; }
               /* Upload only the new JPEG thumb — full-res is already in Netlify Blobs */
               var _meta = {
                 fileName:  poolEntry.fileName  || '',
@@ -15272,7 +15285,16 @@ function _migrateStrandedPhotosToBlob() {
                   tile.dataset.mediaSrc = bThumbUrl;
                 }
               });
-            });
+              }); // end _compressBlob
+            }
+            /* HEIC blobs: convert to JPEG with heic2any before canvas drawing */
+            if (blob.type && blob.type.match(/heic|heif/i) && typeof heic2any !== 'undefined') {
+              heic2any({ blob: blob, toType: 'image/jpeg', quality: 0.85 })
+                .then(function(jpegBlob) { _compressBlob(jpegBlob); })
+                .catch(function() { _compressBlob(blob); }); // fallback to native
+            } else {
+              _compressBlob(blob);
+            }
           })
           .catch(function() { _saveIfDone(); });
       }
@@ -15392,14 +15414,35 @@ function renderGalleryTab() {
   var hasGPS = groupKeys.length > 0;
 
   /* ── 4. Header ───────────────────────────────────────────────────── */
+  /* Build location options for dropdown */
+  var _locOptions = '<option value="">📍 All locations</option>';
+  if (hasGPS) {
+    var _locNames = [];
+    groupKeys.forEach(function(k) {
+      var lbl = locationGroups[k].label;
+      if (lbl) _locNames.push({ key: k, label: lbl });
+    });
+    _locNames.sort(function(a,b) { return a.label.localeCompare(b.label); });
+    _locNames.forEach(function(loc) {
+      var sel = (_galleryMapFilter === loc.key) ? ' selected' : '';
+      _locOptions += '<option value="' + loc.key + '"' + sel + '>' + loc.label + '</option>';
+    });
+  }
   var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px;">'
     + '<h2 class="section-title" style="margin:0;"><i class="fa-solid fa-images"></i> Photo Gallery</h2>'
-    + '<div style="display:flex;align-items:center;gap:8px;">'
+    + '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">'
     + '<span style="font-size:.8rem;color:var(--text-3);">' + allPhotos.length + ' photo' + (allPhotos.length !== 1 ? 's' : '') + '</span>'
-    + (!_galleryShareMode
-        ? '<button onclick="_copyGalleryLink()" title="Share gallery with friends" style="background:rgba(44,95,138,.12);color:var(--blue);border:1px solid rgba(44,95,138,.25);border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:var(--font);">🔗 Share</button>'
+    + (hasGPS
+        ? '<select onchange="_gallerySetLocationFilter(this.value)" style="font-size:.75rem;padding:4px 8px;border:1px solid var(--border);border-radius:20px;background:#fff;color:var(--text-1);cursor:pointer;font-family:var(--font);max-width:160px;">' + _locOptions + '</select>'
         : '')
     + (!_galleryShareMode
+        ? '<button onclick="_galleryToggleSelectMode()" title="' + (_gallerySelectMode ? 'Exit select mode' : 'Select photos to delete or share') + '" style="background:' + (_gallerySelectMode ? 'var(--orange)' : 'rgba(0,0,0,.06)') + ';color:' + (_gallerySelectMode ? '#fff' : 'var(--text-2)') + ';border:none;border-radius:100px;padding:6px 12px;font-size:.75rem;font-weight:700;cursor:pointer;font-family:var(--font);">'
+          + (_gallerySelectMode ? '✕ Cancel' : '☑ Select') + '</button>'
+        : '')
+    + (!_galleryShareMode && !_gallerySelectMode
+        ? '<button onclick="_copyGalleryLink()" title="Share gallery with friends" style="background:rgba(44,95,138,.12);color:var(--blue);border:1px solid rgba(44,95,138,.25);border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font-family:var(--font);">🔗 Share</button>'
+        : '')
+    + (!_galleryShareMode && !_gallerySelectMode
         ? '<button onclick="_openGalleryFilePicker()" style="background:var(--orange);color:#fff;border:none;border-radius:100px;padding:6px 14px;font-size:.78rem;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--font);">📤 Add Photos</button>'
         : '')
     + '</div></div>';
@@ -15449,6 +15492,20 @@ function renderGalleryTab() {
     ? locationGroups[_galleryMapFilter].photos
     : allPhotos;
 
+  /* ── 6b. Select-mode action bar ─────────────────────────────────── */
+  if (_gallerySelectMode) {
+    var _selCount = Object.keys(_gallerySelected).length;
+    html += '<div id="gallery-select-bar" style="position:sticky;top:0;z-index:10;display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--border);border-radius:12px;padding:10px 14px;margin-bottom:12px;box-shadow:0 2px 8px rgba(0,0,0,.08);">'
+      + '<div style="display:flex;align-items:center;gap:10px;">'
+      + '<span style="font-size:.82rem;font-weight:700;color:var(--text-2);">' + (_selCount > 0 ? _selCount + ' selected' : 'Tap photos to select') + '</span>'
+      + '<button onclick="_gallerySelectAll()" style="font-size:.72rem;color:var(--blue);background:none;border:none;cursor:pointer;font-weight:600;font-family:var(--font);">Select all</button>'
+      + '</div>'
+      + '<div style="display:flex;gap:8px;">'
+      + '<button onclick="_galleryShareSelected()" ' + (_selCount === 0 ? 'disabled' : '') + ' style="background:rgba(44,95,138,.12);color:var(--blue);border:1px solid rgba(44,95,138,.25);border-radius:20px;padding:6px 14px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);opacity:' + (_selCount === 0 ? '.4' : '1') + ';">📤 Share ' + (_selCount > 0 ? '(' + _selCount + ')' : '') + '</button>'
+      + '<button onclick="_galleryDeleteSelected()" ' + (_selCount === 0 ? 'disabled' : '') + ' style="background:var(--red-l);color:var(--red);border:1px solid rgba(217,79,61,.25);border-radius:20px;padding:6px 14px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:var(--font);opacity:' + (_selCount === 0 ? '.4' : '1') + ';">🗑 Delete ' + (_selCount > 0 ? '(' + _selCount + ')' : '') + '</button>'
+      + '</div></div>';
+  }
+
   /* ── 7. Date-sectioned grid (wrapped so it can be updated in-place) ─ */
   html += '<div id="gallery-photos-section">';
 
@@ -15489,21 +15546,26 @@ function renderGalleryTab() {
       var capText = p.caption || p.location || '';
       /* data-blob-url carries the Netlify full-res URL so the lightbox can
          load from Blob storage on devices that don't have the IDB entry.  */
-      html += '<div style="cursor:zoom-in;position:relative;aspect-ratio:1;overflow:hidden;border-radius:6px;' + (p.isCloudThumb ? 'opacity:.85;' : '') + '" data-media-src="' + (p.src||'') + '" data-media-type="' + (isVid?'video':'image') + '" data-media-cap="' + (capText.replace(/"/g,'&quot;')) + '" data-photo-id="' + (p.photoId||'') + '" data-blob-url="' + (p.blobUrl||'') + '">'
+      var _isSelected = _gallerySelectMode && p.photoId && _gallerySelected[p.photoId];
+      var _tileClick  = _gallerySelectMode && p.photoId
+          ? 'onclick="_galleryToggleTile(\'' + p.photoId + '\')"'
+          : '';
+      html += '<div style="cursor:' + (_gallerySelectMode ? 'pointer' : 'zoom-in') + ';position:relative;aspect-ratio:1;overflow:hidden;border-radius:6px;' + (p.isCloudThumb ? 'opacity:.85;' : '') + (_isSelected ? 'outline:3px solid var(--orange);outline-offset:-3px;' : '') + '" ' + _tileClick + ' data-media-src="' + (p.src||'') + '" data-media-type="' + (isVid?'video':'image') + '" data-media-cap="' + (capText.replace(/"/g,'&quot;')) + '" data-photo-id="' + (p.photoId||'') + '" data-blob-url="' + (p.blobUrl||'') + '">'
         + (isVid
             ? '<video src="' + p.src + '" style="width:100%;height:100%;object-fit:cover;" muted preload="metadata"></video>'
               + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);"><span style="font-size:1.8rem;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6));">▶️</span></div>'
             : (p.src
                 ? '<img src="' + p.src + '" style="width:100%;height:100%;object-fit:cover;" loading="lazy" />'
-                /* No src yet — photo is stored in IDB on the uploading device.
-                   Show a clean placeholder so it doesn't look broken.        */
                 : '<div style="width:100%;height:100%;background:linear-gradient(135deg,#e8ecf0 0%,#dde3e9 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;">'
                   + '<span style="font-size:1.6rem;opacity:.5;">📷</span>'
                   + '<span style="font-size:.55rem;color:#999;font-weight:600;letter-spacing:.03em;">Syncing…</span>'
                   + '</div>'))
-        + (p.isCloudThumb ? '<div style="position:absolute;top:3px;right:3px;background:rgba(0,0,0,.5);border-radius:6px;padding:2px 4px;font-size:.55rem;color:#fff;line-height:1;">☁️</div>' : '')
-        + (capText ? '<div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.65));padding:4px 6px 4px;font-size:.56rem;color:#fff;line-height:1.3;">' + capText + '</div>' : '')
-        + (p.photoId ? '<button onclick="event.stopPropagation();_deleteGalleryPhoto(\'' + p.photoId + '\')" style="position:absolute;top:5px;left:5px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;border:none;cursor:pointer;font-size:.65rem;display:flex;align-items:center;justify-content:center;z-index:2;line-height:1;">✕</button>' : '')
+        + (p.isCloudThumb && !_gallerySelectMode ? '<div style="position:absolute;top:3px;right:3px;background:rgba(0,0,0,.5);border-radius:6px;padding:2px 4px;font-size:.55rem;color:#fff;line-height:1;">☁️</div>' : '')
+        + (capText && !_gallerySelectMode ? '<div style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(0,0,0,.65));padding:4px 6px 4px;font-size:.56rem;color:#fff;line-height:1.3;">' + capText + '</div>' : '')
+        + (p.photoId && _gallerySelectMode
+            ? '<div style="position:absolute;top:5px;right:5px;width:22px;height:22px;border-radius:50%;background:' + (_isSelected ? 'var(--orange)' : 'rgba(255,255,255,.85)') + ';border:2px solid ' + (_isSelected ? 'var(--orange)' : 'rgba(0,0,0,.3)') + ';display:flex;align-items:center;justify-content:center;font-size:.7rem;pointer-events:none;z-index:2;">' + (_isSelected ? '✓' : '') + '</div>'
+            : '')
+        + (p.photoId && !_gallerySelectMode ? '<button onclick="event.stopPropagation();_deleteGalleryPhoto(\'' + p.photoId + '\')" style="position:absolute;top:5px;left:5px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;border:none;cursor:pointer;font-size:.65rem;display:flex;align-items:center;justify-content:center;z-index:2;line-height:1;">✕</button>' : '')
         + '</div>';
     });
     html += '</div>';
@@ -15517,6 +15579,9 @@ function renderGalleryTab() {
   var _allTiles = Array.prototype.slice.call(el.querySelectorAll('[data-media-src]'));
   _allTiles.forEach(function(tile, idx) {
     tile.addEventListener('click', function() {
+      /* In select mode, tile click is handled by _galleryToggleTile via onclick.
+         Only open lightbox for non-pool tiles (no photoId) that lack onclick. */
+      if (_gallerySelectMode) return;
       var blobUrl = tile.dataset.blobUrl || null;
       var photoId = tile.dataset.photoId || null;
       _openMediaLightbox(
@@ -15893,6 +15958,90 @@ function _deleteGalleryPhoto(photoId) {
   _gVisibleDayCount = 0; // reset cached count
   renderGalleryTab();
   showToast('🗑 Photo deleted', 1800);
+}
+
+/* ── Gallery multi-select helpers ──────────────────────────────────── */
+
+function _galleryToggleSelectMode() {
+  _gallerySelectMode = !_gallerySelectMode;
+  if (!_gallerySelectMode) _gallerySelected = {}; // clear selection on exit
+  renderGalleryTab();
+}
+
+function _galleryToggleTile(photoId) {
+  if (!photoId) return;
+  if (_gallerySelected[photoId]) {
+    delete _gallerySelected[photoId];
+  } else {
+    _gallerySelected[photoId] = true;
+  }
+  renderGalleryTab();
+}
+
+function _gallerySelectAll() {
+  var photos = window._galleryAllPhotos || [];
+  var poolPhotos = photos.filter(function(p) { return p.photoId; });
+  var allSelected = poolPhotos.every(function(p) { return _gallerySelected[p.photoId]; });
+  if (allSelected) {
+    /* Deselect all */
+    _gallerySelected = {};
+  } else {
+    poolPhotos.forEach(function(p) { _gallerySelected[p.photoId] = true; });
+  }
+  renderGalleryTab();
+}
+
+function _galleryDeleteSelected() {
+  var ids = Object.keys(_gallerySelected);
+  if (!ids.length) return;
+  if (!confirm('Delete ' + ids.length + ' photo' + (ids.length > 1 ? 's' : '') + '? This cannot be undone.')) return;
+  if (!appState.photoPool) return;
+  ids.forEach(function(photoId) {
+    if (typeof _idbDelete === 'function') _idbDelete(photoId, null);
+    if (typeof _netlifyBlobDelete === 'function') _netlifyBlobDelete(photoId);
+    for (var _i = appState.photoPool.length - 1; _i >= 0; _i--) {
+      if (appState.photoPool[_i].id === photoId) { appState.photoPool.splice(_i, 1); break; }
+    }
+  });
+  _gallerySelected = {};
+  _gallerySelectMode = false;
+  saveState(appState);
+  _gVisibleDayCount = 0;
+  renderGalleryTab();
+  showToast('🗑 ' + ids.length + ' photo' + (ids.length > 1 ? 's' : '') + ' deleted', 2000);
+}
+
+function _galleryShareSelected() {
+  var ids = Object.keys(_gallerySelected);
+  if (!ids.length) return;
+  var photos = window._galleryAllPhotos || [];
+  var selected = photos.filter(function(p) { return p.photoId && _gallerySelected[p.photoId]; });
+  var urls = selected.map(function(p) { return p.blobUrl || p.src || ''; }).filter(Boolean);
+  if (!urls.length) { showToast('No shareable URLs for selected photos', 2000); return; }
+  /* Use Web Share API if available (mobile), otherwise copy URLs to clipboard */
+  if (navigator.share && navigator.canShare) {
+    navigator.share({ title: 'TripGenie Photos', text: 'Check out these trip photos!\n' + urls.join('\n') })
+      .catch(function() {});
+  } else {
+    try {
+      navigator.clipboard.writeText(urls.join('\n')).then(function() {
+        showToast('📋 ' + urls.length + ' photo URL' + (urls.length > 1 ? 's' : '') + ' copied to clipboard', 2500);
+      });
+    } catch(e) {
+      prompt('Copy these photo URLs:', urls.join('\n'));
+    }
+  }
+}
+
+/* ── Location dropdown filter ───────────────────────────────────────── */
+function _gallerySetLocationFilter(key) {
+  _galleryMapFilter = key || null;
+  renderGalleryTab();
+  /* Scroll down past the map to the photos */
+  setTimeout(function() {
+    var sec = document.getElementById('gallery-photos-section');
+    if (sec) sec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 300);
 }
 
 function openGalleryPhoto(idx) {
