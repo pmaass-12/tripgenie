@@ -20,7 +20,8 @@
     "report":            "playwright show-report"
   },
   "dependencies": {
-    "@netlify/blobs": "^8.1.0"
+    "@netlify/blobs": "^8.1.0",
+    "sharp": "^0.33.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.42.0"

@@ -14264,27 +14264,15 @@ function _idbMigratePool() {
   }
 }
 
-/* Compress a dataUrl image to a small thumbnail (≤200px, JPEG 0.45)
+/* Compress a dataUrl image to a small thumbnail (≤200px, JPEG 0.45).
    Returns a JPEG data URL via callback, or null on failure.
-   Handles JPEG/PNG/WebP natively; HEIC via createImageBitmap (OS decoder
-   on macOS/iOS) with heic2any (pure-JS) as cross-platform fallback.    */
+
+   Primary path handles JPEG/PNG/WebP from server (all blobs are now JPEG
+   thanks to server-side sharp conversion).  The HEIC branch below is a
+   belt-and-suspenders fallback for any locally-cached HEIC data URLs.   */
 function _compressPhotoThumb(dataUrl, cb) {
   var MAX = 200;
   try {
-    /* Draw an ImageBitmap onto a canvas and return the JPEG data URL */
-    function _bitmapToJpeg(bitmap) {
-      try {
-        var ratio = Math.min(MAX / bitmap.width, MAX / bitmap.height, 1);
-        var c = document.createElement('canvas');
-        c.width  = Math.round(bitmap.width  * ratio);
-        c.height = Math.round(bitmap.height * ratio);
-        c.getContext('2d').drawImage(bitmap, 0, 0, c.width, c.height);
-        try { bitmap.close(); } catch(e2) {}
-        cb(c.toDataURL('image/jpeg', 0.45));
-      } catch(e3) { cb(null); }
-    }
-
-    /* Standard path — works for JPEG/PNG/WebP/GIF */
     function _drawAndReturn(src, cleanup) {
       var img = new Image();
       img.onload = function() {
@@ -14300,71 +14288,41 @@ function _compressPhotoThumb(dataUrl, cb) {
       img.src = src;
     }
 
-    /* Convert a HEIC Blob to JPEG using a two-stage fallback:
-       Stage 1 — createImageBitmap: uses OS-level decoder on macOS/iOS (fast, no JS bundle)
-       Stage 2 — heic2any: pure-JS HEIC decoder (works on Windows/Linux/Android Chrome) */
-    function _heicBlobToJpeg(heicBlob) {
-      if (typeof createImageBitmap !== 'undefined') {
-        createImageBitmap(heicBlob)
-          .then(function(bmp) { _bitmapToJpeg(bmp); })
-          .catch(function() {
-            /* OS decoder failed — try heic2any JS decoder */
-            if (typeof heic2any !== 'undefined') {
-              heic2any({ blob: heicBlob, toType: 'image/jpeg', quality: 0.85 })
-                .then(function(jpegBlob) {
-                  var jpegUrl = URL.createObjectURL(jpegBlob);
-                  _drawAndReturn(jpegUrl, function() { URL.revokeObjectURL(jpegUrl); });
-                })
-                .catch(function() { cb(null); });
-            } else { cb(null); }
-          });
-      } else if (typeof heic2any !== 'undefined') {
-        heic2any({ blob: heicBlob, toType: 'image/jpeg', quality: 0.85 })
-          .then(function(jpegBlob) {
-            var jpegUrl = URL.createObjectURL(jpegBlob);
-            _drawAndReturn(jpegUrl, function() { URL.revokeObjectURL(jpegUrl); });
-          })
-          .catch(function() { cb(null); });
-      } else { cb(null); }
-    }
-
-    /* ── Route by source type ───────────────────────────────────────── */
-
-    /* HEIC/HEIF data URI — decode before canvas */
+    /* HEIC data URI fallback — tries createImageBitmap (OS decoder, macOS/iOS)
+       then heic2any (pure-JS).  Rarely needed now that server converts on upload. */
     if (dataUrl && dataUrl.startsWith('data:image/hei')) {
       var _b64h = dataUrl.split(',')[1];
       if (_b64h) {
         var _binh = atob(_b64h), _bytesh = new Uint8Array(_binh.length);
         for (var _hi = 0; _hi < _binh.length; _hi++) _bytesh[_hi] = _binh.charCodeAt(_hi);
-        _heicBlobToJpeg(new Blob([_bytesh], { type: 'image/heic' }));
-        return;
+        var _heicBlob = new Blob([_bytesh], { type: 'image/heic' });
+        if (typeof createImageBitmap !== 'undefined') {
+          createImageBitmap(_heicBlob).then(function(bmp) {
+            var ratio = Math.min(MAX / bmp.width, MAX / bmp.height, 1);
+            var c = document.createElement('canvas');
+            c.width  = Math.round(bmp.width  * ratio);
+            c.height = Math.round(bmp.height * ratio);
+            c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+            try { bmp.close(); } catch(e2) {}
+            cb(c.toDataURL('image/jpeg', 0.45));
+          }).catch(function() {
+            if (typeof heic2any !== 'undefined') {
+              heic2any({ blob: _heicBlob, toType: 'image/jpeg', quality: 0.85 })
+                .then(function(j) { var u = URL.createObjectURL(j); _drawAndReturn(u, function() { URL.revokeObjectURL(u); }); })
+                .catch(function() { cb(null); });
+            } else { cb(null); }
+          });
+          return;
+        }
+        if (typeof heic2any !== 'undefined') {
+          heic2any({ blob: _heicBlob, toType: 'image/jpeg', quality: 0.85 })
+            .then(function(j) { var u = URL.createObjectURL(j); _drawAndReturn(u, function() { URL.revokeObjectURL(u); }); })
+            .catch(function() { cb(null); });
+          return;
+        }
       }
     }
 
-    /* blob:// or https:// — try native img first; on failure try heic2any fallback
-       (covers HEIC served from Netlify CDN as blob:// or direct URL)          */
-    if (dataUrl && !dataUrl.startsWith('data:')) {
-      var _urlImg = new Image();
-      _urlImg.onload = function() {
-        var ratio = Math.min(MAX / _urlImg.width, MAX / _urlImg.height, 1);
-        var c = document.createElement('canvas');
-        c.width  = Math.round(_urlImg.width  * ratio);
-        c.height = Math.round(_urlImg.height * ratio);
-        c.getContext('2d').drawImage(_urlImg, 0, 0, c.width, c.height);
-        cb(c.toDataURL('image/jpeg', 0.45));
-      };
-      _urlImg.onerror = function() {
-        /* Native decode failed (likely HEIC); fetch and try heic2any */
-        fetch(dataUrl)
-          .then(function(r) { return r.blob(); })
-          .then(function(b) { _heicBlobToJpeg(b); })
-          .catch(function() { cb(null); });
-      };
-      _urlImg.src = dataUrl;
-      return;
-    }
-
-    /* Standard data: URI (JPEG/PNG/WebP) */
     _drawAndReturn(dataUrl, null);
   } catch(e) { cb(null); }
 }
@@ -15344,51 +15302,10 @@ function _migrateStrandedPhotosToBlob() {
               });
               }); // end _compressBlob
             }
-            /* HEIC blobs: try createImageBitmap (OS decoder) then heic2any before canvas */
-            var _isHeicBlob = blob.type && blob.type.match(/heic|heif/i);
-            if (_isHeicBlob && typeof createImageBitmap !== 'undefined') {
-              createImageBitmap(blob)
-                .then(function(bmp) {
-                  /* OS decoder worked — draw on canvas directly */
-                  try {
-                    var _mig_r = Math.min(200 / bmp.width, 200 / bmp.height, 1);
-                    var _mig_c = document.createElement('canvas');
-                    _mig_c.width  = Math.round(bmp.width  * _mig_r);
-                    _mig_c.height = Math.round(bmp.height * _mig_r);
-                    _mig_c.getContext('2d').drawImage(bmp, 0, 0, _mig_c.width, _mig_c.height);
-                    try { bmp.close(); } catch(e2) {}
-                    var _thumbDU = _mig_c.toDataURL('image/jpeg', 0.45);
-                    // Inline upload (skip _compressBlob round-trip)
-                    if (!_thumbDU) { _saveIfDone(); return; }
-                    var _mm = { fileName: poolEntry.fileName||'', timestamp: poolEntry.timestamp||'', stopId: poolEntry.stopId != null ? String(poolEntry.stopId) : '' };
-                    _netlifyBlobUpload(poolEntry.id, null, _thumbDU, _mm, function(bThumbUrl) {
-                      if (bThumbUrl) poolEntry.blobThumbUrl = bThumbUrl;
-                      poolEntry.thumb = null; poolEntry.dataUrl = null;
-                      _saveIfDone();
-                      var _tile = document.querySelector('[data-photo-id="' + poolEntry.id + '"]');
-                      if (_tile && bThumbUrl) {
-                        var _ph = _tile.querySelector('div[style*="Syncing"]') || _tile.querySelector('div[style*="linear-gradient"]');
-                        if (_ph) { var _i = document.createElement('img'); _i.src = bThumbUrl; _i.style.cssText = 'width:100%;height:100%;object-fit:cover;'; _i.loading='lazy'; _tile.replaceChild(_i, _ph); }
-                        _tile.dataset.mediaSrc = bThumbUrl;
-                      }
-                    });
-                  } catch(e3) { _compressBlob(blob); }
-                })
-                .catch(function() {
-                  /* OS decoder failed — try heic2any */
-                  if (typeof heic2any !== 'undefined') {
-                    heic2any({ blob: blob, toType: 'image/jpeg', quality: 0.85 })
-                      .then(function(jpegBlob) { _compressBlob(jpegBlob); })
-                      .catch(function() { _saveIfDone(); });
-                  } else { _saveIfDone(); }
-                });
-            } else if (_isHeicBlob && typeof heic2any !== 'undefined') {
-              heic2any({ blob: blob, toType: 'image/jpeg', quality: 0.85 })
-                .then(function(jpegBlob) { _compressBlob(jpegBlob); })
-                .catch(function() { _saveIfDone(); });
-            } else {
-              _compressBlob(blob);
-            }
+            /* The Netlify photo function now converts HEIC→JPEG server-side,
+               so fetched blobs are always JPEG.  Pass directly to _compressBlob.
+               (Legacy HEIC blobs also get converted by the GET handler via sharp.) */
+            _compressBlob(blob);
           })
           .catch(function() { _saveIfDone(); });
       }

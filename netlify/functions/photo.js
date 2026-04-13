@@ -30,6 +30,29 @@
 
 const { getStore } = require('@netlify/blobs');
 
+/* sharp: server-side HEIC→JPEG conversion.  Loaded lazily so the function
+   starts even if sharp isn't installed (graceful degradation in local dev). */
+let sharp;
+try { sharp = require('sharp'); } catch (e) {
+  console.warn('[photo] sharp not available — HEIC/HEIF files will be stored as-is');
+}
+
+/** Convert a HEIC/HEIF buffer to JPEG using sharp.
+ *  Returns { buffer, mimeType } — JPEG on success, original on failure.  */
+async function convertHeicToJpeg(inputBuffer, quality = 88) {
+  if (!sharp) return { buffer: inputBuffer, mimeType: 'image/heic' };
+  try {
+    const jpegBuffer = await sharp(inputBuffer)
+      .rotate()           // honour EXIF orientation
+      .jpeg({ quality, mozjpeg: false })
+      .toBuffer();
+    return { buffer: jpegBuffer, mimeType: 'image/jpeg' };
+  } catch (e) {
+    console.warn('[photo] HEIC→JPEG conversion failed:', e.message);
+    return { buffer: inputBuffer, mimeType: 'image/heic' };
+  }
+}
+
 const MAX_UPLOAD_BYTES = 12_000_000;   // 12 MB raw body ceiling
 
 /* getStore must be called INSIDE the handler, not at module load time.
@@ -124,16 +147,30 @@ exports.handler = async function (event, context) {
         return { statusCode: 404, headers: corsHeaders(event), body: 'Not found' };
       }
 
-      const mime = (metadata && metadata.mime) || 'image/jpeg';
+      const storedMime = (metadata && metadata.mime) || 'image/jpeg';
+      let bodyBuffer   = Buffer.from(data);
+      let serveMime    = storedMime;
+
+      /* Transparently convert stored HEIC/HEIF blobs to JPEG.
+         This handles photos uploaded before server-side conversion was added,
+         so they serve as browser-compatible JPEG regardless of stored format. */
+      if (storedMime.match(/^image\/(heic|heif)/i)) {
+        const converted = await convertHeicToJpeg(bodyBuffer);
+        bodyBuffer = converted.buffer;
+        serveMime  = converted.mimeType;
+      }
+
       return {
         statusCode: 200,
         headers: {
           ...corsHeaders(event),
-          'Content-Type':  mime,
-          // Long cache — photos are immutable once uploaded
-          'Cache-Control': 'public, max-age=31536000, immutable',
+          'Content-Type':  serveMime,
+          /* Immutable cache for JPEG; shorter for unconverted HEIC (shouldn't happen) */
+          'Cache-Control': serveMime === 'image/jpeg'
+            ? 'public, max-age=31536000, immutable'
+            : 'public, max-age=3600',
         },
-        body:            Buffer.from(data).toString('base64'),
+        body:            bodyBuffer.toString('base64'),
         isBase64Encoded: true,
       };
     } catch (e) {
@@ -186,8 +223,17 @@ exports.handler = async function (event, context) {
       return { statusCode: 400, headers: corsHeaders(event),
                body: JSON.stringify({ error: 'data must be a base64 data URL' }) };
     }
-    const mimeType = match[1];
-    const buffer   = Buffer.from(match[2], 'base64');
+    let mimeType = match[1];
+    let buffer   = Buffer.from(match[2], 'base64');
+
+    /* Convert HEIC/HEIF → JPEG before storing so every blob is browser-compatible.
+       Thumbnails arrive as JPEG already; full-res from Mac/iPhone may be HEIC.
+       .rotate() honours the EXIF orientation so photos aren't sideways.        */
+    if (mimeType.match(/^image\/(heic|heif)/i)) {
+      const converted = await convertHeicToJpeg(buffer);
+      buffer   = converted.buffer;
+      mimeType = converted.mimeType;
+    }
 
     // Key: "{id}" for full-res, "{id}-t" for thumbnail
     const key = isThumb ? (id + '-t') : id;
