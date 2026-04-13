@@ -14264,19 +14264,39 @@ function _idbMigratePool() {
 /* Compress a dataUrl image to a small thumbnail (≤200px, JPEG 0.45)
    Returns a compressed base64 string via callback. Used for cloud sync. */
 function _compressPhotoThumb(dataUrl, cb) {
+  /* dataUrl may be a data: URI, a blob: URL, or a CDN https: URL.
+     For HEIC data URIs (data:image/heic;base64,...) Chrome can't decode them
+     directly in an <img> — convert to a Blob URL first so the OS decoder runs. */
   try {
-    var img = new Image();
-    img.onload = function() {
-      var MAX = 200;
-      var ratio = Math.min(MAX / img.width, MAX / img.height, 1);
-      var c = document.createElement('canvas');
-      c.width  = Math.round(img.width  * ratio);
-      c.height = Math.round(img.height * ratio);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      cb(c.toDataURL('image/jpeg', 0.45));
-    };
-    img.onerror = function() { cb(null); };
-    img.src = dataUrl;
+    function _drawAndReturn(src, cleanup) {
+      var img = new Image();
+      img.onload = function() {
+        var MAX = 200;
+        var ratio = Math.min(MAX / img.width, MAX / img.height, 1);
+        var c = document.createElement('canvas');
+        c.width  = Math.round(img.width  * ratio);
+        c.height = Math.round(img.height * ratio);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        if (cleanup) cleanup();
+        cb(c.toDataURL('image/jpeg', 0.45));
+      };
+      img.onerror = function() { if (cleanup) cleanup(); cb(null); };
+      img.src = src;
+    }
+
+    /* HEIC/HEIF data URIs need the blob URL path for native OS decoding */
+    if (dataUrl && dataUrl.startsWith('data:image/hei')) {
+      var _b64 = dataUrl.split(',')[1];
+      if (_b64) {
+        var _bin = atob(_b64), _bytes = new Uint8Array(_bin.length);
+        for (var i = 0; i < _bin.length; i++) _bytes[i] = _bin.charCodeAt(i);
+        var _blob = new Blob([_bytes], { type: 'image/heic' });
+        var _objUrl = URL.createObjectURL(_blob);
+        _drawAndReturn(_objUrl, function() { URL.revokeObjectURL(_objUrl); });
+        return;
+      }
+    }
+    _drawAndReturn(dataUrl, null);
   } catch(e) { cb(null); }
 }
 
@@ -15216,14 +15236,43 @@ function _migrateStrandedPhotosToBlob() {
         /* Full-res in IDB on this device — use directly */
         _doThumbUpload(fullDataUrl);
       } else {
-        /* Not in local IDB — fetch full-res from Netlify Blob CDN and thumbnail it */
+        /* Not in local IDB — fetch full-res from Netlify Blob CDN.
+           Use createObjectURL (not readAsDataURL) so macOS/browser
+           native decoders handle HEIC → canvas works on Mac Chrome. */
         fetch(poolEntry.blobUrl)
           .then(function(r) { return r.blob(); })
           .then(function(blob) {
-            var reader = new FileReader();
-            reader.onload = function(e) { _doThumbUpload(e.target.result); };
-            reader.onerror = function() { _saveIfDone(); };
-            reader.readAsDataURL(blob);
+            var objUrl = URL.createObjectURL(blob);
+            /* _compressPhotoThumb with a blob:// URL works for HEIC on Mac Chrome
+               because the browser uses the OS image decoder, not a base64 parser. */
+            _compressPhotoThumb(objUrl, function(thumbDataUrl) {
+              URL.revokeObjectURL(objUrl);
+              if (!thumbDataUrl) { _saveIfDone(); return; }
+              /* Upload only the new JPEG thumb — full-res is already in Netlify Blobs */
+              var _meta = {
+                fileName:  poolEntry.fileName  || '',
+                timestamp: poolEntry.timestamp || '',
+                stopId:    poolEntry.stopId != null ? String(poolEntry.stopId) : '',
+              };
+              _netlifyBlobUpload(poolEntry.id, null, thumbDataUrl, _meta, function(bThumbUrl) {
+                if (bThumbUrl) poolEntry.blobThumbUrl = bThumbUrl;
+                poolEntry.thumb   = null;
+                poolEntry.dataUrl = null;
+                _saveIfDone();
+                var tile = document.querySelector('[data-photo-id="' + poolEntry.id + '"]');
+                if (tile && bThumbUrl) {
+                  var placeholder = tile.querySelector('div[style*="Syncing"]') || tile.querySelector('div[style*="linear-gradient"]');
+                  if (placeholder) {
+                    var img = document.createElement('img');
+                    img.src = bThumbUrl;
+                    img.style.cssText = 'width:100%;height:100%;object-fit:cover;';
+                    img.loading = 'lazy';
+                    tile.replaceChild(img, placeholder);
+                  }
+                  tile.dataset.mediaSrc = bThumbUrl;
+                }
+              });
+            });
           })
           .catch(function() { _saveIfDone(); });
       }
