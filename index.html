@@ -13987,112 +13987,89 @@ function _galleryUpload(input) {
       _processNext(idx + 1);
       return;
     }
-    var reader = new FileReader();
-    reader.onload = function(ev) {
-      var rawUrl  = ev.target.result;
-      var isVideo = false;
+    /* ── HEIC pre-conversion ─────────────────────────────────────────────
+       iPhone .heic files can't be decoded on canvas in Chrome/Windows.
+       Convert the File blob → JPEG blob BEFORE FileReader so the entire
+       downstream pipeline (canvas, thumbnail, Netlify upload) sees a JPEG.
+       Priority: createImageBitmap (OS decoder, macOS/iOS) → heic2any (CDN)
+       → pass HEIC through as-is (server sharp will handle it).           */
+    var _isHeic = file.type === 'image/heic' || file.type === 'image/heif'
+               || /\.(heic|heif)$/i.test(file.name);
 
-      function _afterCompress(dataUrl) {
-        /* Use file.lastModified as timestamp so photos group by actual capture date,
-           not the upload date. This is almost always the original camera capture time. */
-        var entry = {
-          id:        Date.now() + '_' + Math.random().toString(36).substr(2,6),
-          dataUrl:   dataUrl,
-          fileName:  file.name,
-          type:      isVideo ? 'video' : 'image',
-          timestamp: new Date(file.lastModified || Date.now()).toISOString(),
-          caption:   '',
-          stopId:    null,
-          dayNum:    null,
-          source:    'gallery-upload',
-          thumb:     null,
-        };
+    function _readAndProcess(blob) {
+      var reader = new FileReader();
+      reader.onload = function(ev) {
+        var rawUrl = ev.target.result;
 
-        var _doSave = function(finalEntry) {
-          appState.photoPool.unshift(finalEntry);
-          try {
-            saveState(appState);
-            added++;
-          } catch(e) {
-            appState.photoPool.shift();
-            failed++;
-            showToast('⚠️ Photo "' + file.name + '" too large — storage full', 3500);
-          }
-          _processNext(idx + 1);
-        };
+        function _afterCompress(dataUrl) {
+          /* Use file.lastModified as timestamp so photos group by actual capture date,
+             not the upload date. This is almost always the original camera capture time. */
+          var entry = {
+            id:        Date.now() + '_' + Math.random().toString(36).substr(2,6),
+            dataUrl:   dataUrl,
+            fileName:  file.name,
+            type:      'image',
+            timestamp: new Date(file.lastModified || Date.now()).toISOString(),
+            caption:   '',
+            stopId:    null,
+            dayNum:    null,
+            source:    'gallery-upload',
+            thumb:     null,
+          };
 
-        /* ── Ordering fix: generate thumbnail FIRST, then read EXIF, then save.
-           Previously thumb and EXIF ran concurrently and _doSave fired from the
-           EXIF chain — thumb canvas.onload almost always lost the race, so
-           entry.thumb was null when saved → cloud had nothing to show other devices. */
-        var _runExifThenSave = function() {
-          if (window.exifr) {
-            /* Use exifr.gps() for reliable decimal GPS (works on JPEG + HEIC).
-               exifr.parse(file, ['GPSLatitude',...]) returns raw DMS arrays,
-               not decimal — gps() is the correct API for lat/lon.
-               Also drop the jpeg-only type gate so HEIC files are parsed too. */
-            Promise.all([
-              exifr.gps(file).catch(function() { return null; }),
-              exifr.parse(file, ['DateTimeOriginal']).catch(function() { return null; })
-            ]).then(function(results) {
-              var gps      = results[0];
-              var exifMeta = results[1];
-              entry.exif = {};
-              if (gps && gps.latitude  != null) entry.exif.lat = gps.latitude;
-              if (gps && gps.longitude != null) entry.exif.lon = gps.longitude;
-              if (exifMeta && exifMeta.DateTimeOriginal) {
-                var dt = exifMeta.DateTimeOriginal;
-                entry.exif.dt = dt instanceof Date ? dt.toISOString() : String(dt);
-              }
-              /* Async reverse geocode — fire and forget */
-              if (entry.exif.lat != null && entry.exif.lon != null) {
-                var geoUrl = 'https://nominatim.openstreetmap.org/reverse?lat=' + entry.exif.lat
-                  + '&lon=' + entry.exif.lon + '&format=json&zoom=12';
-                fetch(geoUrl, { headers: { 'Accept-Language': 'en' } })
-                  .then(function(r2) { return r2.json(); })
-                  .then(function(geo) {
-                    if (geo && geo.address) {
-                      var city = geo.address.city || geo.address.town || geo.address.village || geo.address.county || '';
-                      var state2 = geo.address.state || '';
-                      entry.exif.locationName = [city, state2].filter(Boolean).join(', ');
-                      var poolEntry = appState.photoPool.find(function(p) { return p.id === entry.id; });
-                      if (poolEntry) {
-                        poolEntry.exif = entry.exif;
-                        try { saveState(appState); } catch(e2) {}
+          var _doSave = function(finalEntry) {
+            appState.photoPool.unshift(finalEntry);
+            try {
+              saveState(appState);
+              added++;
+            } catch(e) {
+              appState.photoPool.shift();
+              failed++;
+              showToast('⚠️ Photo "' + file.name + '" too large — storage full', 3500);
+            }
+            _processNext(idx + 1);
+          };
+
+          var _runExifThenSave = function() {
+            if (window.exifr) {
+              Promise.all([
+                exifr.gps(file).catch(function() { return null; }),
+                exifr.parse(file, ['DateTimeOriginal']).catch(function() { return null; })
+              ]).then(function(results) {
+                var gps      = results[0];
+                var exifMeta = results[1];
+                entry.exif = {};
+                if (gps && gps.latitude  != null) entry.exif.lat = gps.latitude;
+                if (gps && gps.longitude != null) entry.exif.lon = gps.longitude;
+                if (exifMeta && exifMeta.DateTimeOriginal) {
+                  var dt = exifMeta.DateTimeOriginal;
+                  entry.exif.dt = dt instanceof Date ? dt.toISOString() : String(dt);
+                }
+                if (entry.exif.lat != null && entry.exif.lon != null) {
+                  var geoUrl = 'https://nominatim.openstreetmap.org/reverse?lat=' + entry.exif.lat
+                    + '&lon=' + entry.exif.lon + '&format=json&zoom=12';
+                  fetch(geoUrl, { headers: { 'Accept-Language': 'en' } })
+                    .then(function(r2) { return r2.json(); })
+                    .then(function(geo) {
+                      if (geo && geo.address) {
+                        var city = geo.address.city || geo.address.town || geo.address.village || geo.address.county || '';
+                        var state2 = geo.address.state || '';
+                        entry.exif.locationName = [city, state2].filter(Boolean).join(', ');
+                        var poolEntry = appState.photoPool.find(function(p) { return p.id === entry.id; });
+                        if (poolEntry) { poolEntry.exif = entry.exif; try { saveState(appState); } catch(e2) {} }
                       }
-                    }
-                  }).catch(function() {});
-              }
+                    }).catch(function() {});
+                }
+                _doSave(entry);
+              }).catch(function() { _doSave(entry); });
+            } else {
               _doSave(entry);
-            }).catch(function() { _doSave(entry); });
-          } else {
-            _doSave(entry);
-          }
-        };
+            }
+          };
 
-        /* ── Upload pipeline ──────────────────────────────────────────────
-           1. Generate 200px thumbnail (fast, small)
-           2. Save full-res to IndexedDB for local lightbox (existing path)
-           3. Upload BOTH thumb + full-res to Netlify Blob Storage so any
-              device can display this photo — not just the one it was shot on.
-              The blob URLs are stored back in entry.blobUrl / entry.blobThumbUrl.
-           4. Run EXIF and save metadata last.                              */
-        if (isVideo) {
-          /* Videos: save full data to IDB for local playback.
-             CRITICAL: clear entry.dataUrl BEFORE _doSave writes to localStorage —
-             a 30-60 MB video as base64 instantly blows the ~5 MB localStorage quota
-             and causes the pool entry to be silently removed.  The IDB key (entry.id)
-             is kept so the lightbox can fetch the video on demand via _idbGet. */
-          _idbSave(entry.id, dataUrl, function() {
-            entry.dataUrl = null;
-            _runExifThenSave();
-          });
-        } else {
           _compressPhotoThumb(dataUrl, function(thumbDataUrl) {
             if (thumbDataUrl) entry.thumb = thumbDataUrl;
-            /* Save full-res to IDB first (local lightbox) */
             _idbSave(entry.id, dataUrl, function() {
-              /* Then upload to Netlify Blobs (cross-device access) */
               var _blobMeta = {
                 fileName:  entry.fileName  || '',
                 timestamp: entry.timestamp || '',
@@ -14101,25 +14078,51 @@ function _galleryUpload(input) {
               _netlifyBlobUpload(entry.id, dataUrl, thumbDataUrl, _blobMeta, function(bThumbUrl, bFullUrl) {
                 if (bThumbUrl) entry.blobThumbUrl = bThumbUrl;
                 if (bFullUrl)  entry.blobUrl      = bFullUrl;
-                /* Clear raw data from localStorage — full-res is in IDB, thumb is in Netlify Blobs.
-                   Keeping base64 strings in localStorage burns through the ~5MB quota fast. */
                 entry.dataUrl = null;
-                if (bThumbUrl) entry.thumb = null;  // blob URL is the src now — no need for base64 thumb
+                if (bThumbUrl) entry.thumb = null;
                 _runExifThenSave();
               });
             });
           });
         }
-      }
 
-      if (isVideo) { _afterCompress(rawUrl); }
-      else { _compressImage(rawUrl, _afterCompress); }
-    };
-    reader.onerror = function() {
-      failed++;
-      _processNext(idx + 1);
-    };
-    reader.readAsDataURL(file);
+        _compressImage(rawUrl, _afterCompress);
+      };
+      reader.onerror = function() { failed++; _processNext(idx + 1); };
+      reader.readAsDataURL(blob);
+    }
+
+    if (_isHeic) {
+      /* Try OS decoder first (fast, lossless path on macOS/iOS) */
+      var _tryHeic2any = function() {
+        if (typeof heic2any !== 'undefined') {
+          heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 })
+            .then(function(j) { _readAndProcess(Array.isArray(j) ? j[0] : j); })
+            .catch(function()  { _readAndProcess(file); }); // last resort: let server sharp handle it
+        } else {
+          _readAndProcess(file);
+        }
+      };
+      if (typeof createImageBitmap !== 'undefined') {
+        createImageBitmap(file)
+          .then(function(bmp) {
+            var c = document.createElement('canvas');
+            c.width = bmp.width; c.height = bmp.height;
+            c.getContext('2d').drawImage(bmp, 0, 0);
+            try { bmp.close(); } catch(e2) {}
+            c.toBlob(function(jpegBlob) {
+              if (jpegBlob) _readAndProcess(jpegBlob);
+              else _tryHeic2any();
+            }, 'image/jpeg', 0.9);
+          })
+          .catch(_tryHeic2any);
+      } else {
+        _tryHeic2any();
+      }
+      return; /* async — don't fall through */
+    }
+
+    _readAndProcess(file);
   }
 
   _processNext(0);
