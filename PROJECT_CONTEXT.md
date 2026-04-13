@@ -5,7 +5,7 @@
 ---
 
 ## Last Updated
-2026-04-12 (Session 43)
+2026-04-12 (Session 43b)
 
 ## What This Project Is
 A personal RV trip planner web app for the Maass Family RV Adventure 2026. Static HTML/JS/CSS, no build step, hosted via GitHub. Built and iterated with Claude Cowork.
@@ -70,6 +70,24 @@ tripgenie/
 ---
 
 ## Recent Changes
+
+### Session 43b — 2026-04-12
+
+**Fix: MP4 videos not playing (three stacked bugs)**
+
+1. **localStorage quota crash (root cause)**: `_galleryUpload` kept `entry.dataUrl` set to the full raw base64 video (30–100 MB) before calling `_doSave`. This caused `saveState` to throw a quota-exceeded error, which rolled back `appState.photoPool.shift()` — the entry was silently removed. Fixed: after IDB save, `entry.dataUrl = null` is cleared before `_runExifThenSave()`. Video data lives in IDB only; the lightbox fetches it on demand.
+
+2. **Broken video tile when no src**: Video tiles with `p.src = ''` rendered `<video src="">` which shows as a broken element. Fixed: when no `p.src`, render a dark `#111` background div; always overlay the ▶️ play icon.
+
+3. **Lightbox skipped IDB for videos**: `_openMediaLightbox` had a short-circuit for `type === 'video'` that bypassed `_idbGet` entirely. Fixed: if `type === 'video' && !src && photoId`, look up from IDB first; if not found, show "Video only available on the device it was recorded on" toast.
+
+4. **`_navTo` IDB gap**: When using prev/next in lightbox and landing on an IDB-only video, `newSrc` was `''` → `mediaEl.src = ''`. Fixed: same IDB-lookup logic applied in `_navTo`; also handles type-change (image→video) case by fetching IDB data URL before calling `_buildMedia`.
+
+5. **`playsInline`**: Added `v.playsInline = true` to `_buildMedia` for iOS compatibility (Safari requires this for non-fullscreen video playback).
+
+**Note for existing videos already in the pool**: If a video entry survived with a non-null `dataUrl` (small video), it will play from that data URL as before. The IDB path is the new reliable path for future uploads and for entries where `dataUrl` was cleared.
+
+---
 
 ### Session 43 — 2026-04-12
 

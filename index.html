@@ -14069,8 +14069,15 @@ function _galleryUpload(input) {
               The blob URLs are stored back in entry.blobUrl / entry.blobThumbUrl.
            4. Run EXIF and save metadata last.                              */
         if (isVideo) {
-          /* Videos: save raw to IDB, no blob upload for now, then EXIF+save */
-          _idbSave(entry.id, dataUrl, function() { _runExifThenSave(); });
+          /* Videos: save full data to IDB for local playback.
+             CRITICAL: clear entry.dataUrl BEFORE _doSave writes to localStorage —
+             a 30-60 MB video as base64 instantly blows the ~5 MB localStorage quota
+             and causes the pool entry to be silently removed.  The IDB key (entry.id)
+             is kept so the lightbox can fetch the video on demand via _idbGet. */
+          _idbSave(entry.id, dataUrl, function() {
+            entry.dataUrl = null;
+            _runExifThenSave();
+          });
         } else {
           _compressPhotoThumb(dataUrl, function(thumbDataUrl) {
             if (thumbDataUrl) entry.thumb = thumbDataUrl;
@@ -15607,8 +15614,10 @@ function renderGalleryTab() {
           : '';
       html += '<div style="cursor:' + (_gallerySelectMode ? 'pointer' : 'zoom-in') + ';position:relative;aspect-ratio:1;overflow:hidden;border-radius:6px;' + (p.isCloudThumb ? 'opacity:.85;' : '') + (_isSelected ? 'outline:3px solid var(--orange);outline-offset:-3px;' : '') + '" ' + _tileClick + ' data-media-src="' + (p.src||'') + '" data-media-type="' + (isVid?'video':'image') + '" data-media-cap="' + (capText.replace(/"/g,'&quot;')) + '" data-photo-id="' + (p.photoId||'') + '" data-blob-url="' + (p.blobUrl||'') + '">'
         + (isVid
-            ? '<video src="' + p.src + '" style="width:100%;height:100%;object-fit:cover;" muted preload="metadata"></video>'
-              + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.25);"><span style="font-size:1.8rem;filter:drop-shadow(0 1px 3px rgba(0,0,0,.6));">▶️</span></div>'
+            ? (p.src
+                ? '<video src="' + p.src + '" style="width:100%;height:100%;object-fit:cover;" muted preload="metadata"></video>'
+                : '<div style="width:100%;height:100%;background:linear-gradient(135deg,#1a1a2e,#16213e);"></div>')
+              + '<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.28);pointer-events:none;"><span style="font-size:1.8rem;filter:drop-shadow(0 1px 3px rgba(0,0,0,.7));">▶️</span></div>'
             : (p.src
                 ? '<img src="' + p.src + '" style="width:100%;height:100%;object-fit:cover;" loading="lazy" />'
                 : '<div style="width:100%;height:100%;background:linear-gradient(135deg,#e8ecf0 0%,#dde3e9 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;">'
@@ -16112,7 +16121,19 @@ function openGalleryPhoto(idx) {
    navContext: optional { tiles: NodeList/Array of [data-media-src] elements, idx: currentIndex }
    If omitted, single-photo mode (no arrows).                                               */
 function _openMediaLightbox(src, type, caption, photoId, navContext) {
-  /* Videos play directly from src/blobUrl — no IDB lookup needed */
+  /* Videos stored locally in IDB (no blobUrl, no dataUrl in pool entry):
+     fetch the data URL from IDB before opening, then play from that. */
+  if (type === 'video' && !src && photoId) {
+    _idbGet(photoId, function(fullSrc) {
+      if (fullSrc) {
+        _doOpenMediaLightbox(fullSrc, type, caption, navContext);
+      } else {
+        showToast('📱 Video only available on the device it was recorded on', 3000);
+      }
+    });
+    return;
+  }
+  /* Videos with a blobUrl or direct src — play immediately */
   if (type === 'video') {
     _doOpenMediaLightbox(src, type, caption, navContext);
     return;
@@ -16148,7 +16169,7 @@ function _doOpenMediaLightbox(src, type, caption, navContext) {
   function _buildMedia(s, t) {
     if (t === 'video') {
       var v = document.createElement('video');
-      v.src = s; v.controls = true; v.autoplay = true;
+      v.src = s; v.controls = true; v.autoplay = true; v.playsInline = true;
       v.style.cssText = 'width:100%;max-height:82vh;object-fit:contain;border-radius:10px;box-shadow:0 8px 40px rgba(0,0,0,.6);';
       return v;
     }
@@ -16217,14 +16238,26 @@ function _doOpenMediaLightbox(src, type, caption, navContext) {
     mediaEl.style.transition = 'opacity .15s';
     setTimeout(function() {
       var currentTag = mediaEl.tagName === 'VIDEO' ? 'video' : 'image';
-      if (currentTag !== newType) {
-        /* Type changed — replace the element entirely */
-        var newEl = _buildMedia(newSrc, newType);
+
+      /* Helper: swap in a new element (used when type changes) */
+      function _swapEl(finalSrc) {
+        var newEl = _buildMedia(finalSrc, newType);
         newEl.style.opacity = '0';
         wrap.replaceChild(newEl, mediaEl);
+        if (_hasNav) { wrap.appendChild(prevBtn); wrap.appendChild(nextBtn); }
         mediaEl = newEl;
         setTimeout(function() { mediaEl.style.opacity = '1'; }, 50);
-      } else if (newPid && newType !== 'video') {
+      }
+
+      if (currentTag !== newType) {
+        /* Type changed — if IDB-only video, fetch data URL first */
+        if (newType === 'video' && !newSrc && newPid) {
+          _idbGet(newPid, function(fullSrc) { _swapEl(fullSrc || ''); });
+        } else {
+          _swapEl(newSrc);
+        }
+      } else if (newPid && (newType !== 'video' || !newSrc)) {
+        /* Same type — prefer IDB: always for images; for IDB-only videos (no blobUrl) */
         _idbGet(newPid, function(fullSrc) {
           mediaEl.src = fullSrc || newSrc;
           mediaEl.style.opacity = '1';
