@@ -14033,18 +14033,26 @@ function _galleryUpload(input) {
           var _runExifThenSave = function() {
             if (window.exifr) {
               Promise.all([
+                /* exifr.gps() returns decimal lat/lon directly (handles all GPS EXIF variants) */
                 exifr.gps(file).catch(function() { return null; }),
-                exifr.parse(file, ['DateTimeOriginal']).catch(function() { return null; })
+                /* Try all common date fields — online HEIC→JPEG converters sometimes write
+                   DateTime or DateTimeDigitized instead of DateTimeOriginal */
+                exifr.parse(file, ['DateTimeOriginal','DateTimeDigitized','CreateDate','DateTime'])
+                     .catch(function() { return null; })
               ]).then(function(results) {
                 var gps      = results[0];
                 var exifMeta = results[1];
                 entry.exif = {};
                 if (gps && gps.latitude  != null) entry.exif.lat = gps.latitude;
                 if (gps && gps.longitude != null) entry.exif.lon = gps.longitude;
-                if (exifMeta && exifMeta.DateTimeOriginal) {
-                  var dt = exifMeta.DateTimeOriginal;
-                  entry.exif.dt = dt instanceof Date ? dt.toISOString() : String(dt);
-                }
+                /* Prefer capture time; fall back through other date fields */
+                var _rawDt = exifMeta && (
+                  exifMeta.DateTimeOriginal  ||
+                  exifMeta.DateTimeDigitized ||
+                  exifMeta.CreateDate        ||
+                  exifMeta.DateTime
+                );
+                if (_rawDt) entry.exif.dt = _rawDt instanceof Date ? _rawDt.toISOString() : String(_rawDt);
                 if (entry.exif.lat != null && entry.exif.lon != null) {
                   var geoUrl = 'https://nominatim.openstreetmap.org/reverse?lat=' + entry.exif.lat
                     + '&lon=' + entry.exif.lon + '&format=json&zoom=12';
@@ -15179,32 +15187,51 @@ function _galleryUpgradeFromIDB(container) {
    Fetches full-res from Netlify Blob CDN, parses GPS, reverse-geocodes, saves. */
 function _migrateExifFromBlobs() {
   if (!window.exifr || !appState.photoPool || !appState.photoPool.length) return;
+  /* Re-read EXIF for any pool photo that is missing GPS *or* a capture date.
+     This catches photos uploaded before the multi-field date fix, and photos
+     whose online HEIC→JPEG converter may have used non-standard date fields. */
   var needsExif = appState.photoPool.filter(function(p) {
-    return p.blobUrl && (!p.exif || (p.exif.lat == null && p.exif.lon == null));
+    return p.blobUrl && (
+      !p.exif ||
+      (p.exif.lat == null && p.exif.lon == null) ||
+      !p.exif.dt
+    );
   });
   if (!needsExif.length) return;
   var _saved = 0;
+  function _done() {
+    _saved++;
+    try { saveState(appState); } catch(e) {}
+    if (_saved === needsExif.length) {
+      showToast('📅 Photo dates & locations updated — refreshing', 2000);
+      setTimeout(function() { renderGalleryTab(); }, 2100);
+    }
+  }
   needsExif.forEach(function(poolEntry) {
-    fetch(poolEntry.blobUrl)
+    fetch(poolEntry.blobUrl, { cache: 'no-store' })
       .then(function(r) { return r.blob(); })
       .then(function(blob) {
         return Promise.all([
           exifr.gps(blob).catch(function() { return null; }),
-          exifr.parse(blob, ['DateTimeOriginal']).catch(function() { return null; })
+          exifr.parse(blob, ['DateTimeOriginal','DateTimeDigitized','CreateDate','DateTime'])
+               .catch(function() { return null; })
         ]);
       })
       .then(function(results) {
         var gps = results[0], exifMeta = results[1];
-        if (!gps && !exifMeta) return;
+        if (!gps && !exifMeta) { _done(); return; }
         if (!poolEntry.exif) poolEntry.exif = {};
         if (gps && gps.latitude  != null) poolEntry.exif.lat = gps.latitude;
         if (gps && gps.longitude != null) poolEntry.exif.lon = gps.longitude;
-        if (exifMeta && exifMeta.DateTimeOriginal) {
-          var dt = exifMeta.DateTimeOriginal;
-          poolEntry.exif.dt = dt instanceof Date ? dt.toISOString() : String(dt);
-        }
-        if (poolEntry.exif.lat != null && poolEntry.exif.lon == null) return; // partial — skip geocode
-        if (poolEntry.exif.lat != null) {
+        var _rawDt = exifMeta && (
+          exifMeta.DateTimeOriginal  ||
+          exifMeta.DateTimeDigitized ||
+          exifMeta.CreateDate        ||
+          exifMeta.DateTime
+        );
+        if (_rawDt) poolEntry.exif.dt = _rawDt instanceof Date ? _rawDt.toISOString() : String(_rawDt);
+        /* Reverse-geocode if we now have GPS and no location name yet */
+        if (poolEntry.exif.lat != null && poolEntry.exif.lon != null && !poolEntry.exif.locationName) {
           fetch('https://nominatim.openstreetmap.org/reverse?lat=' + poolEntry.exif.lat
             + '&lon=' + poolEntry.exif.lon + '&format=json&zoom=12', { headers: { 'Accept-Language': 'en' } })
             .then(function(r2) { return r2.json(); })
@@ -15213,19 +15240,13 @@ function _migrateExifFromBlobs() {
                 var city = geo.address.city || geo.address.town || geo.address.village || geo.address.county || '';
                 poolEntry.exif.locationName = [city, geo.address.state || ''].filter(Boolean).join(', ');
               }
-              _saved++;
-              try { saveState(appState); } catch(e) {}
-              if (_saved === needsExif.length) {
-                showToast('📍 Location data updated — refreshing gallery', 2000);
-                setTimeout(function() { renderGalleryTab(); }, 2100);
-              }
-            }).catch(function() {
-              _saved++;
-              try { saveState(appState); } catch(e) {}
-            });
+              _done();
+            }).catch(_done);
+        } else {
+          _done();
         }
       })
-      .catch(function() {});
+      .catch(_done);
   });
 }
 
