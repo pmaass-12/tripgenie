@@ -14106,14 +14106,27 @@ function _galleryUpload(input) {
       if (typeof createImageBitmap !== 'undefined') {
         createImageBitmap(file)
           .then(function(bmp) {
-            var c = document.createElement('canvas');
-            c.width = bmp.width; c.height = bmp.height;
-            c.getContext('2d').drawImage(bmp, 0, 0);
-            try { bmp.close(); } catch(e2) {}
-            c.toBlob(function(jpegBlob) {
-              if (jpegBlob) _readAndProcess(jpegBlob);
-              else _tryHeic2any();
-            }, 'image/jpeg', 0.9);
+            /* Guard: Chrome sometimes resolves with a 0×0 bitmap for HEIC files it
+               can't fully decode.  drawImage/toBlob on a 0×0 canvas throw an
+               IndexSizeError that can escape Promise rejection chains.  Fall through
+               to heic2any instead. */
+            if (!bmp.width || !bmp.height) {
+              try { bmp.close(); } catch(e2) {}
+              _tryHeic2any(); return;
+            }
+            try {
+              var c = document.createElement('canvas');
+              c.width = bmp.width; c.height = bmp.height;
+              c.getContext('2d').drawImage(bmp, 0, 0);
+              try { bmp.close(); } catch(e2) {}
+              c.toBlob(function(jpegBlob) {
+                if (jpegBlob) _readAndProcess(jpegBlob);
+                else _tryHeic2any();
+              }, 'image/jpeg', 0.9);
+            } catch(canvasErr) {
+              try { bmp.close(); } catch(e2) {}
+              _tryHeic2any();
+            }
           })
           .catch(_tryHeic2any);
       } else {
@@ -14315,22 +14328,27 @@ function _compressPhotoThumb(dataUrl, cb) {
         var _binh = atob(_b64h), _bytesh = new Uint8Array(_binh.length);
         for (var _hi = 0; _hi < _binh.length; _hi++) _bytesh[_hi] = _binh.charCodeAt(_hi);
         var _heicBlob = new Blob([_bytesh], { type: 'image/heic' });
+        var _heic2anyFallback = function() {
+          if (typeof heic2any !== 'undefined') {
+            heic2any({ blob: _heicBlob, toType: 'image/jpeg', quality: 0.85 })
+              .then(function(j) { var u = URL.createObjectURL(j); _drawAndReturn(u, function() { URL.revokeObjectURL(u); }); })
+              .catch(function() { cb(null); });
+          } else { cb(null); }
+        };
         if (typeof createImageBitmap !== 'undefined') {
           createImageBitmap(_heicBlob).then(function(bmp) {
-            var ratio = Math.min(MAX / bmp.width, MAX / bmp.height, 1);
-            var c = document.createElement('canvas');
-            c.width  = Math.round(bmp.width  * ratio);
-            c.height = Math.round(bmp.height * ratio);
-            c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
-            try { bmp.close(); } catch(e2) {}
-            cb(c.toDataURL('image/jpeg', 0.45));
-          }).catch(function() {
-            if (typeof heic2any !== 'undefined') {
-              heic2any({ blob: _heicBlob, toType: 'image/jpeg', quality: 0.85 })
-                .then(function(j) { var u = URL.createObjectURL(j); _drawAndReturn(u, function() { URL.revokeObjectURL(u); }); })
-                .catch(function() { cb(null); });
-            } else { cb(null); }
-          });
+            /* 0×0 bitmap = browser can't decode this HEIC — fall through */
+            if (!bmp.width || !bmp.height) { try { bmp.close(); } catch(e2) {} _heic2anyFallback(); return; }
+            try {
+              var ratio = Math.min(MAX / bmp.width, MAX / bmp.height, 1);
+              var c = document.createElement('canvas');
+              c.width  = Math.round(bmp.width  * ratio);
+              c.height = Math.round(bmp.height * ratio);
+              c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+              try { bmp.close(); } catch(e2) {}
+              cb(c.toDataURL('image/jpeg', 0.45));
+            } catch(canvasErr) { try { bmp.close(); } catch(e2) {} _heic2anyFallback(); }
+          }).catch(_heic2anyFallback);
           return;
         }
         if (typeof heic2any !== 'undefined') {
@@ -15332,11 +15350,14 @@ function _migrateStrandedPhotosToBlob() {
                 if (typeof createImageBitmap !== 'undefined') {
                   createImageBitmap(b)
                     .then(function(bmp) {
-                      var c = document.createElement('canvas');
-                      c.width = bmp.width; c.height = bmp.height;
-                      c.getContext('2d').drawImage(bmp, 0, 0);
-                      try { bmp.close(); } catch(e2) {}
-                      c.toBlob(function(jpgBlob) { _compressBlob(jpgBlob); }, 'image/jpeg', 0.9);
+                      if (!bmp.width || !bmp.height) { try { bmp.close(); } catch(e2) {} _tryHeic2any(); return; }
+                      try {
+                        var c = document.createElement('canvas');
+                        c.width = bmp.width; c.height = bmp.height;
+                        c.getContext('2d').drawImage(bmp, 0, 0);
+                        try { bmp.close(); } catch(e2) {}
+                        c.toBlob(function(jpgBlob) { if (jpgBlob) _compressBlob(jpgBlob); else _tryHeic2any(); }, 'image/jpeg', 0.9);
+                      } catch(canvasErr) { try { bmp.close(); } catch(e2) {} _tryHeic2any(); }
                     })
                     .catch(_tryHeic2any);
                   return;
