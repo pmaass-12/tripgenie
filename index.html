@@ -7384,8 +7384,12 @@ function _startRealtimeSync() {
 // _startRealtimeSync() is called from _doLegacyInitAfterSbAuth() after _currentTripId is set
 
 var _sbSyncTimer = null;
-function _syncToSupabaseTrips(state) {
+function _syncToSupabaseTrips(state, delayMs) {
   if (_sbSyncTimer) clearTimeout(_sbSyncTimer);
+  /* Default 1200ms debounce batches rapid edits.
+     Pass delayMs=0 for deletions so the change reaches Supabase before
+     the user has a chance to refresh the page. */
+  var ms = (delayMs !== undefined) ? delayMs : 1200;
   _sbSyncTimer = setTimeout(async function() {
     var client = _initSbClient();
     // Only auto-save when we have an active trip — never auto-create new trips.
@@ -7400,7 +7404,7 @@ function _syncToSupabaseTrips(state) {
     })
     .eq('id', _currentTripId)
     .eq('user_id', _sbUser.id);  // belt-and-suspenders alongside RLS
-  }, 1200);
+  }, ms);
 }
 
 /* ── BROWSER BACK BUTTON HANDLER ────────────────────────────────────────
